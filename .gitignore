@@ -1,0 +1,28 @@
+# Build output
+Astral.exe
+x64/
+Debug/
+Release/
+
+# VS Code settings (except the ones we created)
+.vscode/*.log
+
+# API key (contains real credentials)
+api_key.txt
+
+# Runtime logs
+context_log.txt
+
+# Object files
+*.obj
+*.o
+*.ilk
+*.pdb
+*.idb
+*.log
+*.recipe
+*.ifc
+*.tlog/
+
+# Windows DLLs from vcpkg
+*.dll

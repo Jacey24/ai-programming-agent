@@ -1,0 +1,14 @@
+{
+  "name": "ai-programming-agent",
+  "version": "0.1.0",
+  "dependencies": [
+    "ftxui",
+    "nlohmann-json",
+    "sqlite3",
+    "curl",
+    "cli11",
+    "spdlog",
+    "fmt",
+    "gtest"
+  ]
+}

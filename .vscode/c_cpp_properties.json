@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/Astral/source/**",
+                "${workspaceFolder}/Astral/include/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "_CONSOLE",
+                "NOMINMAX",
+                "WIN32_LEAN_AND_MEAN"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
