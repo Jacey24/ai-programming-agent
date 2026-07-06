@@ -1,0 +1,1 @@
+// Tool output view placeholder.

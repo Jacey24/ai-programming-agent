@@ -1,0 +1,8 @@
+{
+  "name": "cpp_test",
+  "description": "Run CTest for a C++ project.",
+  "entry": "run.sh",
+  "args_schema": {
+    "build_dir": "string"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "code_format",
+  "description": "Format C++ source files with clang-format.",
+  "entry": "run.sh",
+  "args_schema": {
+    "path": "string"
+  }
+}

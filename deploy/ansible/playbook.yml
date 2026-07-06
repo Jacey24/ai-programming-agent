@@ -1,0 +1,19 @@
+- name: Deploy CodePilot
+  hosts: codepilot
+  become: false
+  tasks:
+    - name: Ensure runtime directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - ./storage
+        - ./workspace
+        - ./config
+
+    - name: Start CodePilot with Docker Compose
+      ansible.builtin.command:
+        cmd: docker compose -f deploy/docker/docker-compose.yml up -d --build
+        chdir: "{{ playbook_dir }}/../.."
+      changed_when: true

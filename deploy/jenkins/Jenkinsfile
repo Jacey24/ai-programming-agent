@@ -1,0 +1,29 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Configure') {
+      steps {
+        sh 'cmake -S . -B build -DCODEPILOT_BUILD_TESTS=ON'
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh 'cmake --build build'
+      }
+    }
+
+    stage('Test') {
+      steps {
+        sh 'ctest --test-dir build --output-on-failure'
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        sh 'docker build -f deploy/docker/Dockerfile -t codepilot-agent-server:0.1.0 .'
+      }
+    }
+  }
+}

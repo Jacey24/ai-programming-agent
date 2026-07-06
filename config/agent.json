@@ -1,0 +1,32 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "storage": {
+    "type": "sqlite",
+    "path": "/data/agent.db"
+  },
+  "workspace": {
+    "root": "/workspace",
+    "allow_outside_workspace": false,
+    "ignored_dirs": [".git", "build", "dist", "node_modules"],
+    "max_file_size_bytes": 1048576
+  },
+  "llm": {
+    "provider": "openai_compatible",
+    "base_url": "https://api.example.com/v1",
+    "model": "gpt-4.1",
+    "api_key_env": "LLM_API_KEY"
+  },
+  "security": {
+    "require_permission_for_file_write": true,
+    "require_permission_for_file_delete": true,
+    "require_permission_for_dangerous_shell": true,
+    "block_system_paths": true
+  },
+  "agent": {
+    "max_steps": 20,
+    "tool_timeout_seconds": 120
+  }
+}

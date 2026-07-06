@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodePilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="header">
+        <div>
+          <h1>CodePilot</h1>
+          <p>前后端连接状态</p>
+        </div>
+        <button id="refreshButton" type="button">刷新状态</button>
+      </section>
+
+      <section class="status-grid">
+        <article class="panel">
+          <span class="label">后端服务</span>
+          <strong id="serverStatus">检查中</strong>
+          <small id="serverMeta">http://127.0.0.1:8080/api/v1/health</small>
+        </article>
+
+        <article class="panel">
+          <span class="label">数据库</span>
+          <strong id="databaseStatus">检查中</strong>
+          <small id="databaseMeta">SQLite</small>
+        </article>
+      </section>
+
+      <section class="workbench">
+        <form class="panel prompt-panel" id="promptForm">
+          <label class="panel-title" for="promptInput">用户提示词</label>
+          <textarea
+            id="promptInput"
+            name="prompt"
+            rows="10"
+            placeholder="输入你想让 AI 处理的任务..."
+          ></textarea>
+          <div class="actions">
+            <button id="submitPromptButton" type="submit">发送</button>
+            <button id="clearPromptButton" class="secondary" type="button">清空</button>
+          </div>
+        </form>
+
+        <section class="panel result-panel">
+          <div class="panel-title">AI 返回结果</div>
+          <div id="aiResult" class="ai-result">等待输入...</div>
+        </section>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="history-header">
+          <div class="panel-title">历史记录</div>
+          <button id="refreshHistoryButton" class="secondary small-button" type="button">
+            刷新历史
+          </button>
+        </div>
+        <div id="historyList" class="history-list">暂无历史记录</div>
+      </section>
+
+      <section class="panel response-panel">
+        <div class="panel-title">接口响应</div>
+        <pre id="responseBody">等待请求...</pre>
+      </section>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

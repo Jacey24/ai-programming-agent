@@ -1,0 +1,6 @@
+{
+  "root": "/workspace",
+  "allow_outside_workspace": false,
+  "ignored_dirs": [".git", "build", "dist", "node_modules"],
+  "max_file_size_bytes": 1048576
+}

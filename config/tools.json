@@ -1,0 +1,33 @@
+{
+  "enabled": [
+    "file.read",
+    "file.list",
+    "file.write",
+    "file.apply_patch",
+    "shell.run",
+    "git.status",
+    "git.diff",
+    "git.commit",
+    "web.search",
+    "skill.run",
+    "mcp.call"
+  ],
+  "shell": {
+    "default_timeout_seconds": 120,
+    "dangerous_patterns": [
+      "rm -rf",
+      "sudo",
+      "chmod -R 777",
+      "chown -R",
+      "dd",
+      "mkfs",
+      "shutdown",
+      "reboot",
+      "curl | sh",
+      "wget | bash",
+      "git reset --hard",
+      "git clean -fd",
+      "git push"
+    ]
+  }
+}

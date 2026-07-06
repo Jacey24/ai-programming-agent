@@ -1,0 +1,9 @@
+{
+  "name": "cmake_build",
+  "description": "Configure and build a CMake C++ project.",
+  "entry": "run.sh",
+  "args_schema": {
+    "build_dir": "string",
+    "build_type": "string"
+  }
+}

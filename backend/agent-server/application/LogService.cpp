@@ -1,0 +1,1 @@
+// Log application service placeholder.
