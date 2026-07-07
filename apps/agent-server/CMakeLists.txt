@@ -1,7 +1,9 @@
 add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/SessionController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/TaskController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceController.cpp
 )
 
 target_include_directories(codepilot-agent-server PRIVATE
