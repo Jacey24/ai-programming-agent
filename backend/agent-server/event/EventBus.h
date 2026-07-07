@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-
 using json = nlohmann::json;
 
 namespace codepilot {
@@ -68,6 +67,7 @@ private:
   struct Subscription {
     ListenerId id;
     EventType type;
+    bool allEvents{false};
     EventListener listener;
   };
 
