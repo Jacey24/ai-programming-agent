@@ -2,6 +2,7 @@ add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/LogRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
 )
 
 target_include_directories(codepilot-agent-server PRIVATE

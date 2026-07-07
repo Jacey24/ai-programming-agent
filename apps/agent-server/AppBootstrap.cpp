@@ -13,6 +13,7 @@
 #include <sqlite3.h>
 
 #include "infrastructure/storage/repositories/LogRepository.h"
+#include "infrastructure/storage/repositories/TaskRepository.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -119,18 +120,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    goal TEXT NOT NULL,
-    status TEXT NOT NULL,
-    plan TEXT,
-    current_step TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     prompt TEXT NOT NULL,
@@ -157,6 +146,9 @@ CREATE TABLE IF NOT EXISTS workspaces (
     }
 
     try {
+        TaskRepository task_repository(db);
+        task_repository.initTable();
+
         LogRepository log_repository(db);
         log_repository.initTable();
     } catch (const std::exception& error) {
@@ -714,32 +706,14 @@ std::string create_task_response(const std::string& request) {
             "500 Internal Server Error");
     }
 
-    const char* sql = "INSERT INTO tasks (id, session_id, workspace_id, goal, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
+    TaskRecord task;
+    try {
+        TaskRepository task_repository(db);
+        task = task_repository.createTask(id, session_id, workspace_id, input, now, now);
+    } catch (const std::exception& error) {
         sqlite3_close(db);
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, session_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, input.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, "created", -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 6, now.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 7, now.c_str(), -1, SQLITE_TRANSIENT);
-
-    const int step_result = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    if (step_result != SQLITE_DONE) {
-        const std::string error = sqlite3_errmsg(db);
-        sqlite3_close(db);
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
             "500 Internal Server Error");
     }
 
@@ -749,13 +723,13 @@ std::string create_task_response(const std::string& request) {
     // AgentResult result = agentService.runTask(id, session_id, workspace_id, input);
 
     std::ostringstream response_body;
-    response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
-                  << R"(","session_id":")" << json_escape(session_id)
-                  << R"(","workspace_id":")" << json_escape(workspace_id)
-                  << R"(","goal":")" << json_escape(input)
-                  << R"(","status":"created")"
-                  << R"(,"created_at":")" << now
-                  << R"(","updated_at":")" << now << R"("}})";
+    response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
+                  << R"(","session_id":")" << json_escape(task.session_id)
+                  << R"(","workspace_id":")" << json_escape(task.workspace_id)
+                  << R"(","goal":")" << json_escape(task.goal)
+                  << R"(","status":")" << json_escape(task.status) << R"(")"
+                  << R"(,"created_at":")" << json_escape(task.created_at)
+                  << R"(","updated_at":")" << json_escape(task.updated_at) << R"("}})";
     return http_response(response_body.str());
 }
 
@@ -776,53 +750,40 @@ std::string get_task_response(const std::string& request) {
             "500 Internal Server Error");
     }
 
-    const char* sql = "SELECT id, session_id, workspace_id, goal, status, plan, current_step, created_at, updated_at FROM tasks WHERE id = ?;";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
+    std::string response;
+    try {
+        TaskRepository task_repository(db);
+        const std::optional<TaskRecord> task = task_repository.findById(task_id);
+        if (!task) {
+            response = http_response(
+                R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"任务不存在"}})",
+                "404 Not Found");
+            sqlite3_close(db);
+            return response;
+        }
+        std::ostringstream body;
+        body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
+             << R"(","session_id":")" << json_escape(task->session_id)
+             << R"(","workspace_id":")" << json_escape(task->workspace_id)
+             << R"(","goal":")" << json_escape(task->goal)
+             << R"(","status":")" << json_escape(task->status) << R"(")";
+        if (!task->plan.empty()) {
+            body << R"(","plan":)" << task->plan;
+        }
+        if (!task->current_step.empty()) {
+            body << R"(,"current_step":")" << json_escape(task->current_step) << R"(")";
+        }
+        body << R"(,"created_at":")" << json_escape(task->created_at)
+             << R"(","updated_at":")" << json_escape(task->updated_at)
+             << R"("}})";
+        response = http_response(body.str());
+    } catch (const std::exception& error) {
         sqlite3_close(db);
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
             "500 Internal Server Error");
     }
 
-    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
-
-    std::string response;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        const auto* session_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* workspace_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* goal = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-        const auto* plan = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-        const auto* current_step = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-        const auto* updated_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
-
-        std::ostringstream body;
-        body << R"({"success":true,"data":{"id":")" << json_escape(id ? id : "")
-             << R"(","session_id":")" << json_escape(session_id ? session_id : "")
-             << R"(","workspace_id":")" << json_escape(workspace_id ? workspace_id : "")
-             << R"(","goal":")" << json_escape(goal ? goal : "")
-             << R"(","status":")" << json_escape(status ? status : "") << R"(")";
-        if (plan && plan[0] != '\0') {
-            body << R"(","plan":)" << plan;
-        }
-        if (current_step && current_step[0] != '\0') {
-            body << R"(,"current_step":")" << json_escape(current_step) << R"(")";
-        }
-        body << R"(,"created_at":")" << json_escape(created_at ? created_at : "")
-             << R"(","updated_at":")" << json_escape(updated_at ? updated_at : "")
-             << R"("}})";
-        response = http_response(body.str());
-    } else {
-        response = http_response(
-            R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"任务不存在"}})",
-            "404 Not Found");
-    }
-
-    sqlite3_finalize(stmt);
     sqlite3_close(db);
     return response;
 }
