@@ -1,5 +1,6 @@
 #include <chrono>
 #include <csignal>
+#include <ctime>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -132,6 +133,13 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     prompt TEXT NOT NULL,
     response TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );
 )SQL";
 
@@ -396,6 +404,133 @@ std::string chat_history_response() {
     return http_response(body.str());
 }
 
+std::string current_timestamp() {
+    const auto now = std::time(nullptr);
+    char buf[32] = {};
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
+    return buf;
+}
+
+std::string generate_id(const std::string& prefix) {
+    return prefix + "_" + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+}
+
+std::string create_session_response(const std::string& request) {
+    const std::string req_body = request_body(request);
+    const std::string title = extract_json_string(req_body, "title");
+    if (title.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"title is required"}})",
+            "400 Bad Request");
+    }
+
+    const std::string id = generate_id("session");
+    const std::string now = current_timestamp();
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(database_state.path.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    const char* sql = "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?);";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, now.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
+
+    const int step_result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (step_result != SQLITE_DONE) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream response_body;
+    response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
+                  << R"(","title":")" << json_escape(title)
+                  << R"(","created_at":")" << now
+                  << R"(","updated_at":")" << now << R"("}})";
+    return http_response(response_body.str());
+}
+
+std::string create_workspace_response(const std::string& request) {
+    const std::string req_body = request_body(request);
+    const std::string name = extract_json_string(req_body, "name");
+    const std::string path = extract_json_string(req_body, "path");
+    if (name.empty() || path.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"name and path are required"}})",
+            "400 Bad Request");
+    }
+
+    const std::string id = generate_id("workspace");
+    const std::string now = current_timestamp();
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(database_state.path.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    const char* sql = "INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?);";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, path.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
+
+    const int step_result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (step_result != SQLITE_DONE) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream response_body;
+    response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
+                  << R"(","name":")" << json_escape(name)
+                  << R"(","path":")" << json_escape(path)
+                  << R"(","created_at":")" << now << R"("}})";
+    return http_response(response_body.str());
+}
+
 std::string not_found_response() {
     const std::string body = R"({"success":false,"error":{"code":"NOT_FOUND","message":"Endpoint not found"}})";
     std::ostringstream response;
@@ -424,6 +559,10 @@ void handle_client(int client_fd) {
         response = create_chat_response(request);
     } else if (request.rfind("GET /api/v1/chat/history ", 0) == 0) {
         response = chat_history_response();
+    } else if (request.rfind("POST /api/v1/sessions ", 0) == 0) {
+        response = create_session_response(request);
+    } else if (request.rfind("POST /api/v1/workspaces ", 0) == 0) {
+        response = create_workspace_response(request);
     } else {
         response = not_found_response();
     }
