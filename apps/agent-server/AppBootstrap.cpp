@@ -13,6 +13,7 @@
 #include <sqlite3.h>
 
 #include "infrastructure/storage/repositories/LogRepository.h"
+#include "infrastructure/storage/repositories/SessionRepository.h"
 #include "infrastructure/storage/repositories/TaskRepository.h"
 
 #include <arpa/inet.h>
@@ -113,13 +114,6 @@ INSERT INTO system_health (id, service, checked_at)
 VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP)
 ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;
 
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     prompt TEXT NOT NULL,
@@ -146,6 +140,9 @@ CREATE TABLE IF NOT EXISTS workspaces (
     }
 
     try {
+        SessionRepository session_repository(db);
+        session_repository.initTable();
+
         TaskRepository task_repository(db);
         task_repository.initTable();
 
@@ -468,33 +465,16 @@ std::string create_session_response(const std::string& request) {
             "500 Internal Server Error");
     }
 
-    const char* sql = "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?);";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
+    SessionRecord session;
+    try {
+        SessionRepository session_repository(db);
+        session = session_repository.createSession(id, title, now, now);
+    } catch (const std::exception& error) {
         sqlite3_close(db);
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
             "500 Internal Server Error");
     }
-
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, now.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
-    const int step_result = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    if (step_result != SQLITE_DONE) {
-         const std::string error = sqlite3_errmsg(db);
-         sqlite3_close(db);
-
-         return http_response(
-          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")"
-          + json_escape(error) +
-          R"("}})",
-          "500 Internal Server Error");
-     }
   
      sqlite3_close(db);
 
@@ -502,13 +482,13 @@ std::string create_session_response(const std::string& request) {
 
 response_body
     << R"({"success":true,"data":{"id":")"
-    << json_escape(id)
+    << json_escape(session.id)
     << R"(","title":")"
-    << json_escape(title)
+    << json_escape(session.title)
     << R"(","created_at":")"
-    << now
+    << json_escape(session.created_at)
     << R"(","updated_at":")"
-    << now
+    << json_escape(session.updated_at)
     << R"("}})";
 
 return http_response(response_body.str());
