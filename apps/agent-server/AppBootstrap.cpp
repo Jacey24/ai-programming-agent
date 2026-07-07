@@ -1,6 +1,7 @@
 #include <chrono>
 #include <csignal>
 #include <ctime>
+#include <exception>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -10,6 +11,8 @@
 #include <vector>
 
 #include <sqlite3.h>
+
+#include "infrastructure/storage/repositories/LogRepository.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -141,14 +144,6 @@ CREATE TABLE IF NOT EXISTS workspaces (
     path TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS execution_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 )SQL";
 
     char* error_message = nullptr;
@@ -157,6 +152,16 @@ CREATE TABLE IF NOT EXISTS execution_logs (
         database_state.connected = false;
         database_state.error = error_message ? error_message : "schema initialization failed";
         sqlite3_free(error_message);
+        sqlite3_close(db);
+        return false;
+    }
+
+    try {
+        LogRepository log_repository(db);
+        log_repository.initTable();
+    } catch (const std::exception& error) {
+        database_state.connected = false;
+        database_state.error = error.what();
         sqlite3_close(db);
         return false;
     }
@@ -535,29 +540,17 @@ std::string create_log_response(const std::string& request) {
         return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT INTO execution_logs (task_id, type, content) VALUES (?, ?, ?);";
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
-        sqlite3_close(db);
-        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
-    }
-
-    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, type.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, content.c_str(), -1, SQLITE_TRANSIENT);
-    const int step_result = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    if (step_result != SQLITE_DONE) {
-        const std::string error = sqlite3_errmsg(db);
+    sqlite3_int64 id = 0;
+    try {
+        LogRepository log_repository(db);
+        id = log_repository.createLog(task_id, type, content);
+    } catch (const std::exception& error) {
         sqlite3_close(db);
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
             "500 Internal Server Error");
     }
   
-    const sqlite3_int64 id = sqlite3_last_insert_rowid(db);
     sqlite3_close(db);
     std::ostringstream response_body;
 
@@ -648,40 +641,33 @@ std::string logs_response(const std::string& request) {
         return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, created_at FROM execution_logs WHERE task_id = ? ORDER BY id ASC LIMIT 200;";
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
+    std::vector<LogRecord> logs;
+    try {
+        LogRepository log_repository(db);
+        logs = log_repository.findByTaskId(task_id);
+    } catch (const std::exception& error) {
         sqlite3_close(db);
-        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
+        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})", "500 Internal Server Error");
     }
 
-    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
-
+    sqlite3_close(db);
     std::ostringstream body;
     body << R"({"success":true,"data":{"items":[)";
     bool first = true;
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
+    for (const LogRecord& log : logs) {
         if (!first) {
             body << ",";
         }
         first = false;
-        const int id = sqlite3_column_int(stmt, 0);
-        const auto* row_task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-        body << R"({"id":)" << id
-             << R"(,"task_id":")" << json_escape(row_task_id ? row_task_id : "")
-             << R"(","type":")" << json_escape(type ? type : "")
-             << R"(","content":")" << json_escape(content ? content : "")
-             << R"(","created_at":")" << json_escape(created_at ? created_at : "")
+        body << R"({"id":)" << log.id
+             << R"(,"task_id":")" << json_escape(log.task_id)
+             << R"(","type":")" << json_escape(log.type)
+             << R"(","content":")" << json_escape(log.content)
+             << R"(","created_at":")" << json_escape(log.created_at)
              << R"("})";
     }
     body << "]}}";
 
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
     return http_response(body.str());
 }
 
