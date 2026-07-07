@@ -96,13 +96,14 @@ void EventBus::publish(const EventData &event) {
 
 ListenerId EventBus::subscribe(EventType type, EventListener listener) {
   ListenerId id = nextId_++;
-  subscriptions_.push_back({id, type, std::move(listener)});
+  subscriptions_.push_back({id, type, false, std::move(listener)});
   return id;
 }
 
 ListenerId EventBus::subscribeAll(EventListener listener) {
   ListenerId id = nextId_++;
-  subscriptions_.push_back({id, EventType::TaskCreated, std::move(listener)});
+  subscriptions_.push_back(
+      {id, EventType::TaskCreated, true, std::move(listener)});
   return id;
 }
 
@@ -151,9 +152,11 @@ void EventBus::clearHistory(const std::string &taskId) {
 
 void EventBus::notifyListeners(const EventData &event) {
   for (const auto &sub : subscriptions_) {
-    if (sub.listener) {
-      sub.listener(event);
-    }
+    if (!sub.listener)
+      continue;
+    if (!sub.allEvents && sub.type != event.type)
+      continue;
+    sub.listener(event);
   }
 }
 
