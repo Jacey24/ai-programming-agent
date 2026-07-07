@@ -141,6 +141,14 @@ CREATE TABLE IF NOT EXISTS workspaces (
     path TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS execution_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 )SQL";
 
     char* error_message = nullptr;
@@ -266,6 +274,32 @@ std::string request_body(const std::string& request) {
         return "";
     }
     return request.substr(body_pos + 4);
+}
+
+std::string query_parameter(const std::string& request, const std::string& key) {
+    const std::size_t request_line_end = request.find("\r\n");
+    const std::string request_line = request.substr(0, request_line_end);
+    const std::size_t query_start = request_line.find('?');
+    if (query_start == std::string::npos) {
+        return "";
+    }
+
+    const std::size_t path_end = request_line.find(' ', query_start);
+    const std::string query = request_line.substr(query_start + 1, path_end - query_start - 1);
+    const std::string marker = key + "=";
+    std::size_t param_start = 0;
+    while (param_start < query.size()) {
+        const std::size_t param_end = query.find('&', param_start);
+        const std::string param = query.substr(param_start, param_end - param_start);
+        if (param.rfind(marker, 0) == 0) {
+            return param.substr(marker.size());
+        }
+        if (param_end == std::string::npos) {
+            break;
+        }
+        param_start = param_end + 1;
+    }
+    return "";
 }
 
 std::size_t content_length(const std::string& request) {
@@ -451,7 +485,67 @@ std::string create_session_response(const std::string& request) {
     sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 3, now.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
+    const int step_result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
 
+    if (step_result != SQLITE_DONE) {
+         const std::string error = sqlite3_errmsg(db);
+         sqlite3_close(db);
+
+         return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")"
+          + json_escape(error) +
+          R"("}})",
+          "500 Internal Server Error");
+     }
+  
+     sqlite3_close(db);
+
+     std::ostringstream response_body;
+
+response_body
+    << R"({"success":true,"data":{"id":")"
+    << json_escape(id)
+    << R"(","title":")"
+    << json_escape(title)
+    << R"(","created_at":")"
+    << now
+    << R"(","updated_at":")"
+    << now
+    << R"("}})";
+
+return http_response(response_body.str());
+}
+
+std::string create_log_response(const std::string& request) {
+    const std::string body_content = request_body(request);
+    const std::string task_id = extract_json_string(body_content, "task_id");
+    const std::string type = extract_json_string(body_content, "type");
+    const std::string content = extract_json_string(body_content, "content");
+    if (task_id.empty() || type.empty() || content.empty()) {
+        return http_response(R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id, type and content are required"}})", "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(database_state.path.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) {
+            sqlite3_close(db);
+        }
+        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "INSERT INTO execution_logs (task_id, type, content) VALUES (?, ?, ?);";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
+    }
+
+    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, type.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, content.c_str(), -1, SQLITE_TRANSIENT);
     const int step_result = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
@@ -462,15 +556,23 @@ std::string create_session_response(const std::string& request) {
             R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
             "500 Internal Server Error");
     }
-
+  
+    const sqlite3_int64 id = sqlite3_last_insert_rowid(db);
     sqlite3_close(db);
-
     std::ostringstream response_body;
-    response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
-                  << R"(","title":")" << json_escape(title)
-                  << R"(","created_at":")" << now
-                  << R"(","updated_at":")" << now << R"("}})";
-    return http_response(response_body.str());
+
+response_body 
+    << R"({"success":true,"data":{"id":)"
+    << id
+    << R"(,"task_id":")"
+    << json_escape(task_id)
+    << R"(","type":")"
+    << json_escape(type)
+    << R"(","content":")"
+    << json_escape(content)
+    << R"("}})";
+
+return http_response(response_body.str());
 }
 
 std::string create_workspace_response(const std::string& request) {
@@ -531,6 +633,58 @@ std::string create_workspace_response(const std::string& request) {
     return http_response(response_body.str());
 }
 
+std::string logs_response(const std::string& request) {
+    const std::string task_id = query_parameter(request, "task_id");
+    if (task_id.empty()) {
+        return http_response(R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})", "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(database_state.path.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) {
+            sqlite3_close(db);
+        }
+        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id, task_id, type, content, created_at FROM execution_logs WHERE task_id = ? ORDER BY id ASC LIMIT 200;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return http_response(R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})", "500 Internal Server Error");
+    }
+
+    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"items":[)";
+    bool first = true;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (!first) {
+            body << ",";
+        }
+        first = false;
+        const int id = sqlite3_column_int(stmt, 0);
+        const auto* row_task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        const auto* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        body << R"({"id":)" << id
+             << R"(,"task_id":")" << json_escape(row_task_id ? row_task_id : "")
+             << R"(","type":")" << json_escape(type ? type : "")
+             << R"(","content":")" << json_escape(content ? content : "")
+             << R"(","created_at":")" << json_escape(created_at ? created_at : "")
+             << R"("})";
+    }
+    body << "]}}";
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return http_response(body.str());
+}
+
 std::string not_found_response() {
     const std::string body = R"({"success":false,"error":{"code":"NOT_FOUND","message":"Endpoint not found"}})";
     std::ostringstream response;
@@ -563,6 +717,10 @@ void handle_client(int client_fd) {
         response = create_session_response(request);
     } else if (request.rfind("POST /api/v1/workspaces ", 0) == 0) {
         response = create_workspace_response(request);
+    } else if (request.rfind("POST /api/v1/logs ", 0) == 0) {
+        response = create_log_response(request);
+    } else if (request.rfind("GET /api/v1/logs?", 0) == 0 || request.rfind("GET /api/v1/logs ", 0) == 0) {
+        response = logs_response(request);
     } else {
         response = not_found_response();
     }

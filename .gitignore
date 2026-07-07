@@ -1,0 +1,29 @@
+# Build outputs
+build/
+*.o
+*.obj
+*.exe
+*.out
+
+# IDE / Editor
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Storage (local only)
+storage/agent.db
+storage/logs/
+
+# Config overrides (local)
+config/*.local.json
