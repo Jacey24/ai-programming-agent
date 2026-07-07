@@ -8,62 +8,131 @@
   </head>
   <body>
     <main class="shell">
-      <section class="header">
+      <header class="topbar">
         <div>
           <h1>CodePilot</h1>
-          <p>前后端连接状态</p>
+          <p>任务模式 · Sprint 1 前端闭环</p>
         </div>
-        <button id="refreshButton" type="button">刷新状态</button>
-      </section>
+        <div class="topbar-actions">
+          <button id="refreshButton" type="button">刷新状态</button>
+          <button id="refreshHistoryButton" class="secondary" type="button">刷新历史</button>
+        </div>
+      </header>
 
-      <section class="status-grid">
-        <article class="panel">
+      <section class="status-grid" aria-label="系统状态">
+        <article class="panel status-card">
           <span class="label">后端服务</span>
           <strong id="serverStatus">检查中</strong>
           <small id="serverMeta">http://127.0.0.1:8080/api/v1/health</small>
         </article>
 
-        <article class="panel">
+        <article class="panel status-card">
           <span class="label">数据库</span>
           <strong id="databaseStatus">检查中</strong>
           <small id="databaseMeta">SQLite</small>
         </article>
+
+        <article class="panel status-card">
+          <span class="label">当前任务</span>
+          <strong id="taskStatus">未创建</strong>
+          <small id="taskMeta">等待提交</small>
+        </article>
       </section>
 
-      <section class="workbench">
-        <form class="panel prompt-panel" id="promptForm">
-          <label class="panel-title" for="promptInput">用户提示词</label>
+      <section class="workspace">
+        <form class="panel task-panel" id="taskForm">
+          <div class="panel-heading">
+            <div>
+              <h2>提交任务</h2>
+              <p>按接口文档创建 session、workspace 和 task</p>
+            </div>
+          </div>
+
+          <label for="sessionTitle">会话标题</label>
+          <input id="sessionTitle" name="sessionTitle" value="Sprint 1 前端联调" />
+
+          <label for="workspaceName">工作区名称</label>
+          <input id="workspaceName" name="workspaceName" value="codepilot-workspace" />
+
+          <label for="workspacePath">工作区路径</label>
+          <input id="workspacePath" name="workspacePath" value="/workspace" />
+
+          <label for="taskInput">任务输入</label>
           <textarea
-            id="promptInput"
-            name="prompt"
-            rows="10"
-            placeholder="输入你想让 AI 处理的任务..."
+            id="taskInput"
+            name="taskInput"
+            rows="8"
+            placeholder="输入你想让 Agent 处理的任务..."
           ></textarea>
+
+          <div class="option-row">
+            <label class="check-label">
+              <input id="autoRunSafeCommands" type="checkbox" checked />
+              自动执行安全命令
+            </label>
+            <label class="check-label">
+              <input id="requireFileWritePermission" type="checkbox" checked />
+              写文件需要确认
+            </label>
+          </div>
+
           <div class="actions">
-            <button id="submitPromptButton" type="submit">发送</button>
-            <button id="clearPromptButton" class="secondary" type="button">清空</button>
+            <button id="submitTaskButton" type="submit">创建任务</button>
+            <button id="clearTaskButton" class="secondary" type="button">清空</button>
           </div>
         </form>
 
-        <section class="panel result-panel">
-          <div class="panel-title">AI 返回结果</div>
-          <div id="aiResult" class="ai-result">等待输入...</div>
+        <section class="panel task-detail-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>任务状态</h2>
+              <p id="taskMode">等待任务提交</p>
+            </div>
+          </div>
+
+          <dl class="detail-list">
+            <div>
+              <dt>Session</dt>
+              <dd id="sessionId">-</dd>
+            </div>
+            <div>
+              <dt>Workspace</dt>
+              <dd id="workspaceId">-</dd>
+            </div>
+            <div>
+              <dt>Task</dt>
+              <dd id="taskId">-</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd id="taskStatusDetail">-</dd>
+            </div>
+          </dl>
+
+          <div class="result-box" id="taskResult">暂无任务结果</div>
         </section>
       </section>
 
-      <section class="panel history-panel">
-        <div class="history-header">
-          <div class="panel-title">历史记录</div>
-          <button id="refreshHistoryButton" class="secondary small-button" type="button">
-            刷新历史
-          </button>
-        </div>
-        <div id="historyList" class="history-list">暂无历史记录</div>
-      </section>
+      <section class="lower-grid">
+        <section class="panel history-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>历史记录</h2>
+              <p>优先读取任务列表，必要时读取 chat 历史</p>
+            </div>
+          </div>
+          <div id="historyList" class="history-list muted">暂无历史记录</div>
+        </section>
 
-      <section class="panel response-panel">
-        <div class="panel-title">接口响应</div>
-        <pre id="responseBody">等待请求...</pre>
+        <section class="panel response-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>接口 JSON</h2>
+              <p id="lastEndpoint">等待请求</p>
+            </div>
+          </div>
+          <pre id="responseBody">等待请求...</pre>
+        </section>
       </section>
     </main>
 
