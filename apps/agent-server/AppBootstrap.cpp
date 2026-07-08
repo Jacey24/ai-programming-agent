@@ -12,6 +12,9 @@
 
 #include <sqlite3.h>
 
+#include "api/controllers/SessionController.h"
+#include "api/controllers/TaskController.h"
+#include "api/controllers/WorkspaceController.h"
 #include "infrastructure/storage/repositories/LogRepository.h"
 #include "infrastructure/storage/repositories/SessionRepository.h"
 #include "infrastructure/storage/repositories/TaskRepository.h"
@@ -540,64 +543,6 @@ response_body
 return http_response(response_body.str());
 }
 
-std::string create_workspace_response(const std::string& request) {
-    const std::string req_body = request_body(request);
-    const std::string name = extract_json_string(req_body, "name");
-    const std::string path = extract_json_string(req_body, "path");
-    if (name.empty() || path.empty()) {
-        return http_response(
-            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"name and path are required"}})",
-            "400 Bad Request");
-    }
-
-    const std::string id = generate_id("workspace");
-    const std::string now = current_timestamp();
-
-    sqlite3* db = nullptr;
-    if (sqlite3_open(database_state.path.c_str(), &db) != SQLITE_OK) {
-        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-        if (db) { sqlite3_close(db); }
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    const char* sql = "INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?);";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        const std::string error = sqlite3_errmsg(db);
-        sqlite3_close(db);
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, path.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
-
-    const int step_result = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    if (step_result != SQLITE_DONE) {
-        const std::string error = sqlite3_errmsg(db);
-        sqlite3_close(db);
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    sqlite3_close(db);
-
-    std::ostringstream response_body;
-    response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
-                  << R"(","name":")" << json_escape(name)
-                  << R"(","path":")" << json_escape(path)
-                  << R"(","created_at":")" << now << R"("}})";
-    return http_response(response_body.str());
-}
-
 std::string logs_response(const std::string& request) {
     const std::string task_id = query_parameter(request, "task_id");
     if (task_id.empty()) {
@@ -780,6 +725,10 @@ std::string not_found_response() {
     return response.str();
 }
 
+codepilot::SessionController sessionController;
+codepilot::TaskController taskController;
+codepilot::WorkspaceController workspaceController;
+
 void handle_client(int client_fd) {
     const std::string request = read_http_request(client_fd);
     if (request.empty()) {
@@ -797,17 +746,17 @@ void handle_client(int client_fd) {
     } else if (request.rfind("GET /api/v1/chat/history ", 0) == 0) {
         response = chat_history_response();
     } else if (request.rfind("POST /api/v1/sessions ", 0) == 0) {
-        response = create_session_response(request);
+        response = sessionController.createSession(request);
     } else if (request.rfind("POST /api/v1/workspaces ", 0) == 0) {
-        response = create_workspace_response(request);
+        response = workspaceController.createWorkspace(request);
     } else if (request.rfind("POST /api/v1/logs ", 0) == 0) {
         response = create_log_response(request);
     } else if (request.rfind("GET /api/v1/logs?", 0) == 0 || request.rfind("GET /api/v1/logs ", 0) == 0) {
         response = logs_response(request);
     } else if (request.rfind("POST /api/v1/tasks ", 0) == 0) {
-        response = create_task_response(request);
+        response = taskController.createTask(request);
     } else if (request.rfind("GET /api/v1/tasks/", 0) == 0) {
-        response = get_task_response(request);
+        response = taskController.getTask(request);
     } else {
         response = not_found_response();
     }
