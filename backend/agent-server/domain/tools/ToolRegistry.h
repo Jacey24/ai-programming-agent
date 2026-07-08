@@ -75,6 +75,9 @@ public:
   // --- 获取注册工具数量 ---
   size_t size() const { return tools_.size(); }
 
+  // --- 获取所有分组名列表（用于 fallback 提示）---
+  std::string listAvailableToolsByGroup() const;
+
 private:
   std::unordered_map<std::string, std::unique_ptr<Tool>> tools_;
   std::unordered_map<std::string, ToolGroupInfo> groups_;

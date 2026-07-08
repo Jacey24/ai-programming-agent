@@ -69,6 +69,50 @@ private:
   std::shared_ptr<ProcessRunner> runner_;
 };
 
+// ============================================================
+// GitLogTool — 查看提交历史
+//
+// 功能: git log --oneline -n <count>
+// 风险等级: Safe
+// ============================================================
+class GitLogTool : public Tool {
+public:
+  explicit GitLogTool(std::shared_ptr<ProcessRunner> runner);
+
+  std::string name() const override;
+  std::string description() const override;
+  std::string group() const override { return ToolGroups::GIT; }
+  ToolSchema schema() const override;
+  RiskLevel riskLevel(const json &arguments) const override;
+  ToolResult execute(const ToolContext &context,
+                     const json &arguments) override;
+
+private:
+  std::shared_ptr<ProcessRunner> runner_;
+};
+
+// ============================================================
+// GitBranchTool — 查看/创建分支
+//
+// 功能: git branch (list) / git branch <name> (create)
+// 风险等级: Safe (list) / Medium (create)
+// ============================================================
+class GitBranchTool : public Tool {
+public:
+  explicit GitBranchTool(std::shared_ptr<ProcessRunner> runner);
+
+  std::string name() const override;
+  std::string description() const override;
+  std::string group() const override { return ToolGroups::GIT; }
+  ToolSchema schema() const override;
+  RiskLevel riskLevel(const json &arguments) const override;
+  ToolResult execute(const ToolContext &context,
+                     const json &arguments) override;
+
+private:
+  std::shared_ptr<ProcessRunner> runner_;
+};
+
 // --- 注册函数 ---
 void registerGitTools(ToolRegistry &registry,
                       std::shared_ptr<ProcessRunner> runner);
