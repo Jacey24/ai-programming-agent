@@ -1,33 +1,97 @@
 {
-  "enabled": [
-    "file.read",
-    "file.list",
-    "file.write",
-    "file.apply_patch",
-    "shell.run",
-    "git.status",
-    "git.diff",
-    "git.commit",
-    "web.search",
-    "skill.run",
-    "mcp.call"
-  ],
-  "shell": {
-    "default_timeout_seconds": 120,
-    "dangerous_patterns": [
-      "rm -rf",
-      "sudo",
-      "chmod -R 777",
-      "chown -R",
-      "dd",
-      "mkfs",
-      "shutdown",
-      "reboot",
-      "curl | sh",
-      "wget | bash",
-      "git reset --hard",
-      "git clean -fd",
-      "git push"
-    ]
+  "file.list": {
+    "name": "file.list",
+    "description": "列出工作区内的文件和目录结构，支持递归深度控制",
+    "risk_level": "safe",
+    "params": {
+      "path": {"type": "string", "description": "要列出的目录相对路径（可选，默认根目录）", "required": false},
+      "depth": {"type": "integer", "description": "递归深度（1-5，可选，默认2）", "required": false}
+    },
+    "category": "file"
+  },
+  "file.read": {
+    "name": "file.read",
+    "description": "读取工作区内文件的内容，支持指定行范围",
+    "risk_level": "safe",
+    "params": {
+      "path": {"type": "string", "description": "文件相对路径", "required": true},
+      "start_line": {"type": "integer", "description": "起始行号（可选，默认1）", "required": false},
+      "end_line": {"type": "integer", "description": "结束行号（可选，默认文件末尾）", "required": false}
+    },
+    "category": "file"
+  },
+  "file.write": {
+    "name": "file.write",
+    "description": "写入文件内容（覆盖模式），写入操作需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "path": {"type": "string", "description": "文件相对路径", "required": true},
+      "content": {"type": "string", "description": "要写入的文件内容", "required": true}
+    },
+    "category": "file"
+  },
+  "file.apply_patch": {
+    "name": "file.apply_patch",
+    "description": "应用代码补丁到指定文件，补丁操作需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "file_path": {"type": "string", "description": "要修改的文件相对路径", "required": true},
+      "patch": {"type": "string", "description": "补丁内容（diff格式）", "required": true}
+    },
+    "category": "file"
+  },
+  "cd": {
+    "name": "cd",
+    "description": "切换当前工作目录",
+    "risk_level": "safe",
+    "params": {
+      "path": {"type": "string", "description": "要切换到的目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
+  "pwd": {
+    "name": "pwd",
+    "description": "查看当前工作目录路径",
+    "risk_level": "safe",
+    "params": {},
+    "category": "file"
+  },
+  "shell.run": {
+    "name": "shell.run",
+    "description": "在工作区内执行 Shell 命令（Sprint 2 实现）",
+    "risk_level": "medium",
+    "params": {
+      "command": {"type": "string", "description": "要执行的 Shell 命令", "required": true},
+      "cwd": {"type": "string", "description": "工作目录（可选，默认 workspace 根目录）", "required": false},
+      "timeout": {"type": "integer", "description": "超时时间/秒（可选，默认 60）", "required": false}
+    },
+    "category": "shell"
+  },
+  "git.status": {
+    "name": "git.status",
+    "description": "查看 Git 仓库状态（Sprint 2 实现）",
+    "risk_level": "safe",
+    "params": {},
+    "category": "git"
+  },
+  "git.diff": {
+    "name": "git.diff",
+    "description": "查看 Git 文件变更详情（Sprint 2 实现）",
+    "risk_level": "safe",
+    "params": {
+      "path": {"type": "string", "description": "指定文件路径（可选）", "required": false}
+    },
+    "category": "git"
+  },
+  "mcp.call": {
+    "name": "mcp.call",
+    "description": "调用 MCP 外部服务工具（Sprint 2+ 实现）",
+    "risk_level": "medium",
+    "params": {
+      "server": {"type": "string", "description": "MCP 服务器名称", "required": true},
+      "tool": {"type": "string", "description": "工具名称", "required": true},
+      "params": {"type": "object", "description": "工具参数", "required": true}
+    },
+    "category": "mcp"
   }
 }
