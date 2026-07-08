@@ -8,10 +8,10 @@
 namespace codepilot {
 
 // ============================================================
-// GitTool — Git 状态和差异查询
+// GitTool — Git 操作工具集
 //
-// 工具名: git.status / git.diff
-// 功能:   查看 Git 仓库状态和文件变更
+// 已有工具: git.status / git.diff
+// 新增工具: git.commit
 //
 // 对齐整体架构说明.md 第9.5节
 // ============================================================
@@ -21,6 +21,7 @@ public:
 
   std::string name() const override;
   std::string description() const override;
+  std::string group() const override { return ToolGroups::GIT; }
   ToolSchema schema() const override;
   RiskLevel riskLevel(const json &arguments) const override;
   ToolResult execute(const ToolContext &context,
@@ -36,6 +37,29 @@ public:
 
   std::string name() const override;
   std::string description() const override;
+  std::string group() const override { return ToolGroups::GIT; }
+  ToolSchema schema() const override;
+  RiskLevel riskLevel(const json &arguments) const override;
+  ToolResult execute(const ToolContext &context,
+                     const json &arguments) override;
+
+private:
+  std::shared_ptr<ProcessRunner> runner_;
+};
+
+// ============================================================
+// GitCommitTool — 创建 git commit
+//
+// 功能: git add . + git commit -m "message"
+// 风险等级: Dangerous（需要用户确认）
+// ============================================================
+class GitCommitTool : public Tool {
+public:
+  explicit GitCommitTool(std::shared_ptr<ProcessRunner> runner);
+
+  std::string name() const override;
+  std::string description() const override;
+  std::string group() const override { return ToolGroups::GIT; }
   ToolSchema schema() const override;
   RiskLevel riskLevel(const json &arguments) const override;
   ToolResult execute(const ToolContext &context,

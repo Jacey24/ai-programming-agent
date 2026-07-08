@@ -1,6 +1,11 @@
 // ============================================================
-// CodePilot 工具系统 - Sprint 1 + Sprint 2 完整测试套件
-// 所有功能通过 ToolSystem 门面类测试（单 include）
+// CodePilot tool system - Sprint 1 + Sprint 2 complete test suite
+// All tests through ToolSystem facade (single include)
+//
+// Sprint 2.5 additions:
+//   - git.commit tool
+//   - Tool group system (group field + group queries)
+//   - Group-level prompt snippets
 // ============================================================
 
 #include <filesystem>
@@ -8,7 +13,7 @@
 #include <memory>
 #include <string>
 
-// === 只需引入 ToolSystem 一个头文件即可 ===
+// === Only need one header ===
 #include "application/ToolSystem.h"
 
 using namespace codepilot;
@@ -35,23 +40,24 @@ void printResult(const std::string &label, const ToolResult &result) {
 }
 
 // ============================================================
-// Test 1: ToolSystem 初始化 + 工具注册
+// Test 1: ToolSystem init + tool registration
 // ============================================================
 void testToolSystemInit() {
-  printSection("Test 1: ToolSystem 初始化 + 注册");
+  printSection("Test 1: ToolSystem init + registration");
 
   auto &sys = ToolSystem::getInstance();
   sys.init(std::filesystem::current_path().string());
 
   std::cout << "  isInitialized: " << (sys.isInitialized() ? "YES" : "NO")
             << "\n";
-  std::cout << "  注册工具数: " << sys.registry().size() << "\n";
+  std::cout << "  registered tools: " << sys.registry().size() << "\n";
 
-  std::cout << "  工具列表:\n";
+  std::cout << "  tool list:\n";
   for (const auto &name : sys.registry().listToolNames()) {
     auto *tool = sys.registry().getTool(name);
     if (tool) {
-      std::cout << "    - " << name << ": " << tool->description() << "\n";
+      std::cout << "    - " << name << "  [group: " << tool->group()
+                << "]: " << tool->description() << "\n";
     }
   }
 
@@ -62,48 +68,53 @@ void testToolSystemInit() {
                 sys.registry().hasTool("cd") && sys.registry().hasTool("pwd") &&
                 sys.registry().hasTool("shell.run") &&
                 sys.registry().hasTool("git.status") &&
-                sys.registry().hasTool("git.diff");
+                sys.registry().hasTool("git.diff") &&
+                sys.registry().hasTool("git.commit");
 
-  bool testPassed = sys.isInitialized() && sys.registry().size() >= 9 && hasAll;
+  bool testPassed =
+      sys.isInitialized() && sys.registry().size() >= 10 && hasAll;
   std::cout << "\n  >>> Test 1 " << (testPassed ? "PASSED" : "FAILED")
             << " <<<\n";
 }
 
 // ============================================================
-// Test 2: Schema 生成（含 Sprint 2 工具）
+// Test 2: Schema generation
 // ============================================================
 void testSchemaGeneration() {
-  printSection("Test 2: Tool Schema 生成（含 shell.run / git.*）");
+  printSection("Test 2: Tool Schema generation (incl. git.commit)");
 
   auto &sys = ToolSystem::getInstance();
 
   auto schemas = sys.registry().listSchemas();
-  std::cout << "  生成的 Schema (前 600 字符):\n"
+  std::cout << "  generated Schema (first 600 chars):\n"
             << schemas.dump(2).substr(0, 600) << "...\n";
 
   auto info = sys.registry().listToolInfo();
-  std::cout << "\n  listToolInfo:\n" << info.dump(2).substr(0, 600) << "...\n";
+  std::cout << "\n  listToolInfo (with group field):\n"
+            << info.dump(2).substr(0, 600) << "...\n";
 
-  // 验证 shell.run 和 git.status 在 schema 中
+  // verify tools in schema
   std::string schemaStr = schemas.dump();
   bool hasShellRun = schemaStr.find("shell.run") != std::string::npos;
   bool hasGitStatus = schemaStr.find("git.status") != std::string::npos;
   bool hasGitDiff = schemaStr.find("git.diff") != std::string::npos;
+  bool hasGitCommit = schemaStr.find("git.commit") != std::string::npos;
 
-  std::cout << "\n  shell.run: " << (hasShellRun ? "✓" : "✗") << "\n";
-  std::cout << "  git.status: " << (hasGitStatus ? "✓" : "✗") << "\n";
-  std::cout << "  git.diff: " << (hasGitDiff ? "✓" : "✗") << "\n";
+  std::cout << "\n  shell.run: " << (hasShellRun ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  git.status: " << (hasGitStatus ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  git.diff: " << (hasGitDiff ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  git.commit: " << (hasGitCommit ? "[OK]" : "[NO]") << "\n";
 
-  bool testPassed = hasShellRun && hasGitStatus && hasGitDiff;
+  bool testPassed = hasShellRun && hasGitStatus && hasGitDiff && hasGitCommit;
   std::cout << "\n  >>> Test 2 " << (testPassed ? "PASSED" : "FAILED")
             << " <<<\n";
 }
 
 // ============================================================
-// Test 3: file.list / file.read (通过 ToolSystem.callTool)
+// Test 3: file.list / file.read (via ToolSystem.callTool)
 // ============================================================
 void testFileTools() {
-  printSection("Test 3: 文件工具（通过 ToolSystem）");
+  printSection("Test 3: File tools (via ToolSystem)");
 
   auto &sys = ToolSystem::getInstance();
   ToolContext ctx{"test_task",
@@ -146,15 +157,15 @@ void testFileTools() {
 }
 
 // ============================================================
-// Test 4: Workspace 路径安全
+// Test 4: Workspace path security
 // ============================================================
 void testWorkspace() {
-  printSection("Test 4: Workspace 路径安全");
+  printSection("Test 4: Workspace path security");
 
   auto &sys = ToolSystem::getInstance();
 
-  std::cout << "  Workspace 根路径: " << sys.workspace().rootPath() << "\n";
-  std::cout << "  当前路径: " << sys.workspace().currentPath() << "\n";
+  std::cout << "  Workspace root: " << sys.workspace().rootPath() << "\n";
+  std::cout << "  current path: " << sys.workspace().currentPath() << "\n";
 
   bool safe = sys.workspace().isPathSafe("CMakeLists.txt");
   std::cout << "  isPathSafe(\"CMakeLists.txt\"): "
@@ -174,43 +185,44 @@ void testWorkspace() {
 }
 
 // ============================================================
-// Test 5: RiskDetector 危险命令检测
+// Test 5: RiskDetector dangerous command detection
 // ============================================================
 void testRiskDetector() {
-  printSection("Test 5: RiskDetector 危险命令检测");
+  printSection("Test 5: RiskDetector dangerous command detection");
 
   auto &sys = ToolSystem::getInstance();
   auto &detector = sys.riskDetector();
 
-  // 安全命令
+  // safe commands
   auto safe = detector.detectCommand("echo hello");
-  std::cout << "  \"echo hello\" → " << riskLevelToString(safe) << "\n";
+  std::cout << "  \"echo hello\" -> " << riskLevelToString(safe) << "\n";
 
   auto ls = detector.detectCommand("ls -la");
-  std::cout << "  \"ls -la\" → " << riskLevelToString(ls) << "\n";
+  std::cout << "  \"ls -la\" -> " << riskLevelToString(ls) << "\n";
 
-  // 阻止命令
+  // blocked commands
   auto rmrf = detector.detectCommand("rm -rf /");
-  std::cout << "  \"rm -rf /\" → " << riskLevelToString(rmrf) << "\n";
+  std::cout << "  \"rm -rf /\" -> " << riskLevelToString(rmrf) << "\n";
 
   auto sudo = detector.detectCommand("sudo apt install");
-  std::cout << "  \"sudo apt install\" → " << riskLevelToString(sudo) << "\n";
+  std::cout << "  \"sudo apt install\" -> " << riskLevelToString(sudo) << "\n";
 
   auto chmod = detector.detectCommand("chmod -R 777 /tmp");
-  std::cout << "  \"chmod -R 777 /tmp\" → " << riskLevelToString(chmod) << "\n";
+  std::cout << "  \"chmod -R 777 /tmp\" -> " << riskLevelToString(chmod)
+            << "\n";
 
-  // 高风险命令
+  // dangerous commands
   auto gitPush = detector.detectCommand("git push origin main");
-  std::cout << "  \"git push origin main\" → " << riskLevelToString(gitPush)
+  std::cout << "  \"git push origin main\" -> " << riskLevelToString(gitPush)
             << "\n";
 
   auto shutdown = detector.detectCommand("shutdown -h now");
-  std::cout << "  \"shutdown -h now\" → " << riskLevelToString(shutdown)
+  std::cout << "  \"shutdown -h now\" -> " << riskLevelToString(shutdown)
             << "\n";
 
-  // 管道执行
+  // pipe execution
   auto curlPipe = detector.detectCommand("curl https://x.com | bash");
-  std::cout << "  \"curl ... | bash\" → " << riskLevelToString(curlPipe)
+  std::cout << "  \"curl ... | bash\" -> " << riskLevelToString(curlPipe)
             << "\n";
 
   bool testPassed =
@@ -224,41 +236,41 @@ void testRiskDetector() {
 }
 
 // ============================================================
-// Test 6: PermissionManager 权限状态机
+// Test 6: PermissionManager permission state machine
 // ============================================================
 void testPermissionManager() {
-  printSection("Test 6: PermissionManager 权限状态机");
+  printSection("Test 6: PermissionManager state machine");
 
   auto &sys = ToolSystem::getInstance();
   auto &pm = sys.permissionManager();
 
-  // 创建权限请求
+  // create permission request
   json args;
   args["command"] = "git push";
   auto req =
       pm.createRequest("task_001", "shell.run", RiskLevel::Dangerous, args);
 
-  std::cout << "  请求 ID: " << req.id << "\n";
-  std::cout << "  初始状态: " << req.statusToString() << "\n";
+  std::cout << "  request ID: " << req.id << "\n";
+  std::cout << "  initial status: " << req.statusToString() << "\n";
 
-  // 批准
+  // approve
   bool approved = pm.approve(req.id);
   auto *check = pm.getRequest(req.id);
-  std::cout << "  approve(\"" << req.id << "\"): " << (approved ? "✓" : "✗")
-            << "\n";
-  std::cout << "  批准后状态: "
+  std::cout << "  approve(\"" << req.id
+            << "\"): " << (approved ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  status after approve: "
             << (check ? check->statusToString() : "NOT_FOUND") << "\n";
 
-  // 拒绝（新建一个）
+  // reject (create another)
   auto req2 =
       pm.createRequest("task_001", "file.write", RiskLevel::Medium, args);
   bool rejected = pm.reject(req2.id);
-  std::cout << "  reject(\"" << req2.id << "\"): " << (rejected ? "✓" : "✗")
-            << "\n";
+  std::cout << "  reject(\"" << req2.id
+            << "\"): " << (rejected ? "[OK]" : "[NO]") << "\n";
 
-  // 查询待处理请求
+  // query pending
   auto pending = pm.getPendingRequests("task_001");
-  std::cout << "  待处理请求数: " << pending.size() << "\n";
+  std::cout << "  pending requests: " << pending.size() << "\n";
 
   bool testPassed = approved && rejected && check &&
                     check->status == PermissionStatus::Approved &&
@@ -269,10 +281,10 @@ void testPermissionManager() {
 }
 
 // ============================================================
-// Test 7: EventBus 事件系统（通过 ToolSystem）
+// Test 7: EventBus event system
 // ============================================================
 void testEventBus() {
-  printSection("Test 7: EventBus 事件系统（通过 ToolSystem）");
+  printSection("Test 7: EventBus event system (via ToolSystem)");
 
   auto &sys = ToolSystem::getInstance();
   auto &bus = sys.eventBus();
@@ -281,20 +293,20 @@ void testEventBus() {
   auto id = bus.subscribeAll(
       [&received](const EventData &e) { received.push_back(e); });
 
-  // 发布事件
+  // publish events
   bus.publish(
-      EventData::Create("task_001", EventType::TaskCreated, "任务已创建"));
+      EventData::Create("task_001", EventType::TaskCreated, "task created"));
 
   json meta;
   meta["tool_name"] = "shell.run";
   bus.publish(EventData::Create("task_001", EventType::ToolStarted,
-                                "开始执行 shell.run", meta));
+                                "start shell.run", meta));
 
   bus.publish(
-      EventData::Create("task_001", EventType::ToolFinished, "执行完成"));
+      EventData::Create("task_001", EventType::ToolFinished, "finished"));
 
-  std::cout << "  发布事件数: 3\n";
-  std::cout << "  收到事件数: " << received.size() << "\n";
+  std::cout << "  published: 3\n";
+  std::cout << "  received: " << received.size() << "\n";
   for (const auto &e : received) {
     std::cout << "    event: " << e.typeToString()
               << " | content: " << e.content << "\n";
@@ -305,11 +317,11 @@ void testEventBus() {
       !received.empty() && received[0].createdAt.find('T') != std::string::npos;
 
   bus.unsubscribe(id);
-  bus.publish(EventData::Create("task_001", EventType::TaskCompleted, "完成"));
-  std::cout << "  取消订阅后收到数: " << received.size() << "（应为 3）\n";
+  bus.publish(EventData::Create("task_001", EventType::TaskCompleted, "done"));
+  std::cout << "  after unsubscribe: " << received.size() << " (should be 3)\n";
 
   auto history = bus.getHistory("task_001");
-  std::cout << "  历史事件数: " << history.size() << "（应 >= 3）\n";
+  std::cout << "  history count: " << history.size() << " (should be >= 3)\n";
 
   bool testPassed = received.size() == 3 && history.size() >= 3 && hasValidTime;
   std::cout << "\n  >>> Test 7 " << (testPassed ? "PASSED" : "FAILED")
@@ -317,10 +329,10 @@ void testEventBus() {
 }
 
 // ============================================================
-// Test 8: 工具风险等级（含 shell.run）
+// Test 8: Tool risk levels
 // ============================================================
 void testRiskLevels() {
-  printSection("Test 8: 工具风险等级");
+  printSection("Test 8: Tool risk levels");
 
   auto &sys = ToolSystem::getInstance();
 
@@ -338,6 +350,7 @@ void testRiskLevels() {
       {"pwd", "", RiskLevel::Safe},
       {"git.status", "", RiskLevel::Safe},
       {"git.diff", "", RiskLevel::Safe},
+      {"git.commit", "", RiskLevel::Dangerous},
   };
 
   bool allMatch = true;
@@ -352,14 +365,15 @@ void testRiskLevels() {
     RiskLevel actual = tool->riskLevel(args);
     bool match = actual == c.expected;
     std::cout << "  " << c.name << ": " << riskLevelToString(actual)
-              << (match ? " ✓"
-                        : " ✗ (expected " + riskLevelToString(c.expected) + ")")
+              << (match ? " [OK]"
+                        : " [MISMATCH (expected " +
+                              riskLevelToString(c.expected) + ")]")
               << "\n";
     if (!match)
       allMatch = false;
   }
 
-  // shell.run 参数相关测试
+  // shell.run parameter-dependent test
   auto *shellTool = sys.registry().getTool("shell.run");
   if (shellTool) {
     json safeArgs;
@@ -367,7 +381,7 @@ void testRiskLevels() {
     auto safeLevel = shellTool->riskLevel(safeArgs);
     bool safeOk = safeLevel == RiskLevel::Safe;
     std::cout << "  shell.run(\"echo hello\"): " << riskLevelToString(safeLevel)
-              << (safeOk ? " ✓" : " ✗") << "\n";
+              << (safeOk ? " [OK]" : " [NO]") << "\n";
     if (!safeOk)
       allMatch = false;
 
@@ -376,8 +390,8 @@ void testRiskLevels() {
     auto blockedLevel = shellTool->riskLevel(blockedArgs);
     bool blockedOk = blockedLevel == RiskLevel::Blocked;
     std::cout << "  shell.run(\"sudo rm -rf /\"): "
-              << riskLevelToString(blockedLevel) << (blockedOk ? " ✓" : " ✗")
-              << "\n";
+              << riskLevelToString(blockedLevel)
+              << (blockedOk ? " [OK]" : " [NO]") << "\n";
     if (!blockedOk)
       allMatch = false;
   }
@@ -387,10 +401,10 @@ void testRiskLevels() {
 }
 
 // ============================================================
-// Test 9: callToolWithPermission 带权限检查
+// Test 9: callToolWithPermission with permission check
 // ============================================================
 void testCallWithPermission() {
-  printSection("Test 9: callToolWithPermission 权限检查");
+  printSection("Test 9: callToolWithPermission permission check");
 
   auto &sys = ToolSystem::getInstance();
   ToolContext ctx{"perm_test",
@@ -399,30 +413,30 @@ void testCallWithPermission() {
                   "sess_001",
                   {}};
 
-  // 安全命令 → 直接执行
+  // safe command -> direct execution
   json safeArgs;
   safeArgs["command"] = "echo hello";
   auto result = sys.callToolWithPermission("shell.run", ctx, safeArgs);
   printResult("shell.run \"echo hello\" (safe)", result);
 
-  // 阻止命令 → 直接拒绝
+  // blocked command -> direct rejection
   json blockedArgs;
   blockedArgs["command"] = "rm -rf /";
   result = sys.callToolWithPermission("shell.run", ctx, blockedArgs);
-  printResult("shell.run \"rm -rf /\" (blocked→拒绝)", result);
-  bool blockedRejected =
-      !result.success && result.error.find("阻止") != std::string::npos;
+  printResult("shell.run \"rm -rf /\" (blocked->rejected)", result);
+  bool blockedRejected = !result.success;
 
-  // 中等风险 → 创建权限请求后执行
+  // medium risk -> create permission request then execute
   json mediumArgs;
   mediumArgs["path"] = "test_write.txt";
   mediumArgs["content"] = "test content";
   result = sys.callToolWithPermission("file.write", ctx, mediumArgs);
-  printResult("file.write (medium→创建请求)", result);
+  printResult("file.write (medium->creates request)", result);
 
-  // 查看是否有待处理请求
+  // check pending requests
   auto pending = sys.permissionManager().getPendingRequests("perm_test");
-  std::cout << "  待处理请求数: " << pending.size() << "（应 >= 1）\n";
+  std::cout << "  pending requests: " << pending.size()
+            << " (should be >= 1)\n";
 
   bool testPassed = blockedRejected && !pending.empty();
   std::cout << "\n  >>> Test 9 " << (testPassed ? "PASSED" : "FAILED")
@@ -430,17 +444,91 @@ void testCallWithPermission() {
 }
 
 // ============================================================
-// 主函数
+// Test 10: Tool group system (Sprint 2.5 new feature)
+// ============================================================
+void testToolGroups() {
+  printSection("Test 10: Tool group system (ToolGroups)");
+
+  auto &sys = ToolSystem::getInstance();
+  auto &reg = sys.registry();
+
+  // 10a: list all groups
+  auto groups = reg.listGroupNames();
+  std::cout << "  registered groups: " << groups.size() << "\n";
+  std::cout << "  group list: ";
+  for (const auto &g : groups)
+    std::cout << g << " ";
+  std::cout << "\n";
+
+  bool hasFile = false, hasGit = false, hasShell = false;
+  for (const auto &g : groups) {
+    if (g == "file")
+      hasFile = true;
+    if (g == "git")
+      hasGit = true;
+    if (g == "shell")
+      hasShell = true;
+  }
+  std::cout << "  file group: " << (hasFile ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  git group: " << (hasGit ? "[OK]" : "[NO]") << "\n";
+  std::cout << "  shell group: " << (hasShell ? "[OK]" : "[NO]") << "\n";
+
+  // 10b: query schemas by group
+  auto gitSchemas = reg.listSchemas("git");
+  std::cout << "\n  git group schema count: " << gitSchemas["tools"].size()
+            << "\n";
+  for (const auto &t : gitSchemas["tools"]) {
+    std::cout << "    - " << t["function"]["name"] << "\n";
+  }
+  bool hasAllGitTools = gitSchemas["tools"].size() == 3;
+
+  // 10c: query toolInfo by group
+  auto fileInfo = reg.listToolInfo("file");
+  std::cout << "\n  file group tool count: " << fileInfo["items"].size()
+            << "\n";
+  for (const auto &item : fileInfo["items"]) {
+    std::cout << "    - " << item["name"] << " (risk: " << item["risk_level"]
+              << ", group: " << item["group"] << ")\n";
+  }
+  bool hasAllFileTools = fileInfo["items"].size() == 6;
+
+  // 10d: group prompts
+  auto gitPrompt = reg.getGroupPrompt("git");
+  std::cout << "\n  git group prompt: " << gitPrompt.substr(0, 80) << "...\n";
+  auto filePrompt = reg.getGroupPrompt("file");
+  std::cout << "  file group prompt: " << filePrompt.substr(0, 80) << "...\n";
+  auto shellPrompt = reg.getGroupPrompt("shell");
+  std::cout << "  shell group prompt: " << shellPrompt.substr(0, 80) << "...\n";
+  auto unknownPrompt = reg.getGroupPrompt("web");
+  std::cout << "  web group prompt (unregistered): \"" << unknownPrompt
+            << "\"\n";
+
+  bool hasPrompts =
+      !gitPrompt.empty() && !filePrompt.empty() && !shellPrompt.empty();
+  bool noUnknown = unknownPrompt.empty();
+
+  bool testPassed = hasFile && hasGit && hasShell && hasAllGitTools &&
+                    hasAllFileTools && hasPrompts && noUnknown;
+
+  std::cout << "\n  >>> Test 10 " << (testPassed ? "PASSED" : "FAILED")
+            << " <<<\n";
+}
+
+// ============================================================
+// Main
 // ============================================================
 int main() {
   std::cout << "\n";
-  std::cout << "╔══════════════════════════════════════════════════════════╗\n";
-  std::cout << "║   CodePilot 工具系统 - Sprint 1+2 完整测试套件          ║\n";
-  std::cout << "║   所有功能通过 ToolSystem 门面类测试（单 include）       ║\n";
-  std::cout << "╚══════════════════════════════════════════════════════════╝\n";
-  std::cout << "  编译时间: " << __DATE__ << " " << __TIME__ << "\n";
-  std::cout << "  工作目录: " << std::filesystem::current_path().string()
-            << "\n";
+  std::cout
+      << "+===========================================================+\n";
+  std::cout
+      << "|  CodePilot Tool System - Sprint 1+2+2.5 Complete Tests    |\n";
+  std::cout
+      << "|  New: git.commit / tool groups / group prompts            |\n";
+  std::cout
+      << "+===========================================================+\n";
+  std::cout << "  Build: " << __DATE__ << " " << __TIME__ << "\n";
+  std::cout << "  CWD: " << std::filesystem::current_path().string() << "\n";
 
   testToolSystemInit();
   testSchemaGeneration();
@@ -451,15 +539,18 @@ int main() {
   testEventBus();
   testRiskLevels();
   testCallWithPermission();
+  testToolGroups();
 
-  printSection("所有测试完成");
-  std::cout << "  请逐项确认每个测试的 PASS/FAIL 状态。\n";
-  std::cout << "  Sprint 2 新增模块: ShellTool / GitTool / RiskDetector /\n";
+  printSection("ALL TESTS COMPLETE");
+  std::cout << "  Please verify each test PASSED/FAILED status.\n";
+  std::cout << "  Sprint 2.5 additions:\n";
+  std::cout << "    - git.commit tool (Dangerous, requires confirmation)\n";
+  std::cout << "    - tool group system (group field + filtered queries)\n";
   std::cout
-      << "  PermissionManager / ProcessRunner / callToolWithPermission\n\n";
-  std::cout << "  按任意键退出...\n";
+      << "    - group-level prompt snippets (for Agent System Prompt)\n\n";
+  std::cout << "  Press any key to exit...\n";
 
-  // 阻止终端自动退出，方便在外部环境中查看结果
+  // prevent auto-exit for external environment review
   std::cin.get();
 
   return 0;

@@ -83,6 +83,15 @@
     },
     "category": "git"
   },
+  "git.commit": {
+    "name": "git.commit",
+    "description": "创建 Git commit：暂存所有变更并提交",
+    "risk_level": "dangerous",
+    "params": {
+      "message": {"type": "string", "description": "commit 信息，描述本次变更内容", "required": true}
+    },
+    "category": "git"
+  },
   "mcp.call": {
     "name": "mcp.call",
     "description": "调用 MCP 外部服务工具（Sprint 2+ 实现）",
