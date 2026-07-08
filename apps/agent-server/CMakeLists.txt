@@ -25,6 +25,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/PermissionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/ToolCallRepository.cpp
 )
 
 target_include_directories(codepilot-agent-server PRIVATE
