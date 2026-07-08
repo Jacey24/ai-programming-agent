@@ -2,6 +2,7 @@
 
 #include "api/controllers/SessionController.h"
 #include "api/controllers/TaskController.h"
+#include "api/controllers/ToolController.h"
 #include "api/controllers/WorkspaceController.h"
 
 #include <arpa/inet.h>
@@ -252,6 +253,18 @@ std::string HttpServer::handleRequest(const std::string& request) {
     if (request.rfind("GET /api/v1/tasks/", 0) == 0) {
         TaskController controller(config_.databasePath);
         return controller.getTask(request);
+    }
+    if (request.rfind("POST /api/v1/tasks/", 0) == 0) {
+        TaskController controller(config_.databasePath);
+        return controller.cancelTask(request);
+    }
+    if (request.rfind("GET /api/v1/tools?", 0) == 0 || request.rfind("GET /api/v1/tools ", 0) == 0) {
+        ToolController controller;
+        return controller.listTools();
+    }
+    if (request.rfind("GET /api/v1/tools/", 0) == 0) {
+        ToolController controller;
+        return controller.getToolDetail(request);
     }
     return not_found_response();
 }
