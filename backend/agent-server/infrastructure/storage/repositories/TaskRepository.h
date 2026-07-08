@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 struct TaskRecord {
     std::string id;
@@ -30,6 +31,13 @@ public:
         const std::string& created_at,
         const std::string& updated_at);
     std::optional<TaskRecord> findById(const std::string& task_id);
+    std::vector<TaskRecord> listRecent(int limit);
+    void updateExecution(
+        const std::string& task_id,
+        const std::string& status,
+        const std::string& plan,
+        const std::string& current_step,
+        const std::string& updated_at);
 
 private:
     sqlite3* db_;
