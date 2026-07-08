@@ -1,11 +1,14 @@
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
+#include "infrastructure/storage/repositories/PermissionRepository.h"
+#include "infrastructure/storage/repositories/ToolCallRepository.h"
 
 #include <sqlite3.h>
 
 #include <atomic>
 #include <csignal>
 #include <cstdio>
+#include <exception>
 #include <iostream>
 #include <string>
 
@@ -148,6 +151,15 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     if (exec_result != SQLITE_OK) {
         error = error_message ? error_message : "schema initialization failed";
         sqlite3_free(error_message);
+        sqlite3_close(db);
+        return false;
+    }
+
+    try {
+        PermissionRepository(db).initTable();
+        ToolCallRepository(db).initTable();
+    } catch (const std::exception& init_error) {
+        error = init_error.what();
         sqlite3_close(db);
         return false;
     }
