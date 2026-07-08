@@ -24,6 +24,18 @@ public:
   ToolResult changeDirectory(const json &args);
   ToolResult getWorkingDirectory(const json &args);
 
+  // --- 新: 文件搜索 ---
+  ToolResult searchFiles(const json &args);
+
+  // --- 新: 目录创建/删除 ---
+  ToolResult makeDirectory(const json &args);
+  ToolResult removeDirectory(const json &args);
+  ToolResult removeFile(const json &args);
+
+  // --- 新: 文件复制/移动 ---
+  ToolResult copyFile(const json &args);
+  ToolResult moveFile(const json &args);
+
   // --- 路径安全查询（供 RiskDetector 使用） ---
   Workspace *workspace() const { return workspace_.get(); }
 

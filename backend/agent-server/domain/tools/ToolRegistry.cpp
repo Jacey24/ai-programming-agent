@@ -57,7 +57,11 @@ ToolResult ToolRegistry::call(const std::string &name,
                               const json &arguments) {
   auto it = tools_.find(name);
   if (it == tools_.end()) {
-    return ToolResult::Err("Tool not found: " + name);
+    // FallbackHandler: 友好提示可用工具
+    std::string msg = "未知工具 '" + name + "'。";
+    msg += "可用工具分组：\n" + listAvailableToolsByGroup();
+    msg += "\n请检查工具名是否正确。";
+    return ToolResult::Err(msg);
   }
 
   Tool *tool = it->second.get();
@@ -199,6 +203,20 @@ std::string ToolRegistry::getGroupPrompt(const std::string &groupName) const {
   if (it == groups_.end())
     return "";
   return it->second.promptSnippet;
+}
+
+std::string ToolRegistry::listAvailableToolsByGroup() const {
+  std::ostringstream oss;
+  for (const auto &[gname, info] : groups_) {
+    oss << "  [" << gname << " 组] ";
+    for (size_t i = 0; i < info.toolNames.size(); ++i) {
+      if (i > 0)
+        oss << ", ";
+      oss << info.toolNames[i];
+    }
+    oss << "\n";
+  }
+  return oss.str();
 }
 
 } // namespace codepilot
