@@ -1,4 +1,4 @@
-# Build outputs
+﻿# Build outputs
 build/
 *.o
 *.obj
@@ -27,3 +27,8 @@ storage/logs/
 
 # Config overrides (local)
 config/*.local.json
+
+# Personal files
+# 个人文件
+test_write.txt
+代办清单.md
