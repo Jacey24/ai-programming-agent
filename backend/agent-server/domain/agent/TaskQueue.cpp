@@ -6,6 +6,7 @@ void TaskQueue::loadFromPlan(const std::vector<PlanStep>& steps) {
     steps_ = steps;
     currentIndex_ = 0;
     state_.transition(TaskStatus::Planning);
+    state_.transition(TaskStatus::Running);
 }
 
 bool TaskQueue::hasNext() const {
