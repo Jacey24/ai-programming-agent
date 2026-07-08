@@ -1,4 +1,4 @@
-# Build outputs
+﻿# Build outputs
 build/
 *.o
 *.obj
@@ -30,3 +30,8 @@ config/*.local.json
 
 #docs
 docs/AppBootstrap 模块化拆分计划.md
+
+# Personal files
+# 个人文件
+test_write.txt
+代办清单.md
