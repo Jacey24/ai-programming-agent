@@ -3,11 +3,10 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
+#include <utility>
 #include <sqlite3.h>
 
 namespace {
-
-constexpr const char* kDatabasePath = "/data/agent.db";
 
 std::string json_escape(const std::string& value) {
     std::ostringstream escaped;
@@ -89,6 +88,9 @@ std::string request_body(const std::string& request) {
 
 namespace codepilot {
 
+WorkspaceController::WorkspaceController(std::string database_path)
+    : databasePath_(std::move(database_path)) {}
+
 std::string WorkspaceController::createWorkspace(const std::string& request) {
     const std::string req_body = request_body(request);
     const std::string name = extract_json_string(req_body, "name");
@@ -103,7 +105,7 @@ std::string WorkspaceController::createWorkspace(const std::string& request) {
     const std::string now = current_timestamp();
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(kDatabasePath, &db) != SQLITE_OK) {
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
