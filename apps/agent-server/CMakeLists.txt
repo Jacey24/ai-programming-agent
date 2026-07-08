@@ -39,13 +39,22 @@ install(TARGETS codepilot-agent-server RUNTIME DESTINATION bin)
 
 # ============================================================
 # 工具测试可执行文件（独立于 agent-server）
+# Sprint 1: FileTool / BuiltinShell / Workspace / EventBus / EventDispatcher
+# Sprint 2: ShellTool / GitTool / RiskDetector / PermissionManager / ProcessRunner
+# Sprint 2.5: ToolSystem (facade) / ToolRegistry (groups)
 # ============================================================
 add_executable(tool-tests EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/apps/tool-tests/tool_test_main.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ToolRegistry.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/FileTool.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/BuiltinShell.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ShellTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/GitTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/RiskDetector.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventDispatcher.cpp
 )
