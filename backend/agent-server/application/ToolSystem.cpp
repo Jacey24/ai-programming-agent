@@ -89,6 +89,7 @@ void ToolSystem::init(const std::string &workspacePath,
   detector_ = std::make_shared<RiskDetector>();
   registry_ = std::make_unique<ToolRegistry>();
   eventBus_ = std::make_shared<EventBus>();
+  permissionManager_ = std::make_shared<PermissionManager>(eventBus_);
 
   registerFileTools(*registry_, shell_);
 
@@ -250,14 +251,15 @@ ToolResult ToolSystem::callTool(const std::string &name,
 
   eventBus_->publish(EventData::Create(
       context.taskId, EventType::ToolFinished,
-      result.success ? "Tool finished" : "Tool failed: " + result.error,
-      metadata));
+      result.success ? "Tool finished" : "Tool failed: " + result.error, meta));
 
   return result;
 }
 
 // ============================================================
 // callToolWithPermission() — 带权限检查的工具调用
+// ★ Sprint 2 增强：集成同步等待机制
+//   当工具需要权限确认时，会阻塞等待用户通过 API 同意/拒绝
 // ============================================================
 ToolResult ToolSystem::callToolWithPermission(const std::string &name,
                                               const ToolContext &context,
@@ -292,13 +294,63 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     return r;
   }
 
-  // 3. 如果需要权限，创建请求
+  // 3. 如果需要权限，创建请求并等待用户决策
   if (permissionManager_->requiresPermission(name, level, arguments)) {
-    permissionManager_->createRequest(context.taskId, name, level, arguments);
+    auto request = permissionManager_->createRequest(context.taskId, name,
+                                                     level, arguments);
+
+    // ★ Sprint 2: 阻塞等待用户通过 API 确认
+    //   郑嘉娴的 POST /api/v1/permissions/{id}/approve 端点
+    //   会调用 PermissionManager::resolvePermission() 来唤醒
+    bool approved = permissionManager_->waitForResolution(request.id);
+
+    if (!approved) {
+      json meta;
+      meta["tool_name"] = name;
+      meta["risk_level"] = riskLevelToString(level);
+      meta["request_id"] = request.id;
+      meta["permission_denied"] = true;
+      ToolResult r =
+          ToolResult::Err("权限被拒绝或超时: " + name + " (用户未批准该操作)");
+      r.metadata = meta;
+      return r;
+    }
   }
 
   // 4. 执行工具
   return callTool(name, context, arguments);
+}
+
+// ============================================================
+// ★ 新增：getToolSchemas() — 获取所有工具 schemas
+// ============================================================
+json ToolSystem::getToolSchemas() const {
+  std::shared_lock lock(mutex_);
+  return registry_->listSchemas();
+}
+
+// ============================================================
+// ★ 新增：getToolSummaries() — 获取工具轻量摘要
+// ============================================================
+json ToolSystem::getToolSummaries() const {
+  std::shared_lock lock(mutex_);
+  return registry_->listSummaries();
+}
+
+// ============================================================
+// ★ 新增：listToolNames() — 获取所有工具名称
+// ============================================================
+std::vector<std::string> ToolSystem::listToolNames() const {
+  std::shared_lock lock(mutex_);
+  return registry_->listToolNames();
+}
+
+// ============================================================
+// ★ 新增：listToolsByGroup() — 按分组列出工具（文本格式）
+// ============================================================
+std::string ToolSystem::listToolsByGroup() const {
+  std::shared_lock lock(mutex_);
+  return registry_->listAvailableToolsByGroup();
 }
 
 // ============================================================

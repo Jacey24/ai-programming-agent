@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -40,17 +41,38 @@ using ListenerId = size_t;
 
 // ============================================================
 // EventBus - 事件发布-订阅总线
+//
+// Sprint 2 新增能力：
+//   1. subscribeByTaskId(taskId, listener) — 按 taskId 订阅
+//      郑嘉娴的 SSE 端点使用此接口注册每个 task 的推送回调
+//   2. onEvent(listener) — 全局事件钩子
+//      钟经添的 Repository 使用此接口持久化事件到 SQLite
+//   3. 所有方法线程安全（mutex 保护）
 // ============================================================
 class EventBus {
 public:
   EventBus();
 
   // --- 发布事件 ---
+  // 线程安全
   void publish(const EventData &event);
 
-  // --- 订阅事件 ---
+  // --- 按类型订阅 ---
   ListenerId subscribe(EventType type, EventListener listener);
+
+  // --- 订阅所有事件 ---
   ListenerId subscribeAll(EventListener listener);
+
+  // --- ★ 新增：按 taskId 订阅 ---
+  // 只接收指定 taskId 的事件
+  // 用于郑嘉娴的 SSE 端点给每个 task 注册推送
+  ListenerId subscribeByTaskId(const std::string &taskId,
+                               EventListener listener);
+
+  // --- ★ 新增：全局事件钩子（用于持久化等） ---
+  // 接收所有事件，过滤条件由回调内部自行判断
+  // 钟经添的 Repository 用此接口持久化事件
+  ListenerId onEvent(EventListener listener);
 
   // --- 取消订阅 ---
   void unsubscribe(ListenerId id);
@@ -68,12 +90,16 @@ private:
     ListenerId id;
     EventType type;
     bool allEvents{false};
+    bool allTasks{false}; // 匹配所有 taskId
+    std::string taskId;   // 如果非空，只匹配此 taskId 的事件
+    bool global{false};   // 全局钩子（onEvent）
     EventListener listener;
   };
 
   ListenerId nextId_;
   std::vector<Subscription> subscriptions_;
   std::vector<EventData> history_;
+  mutable std::mutex mutex_; // 线程安全互斥锁
 
   void notifyListeners(const EventData &event);
 };
