@@ -142,7 +142,7 @@ std::string TaskController::createTask(const std::string& request) {
         task = task_service.createTask(session_id, workspace_id, input);
 
         AgentService agent_service;
-        const AgentResult agent_result = agent_service.runTask(task.id, session_id, workspace_id, input);
+        const AgentResult agent_result = agent_service.runTask(task.id, session_id, workspace_id, input, db);
         task_service.updateExecution(
             task.id,
             agent_result.status.empty() ? "planned" : agent_result.status,
