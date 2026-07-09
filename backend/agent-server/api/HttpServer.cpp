@@ -1,6 +1,8 @@
 #include "api/HttpServer.h"
 
 #include "api/controllers/LogController.h"
+#include "api/controllers/FileChangeController.h"
+#include "api/controllers/ReplayController.h"
 #include "api/controllers/PermissionController.h"
 #include "api/controllers/SessionController.h"
 #include "api/controllers/TaskController.h"
@@ -259,12 +261,24 @@ std::string HttpServer::handleRequest(const std::string& request) {
             LogController controller(config_.databasePath);
             return controller.listLogs(request);
         }
+        if (request_line.find("/file-changes ") != std::string::npos) {
+            FileChangeController controller(config_.databasePath);
+            return controller.listFileChanges(request);
+        }
+        if (request_line.find("/replay ") != std::string::npos) {
+            ReplayController controller(config_.databasePath);
+            return controller.getReplay(request);
+        }
         TaskController controller(config_.databasePath);
         return controller.getTask(request);
     }
     if (request.rfind("POST /api/v1/tasks/", 0) == 0) {
         TaskController controller(config_.databasePath);
         return controller.cancelTask(request);
+    }
+    if (request.rfind("GET /api/v1/file-changes/", 0) == 0) {
+        FileChangeController controller(config_.databasePath);
+        return controller.getFileChange(request);
     }
     if (request.rfind("GET /api/v1/tools?", 0) == 0 || request.rfind("GET /api/v1/tools ", 0) == 0) {
         ToolController controller;
