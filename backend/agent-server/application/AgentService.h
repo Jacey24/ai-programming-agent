@@ -2,6 +2,7 @@
 
 #include "domain/agent/Agent.h"
 
+#include <memory>
 #include <string>
 
 namespace codepilot {
@@ -13,6 +14,15 @@ public:
         const std::string& sessionId,
         const std::string& workspaceId,
         const std::string& goal);
+
+    // Sprint 2：获取 Agent 实例，供外部使用 buildExecutorPrompt 等
+    Agent* getAgent() { return agent_.get(); }
+
+    // Sprint 2：获取工具描述文本（由 ToolSystem 提供）
+    static std::string getToolsDescription();
+
+private:
+    std::unique_ptr<Agent> agent_;
 };
 
 } // namespace codepilot
