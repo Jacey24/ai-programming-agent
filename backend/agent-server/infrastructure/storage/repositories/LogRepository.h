@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,9 @@ public:
 
     void initTable();
     sqlite3_int64 createLog(const std::string& task_id, const std::string& type, const std::string& content);
+    std::optional<LogRecord> findById(sqlite3_int64 id);
     std::vector<LogRecord> findByTaskId(const std::string& task_id);
+    sqlite3_int64 countByTaskId(const std::string& task_id);
 
 private:
     sqlite3* db_;
