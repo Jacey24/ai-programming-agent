@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/debug/Debugger.h"
 #include "domain/security/PermissionManager.h"
 #include "domain/security/RiskDetector.h"
 #include "domain/tools/BuiltinShell.h"
@@ -77,6 +78,17 @@ public:
   ProcessRunner &processRunner();
 
   // ============================================================
+  // ★ 调试器访问
+  // ============================================================
+  // 返回 Debugger 引用，若未初始化则自动创建
+  Debugger &debugger();
+  // 检查调试器是否可用
+  bool hasDebugger() const { return debugger_ != nullptr; }
+  // 开启/关闭调试器
+  void setDebuggerEnabled(bool enabled);
+  bool isDebuggerEnabled() const;
+
+  // ============================================================
   // 工具调用接口
   // ============================================================
 
@@ -138,6 +150,7 @@ private:
   std::shared_ptr<ProcessRunner> runner_;
   std::shared_ptr<RiskDetector> detector_;
   std::shared_ptr<PermissionManager> permissionManager_;
+  std::unique_ptr<Debugger> debugger_;
   bool initialized_{false};
   std::string configPath_;
 

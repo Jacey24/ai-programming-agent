@@ -90,6 +90,7 @@ void ToolSystem::init(const std::string &workspacePath,
   registry_ = std::make_unique<ToolRegistry>();
   eventBus_ = std::make_shared<EventBus>();
   permissionManager_ = std::make_shared<PermissionManager>(eventBus_);
+  debugger_ = std::make_unique<Debugger>(eventBus_); // 懒初始化，默认关闭
 
   registerFileTools(*registry_, shell_);
 
@@ -203,8 +204,42 @@ ToolResult ToolSystem::callTool(const std::string &name,
     }
   }
 
+  // ★ 断点检查：工具执行前
+  // 仅当调试器启用且有对应断点时暂停
+  json effectiveArgs = arguments;
+  if (debugger_ && debugger_->isEnabled() &&
+      debugger_->hasBreakpoint(name, BreakpointType::BeforeToolCall)) {
+    json debugResult =
+        debugger_->pauseBeforeTool(context.taskId, name, arguments);
+    if (debugResult.contains("__skip__") &&
+        debugResult["__skip__"].get<bool>()) {
+      // 用户选择"跳过"此工具
+      ToolResult skipResult;
+      skipResult.success = debugResult.value("__skip_success__", false);
+      skipResult.output = debugResult.value("__skip_output__", "");
+
+      // 仍发布事件
+      json meta;
+      meta["tool_name"] = name;
+      meta["success"] = skipResult.success;
+      meta["skipped_by_debugger"] = true;
+      eventBus_->publish(
+          EventData::Create(context.taskId, EventType::ToolFinished,
+                            "Tool skipped by debugger: " + name, meta));
+      return skipResult;
+    }
+    effectiveArgs = debugResult;
+  }
+
   // 调用工具（Registry 调用本身不持有锁，避免死锁）
-  ToolResult result = registry_->call(name, context, arguments);
+  ToolResult result = registry_->call(name, context, effectiveArgs);
+
+  // ★ 断点检查：工具执行后
+  if (debugger_ && debugger_->isEnabled() &&
+      debugger_->hasBreakpoint(name, BreakpointType::AfterToolCall)) {
+    result =
+        debugger_->pauseAfterTool(context.taskId, name, effectiveArgs, result);
+  }
 
   // ---- 更新调用历史 & 统计（写锁） ----
   {
@@ -317,8 +352,34 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     }
   }
 
-  // 4. 执行工具
+  // 4. 执行工具（带断点检查）
   return callTool(name, context, arguments);
+}
+
+// ============================================================
+// ★ debugger() — 调试器访问（自动创建）
+// ============================================================
+Debugger &ToolSystem::debugger() {
+  if (!debugger_) {
+    std::unique_lock lock(mutex_);
+    if (!debugger_) {
+      debugger_ = std::make_unique<Debugger>(eventBus_);
+    }
+  }
+  return *debugger_;
+}
+
+void ToolSystem::setDebuggerEnabled(bool enabled) {
+  if (enabled) {
+    // 启用时确保 Debugger 已初始化
+    debugger().setEnabled(true);
+  } else if (debugger_) {
+    debugger_->setEnabled(false);
+  }
+}
+
+bool ToolSystem::isDebuggerEnabled() const {
+  return debugger_ && debugger_->isEnabled();
 }
 
 // ============================================================
