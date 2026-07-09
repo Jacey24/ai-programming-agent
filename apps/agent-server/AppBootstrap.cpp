@@ -1,5 +1,7 @@
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
+#include "infrastructure/storage/repositories/EventRepository.h"
+#include "infrastructure/storage/repositories/FileChangeRepository.h"
 #include "infrastructure/storage/repositories/PermissionRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
 
@@ -163,6 +165,8 @@ CREATE TABLE IF NOT EXISTS execution_logs (
   try {
     PermissionRepository(db).initTable();
     ToolCallRepository(db).initTable();
+    EventRepository(db).initTable();
+    FileChangeRepository(db).initTable();
   } catch (const std::exception &init_error) {
     error = init_error.what();
     sqlite3_close(db);
