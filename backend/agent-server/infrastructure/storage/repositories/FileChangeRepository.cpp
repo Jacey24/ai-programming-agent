@@ -1,17 +1,17 @@
-#include "infrastructure/storage/repositories/EventRepository.h"
+#include "infrastructure/storage/repositories/FileChangeRepository.h"
 
 #include <stdexcept>
 
-EventRepository::EventRepository(sqlite3* db) : db_(db) {}
+FileChangeRepository::FileChangeRepository(sqlite3* db) : db_(db) {}
 
-void EventRepository::initTable() {
+void FileChangeRepository::initTable() {
     const char* sql = R"SQL(
-CREATE TABLE IF NOT EXISTS task_events (
+CREATE TABLE IF NOT EXISTS file_changes (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT,
-    metadata TEXT,
+    file_path TEXT NOT NULL,
+    change_type TEXT NOT NULL,
+    diff TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 )SQL";
@@ -25,23 +25,23 @@ CREATE TABLE IF NOT EXISTS task_events (
     }
 }
 
-EventRecord EventRepository::create(
+FileChangeRecord FileChangeRepository::create(
     const std::string& id,
     const std::string& task_id,
-    const std::string& type,
-    const std::string& content,
-    const std::string& metadata) {
+    const std::string& file_path,
+    const std::string& change_type,
+    const std::string& diff) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT INTO task_events (id, task_id, type, content, metadata) VALUES (?, ?, ?, ?, ?);";
+    const char* sql = "INSERT INTO file_changes (id, task_id, file_path, change_type, diff) VALUES (?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
 
     sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, task_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, type.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, content.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, metadata.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, file_path.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, change_type.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, diff.c_str(), -1, SQLITE_TRANSIENT);
 
     const int step_result = sqlite3_step(stmt);
     if (step_result != SQLITE_DONE) {
@@ -51,12 +51,12 @@ EventRecord EventRepository::create(
     }
 
     sqlite3_finalize(stmt);
-    return EventRecord{id, task_id, type, content, metadata, ""};
+    return FileChangeRecord{id, task_id, file_path, change_type, diff, ""};
 }
 
-std::optional<EventRecord> EventRepository::findById(const std::string& id) {
+std::optional<FileChangeRecord> FileChangeRepository::findById(const std::string& id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE id = ?;";
+    const char* sql = "SELECT id, task_id, file_path, change_type, diff, created_at FROM file_changes WHERE id = ?;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -76,49 +76,49 @@ std::optional<EventRecord> EventRepository::findById(const std::string& id) {
 
     const auto* row_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
     const auto* task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    const auto* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-    const auto* metadata = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+    const auto* file_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+    const auto* change_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    const auto* diff = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
     const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
 
-    EventRecord event{
+    FileChangeRecord file_change{
         row_id ? row_id : "",
         task_id ? task_id : "",
-        type ? type : "",
-        content ? content : "",
-        metadata ? metadata : "",
+        file_path ? file_path : "",
+        change_type ? change_type : "",
+        diff ? diff : "",
         created_at ? created_at : "",
     };
 
     sqlite3_finalize(stmt);
-    return event;
+    return file_change;
 }
 
-std::vector<EventRecord> EventRepository::findByTaskId(const std::string& task_id) {
+std::vector<FileChangeRecord> FileChangeRepository::findByTaskId(const std::string& task_id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE task_id = ? ORDER BY created_at ASC;";
+    const char* sql = "SELECT id, task_id, file_path, change_type, diff, created_at FROM file_changes WHERE task_id = ? ORDER BY created_at ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
 
     sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
 
-    std::vector<EventRecord> events;
+    std::vector<FileChangeRecord> file_changes;
     int step_result = SQLITE_ROW;
     while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
         const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
         const auto* row_task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* metadata = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        const auto* file_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        const auto* change_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        const auto* diff = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
         const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
 
-        events.push_back(EventRecord{
+        file_changes.push_back(FileChangeRecord{
             id ? id : "",
             row_task_id ? row_task_id : "",
-            type ? type : "",
-            content ? content : "",
-            metadata ? metadata : "",
+            file_path ? file_path : "",
+            change_type ? change_type : "",
+            diff ? diff : "",
             created_at ? created_at : "",
         });
     }
@@ -130,35 +130,37 @@ std::vector<EventRecord> EventRepository::findByTaskId(const std::string& task_i
     }
 
     sqlite3_finalize(stmt);
-    return events;
+    return file_changes;
 }
 
-std::vector<EventRecord> EventRepository::findByTaskIdAndType(const std::string& task_id, const std::string& type) {
+std::vector<FileChangeRecord> FileChangeRepository::findByTaskIdAndPath(
+    const std::string& task_id,
+    const std::string& file_path) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE task_id = ? AND type = ? ORDER BY created_at ASC;";
+    const char* sql = "SELECT id, task_id, file_path, change_type, diff, created_at FROM file_changes WHERE task_id = ? AND file_path = ? ORDER BY created_at ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
 
     sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, type.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, file_path.c_str(), -1, SQLITE_TRANSIENT);
 
-    std::vector<EventRecord> events;
+    std::vector<FileChangeRecord> file_changes;
     int step_result = SQLITE_ROW;
     while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
         const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
         const auto* row_task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* row_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* metadata = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        const auto* row_file_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        const auto* change_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        const auto* diff = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
         const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
 
-        events.push_back(EventRecord{
+        file_changes.push_back(FileChangeRecord{
             id ? id : "",
             row_task_id ? row_task_id : "",
-            row_type ? row_type : "",
-            content ? content : "",
-            metadata ? metadata : "",
+            row_file_path ? row_file_path : "",
+            change_type ? change_type : "",
+            diff ? diff : "",
             created_at ? created_at : "",
         });
     }
@@ -170,9 +172,9 @@ std::vector<EventRecord> EventRepository::findByTaskIdAndType(const std::string&
     }
 
     sqlite3_finalize(stmt);
-    return events;
+    return file_changes;
 }
 
-std::string EventRepository::lastError() const {
+std::string FileChangeRepository::lastError() const {
     return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
 }
