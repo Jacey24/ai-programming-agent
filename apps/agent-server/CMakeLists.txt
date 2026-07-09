@@ -3,6 +3,8 @@ add_executable(codepilot-agent-server
     AppBootstrap.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/HttpServer.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/LogController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/FileChangeController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ReplayController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/PermissionController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/SessionController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/TaskController.cpp
@@ -10,6 +12,8 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/AgentService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/LogService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/FileChangeService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ReplayService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/PermissionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/SessionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/TaskService.cpp
