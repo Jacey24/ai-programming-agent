@@ -90,28 +90,56 @@ EventData EventData::Create(const std::string &taskId, EventType type,
 }
 
 // ============================================================
-// EventBus 实现
+// EventBus 实现（线程安全）
 // ============================================================
 
 void EventBus::publish(const EventData &event) {
+  std::lock_guard<std::mutex> lock(mutex_);
   history_.push_back(event);
   notifyListeners(event);
 }
 
 ListenerId EventBus::subscribe(EventType type, EventListener listener) {
+  std::lock_guard<std::mutex> lock(mutex_);
   ListenerId id = nextId_++;
-  subscriptions_.push_back({id, type, false, std::move(listener)});
+  subscriptions_.push_back(
+      {id, type, false, false, "", false, std::move(listener)});
   return id;
 }
 
 ListenerId EventBus::subscribeAll(EventListener listener) {
+  std::lock_guard<std::mutex> lock(mutex_);
   ListenerId id = nextId_++;
-  subscriptions_.push_back(
-      {id, EventType::TaskCreated, true, std::move(listener)});
+  subscriptions_.push_back({id, EventType::TaskCreated, true, false, "", false,
+                            std::move(listener)});
+  return id;
+}
+
+// ============================================================
+// ★ 新增：subscribeByTaskId — 按 taskId 订阅
+// ============================================================
+ListenerId EventBus::subscribeByTaskId(const std::string &taskId,
+                                       EventListener listener) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ListenerId id = nextId_++;
+  subscriptions_.push_back({id, EventType::TaskCreated, false, false, taskId,
+                            false, std::move(listener)});
+  return id;
+}
+
+// ============================================================
+// ★ 新增：onEvent — 全局事件钩子
+// ============================================================
+ListenerId EventBus::onEvent(EventListener listener) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ListenerId id = nextId_++;
+  subscriptions_.push_back({id, EventType::TaskCreated, false, false, "", true,
+                            std::move(listener)});
   return id;
 }
 
 void EventBus::unsubscribe(ListenerId id) {
+  std::lock_guard<std::mutex> lock(mutex_);
   subscriptions_.erase(
       std::remove_if(subscriptions_.begin(), subscriptions_.end(),
                      [id](const Subscription &s) { return s.id == id; }),
@@ -119,6 +147,7 @@ void EventBus::unsubscribe(ListenerId id) {
 }
 
 std::vector<EventData> EventBus::getHistory(const std::string &taskId) const {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (taskId.empty())
     return history_;
   std::vector<EventData> result;
@@ -131,6 +160,7 @@ std::vector<EventData> EventBus::getHistory(const std::string &taskId) const {
 
 std::vector<EventData>
 EventBus::getHistoryByType(EventType type, const std::string &taskId) const {
+  std::lock_guard<std::mutex> lock(mutex_);
   std::vector<EventData> result;
   for (const auto &event : history_) {
     if (event.type == type) {
@@ -143,6 +173,7 @@ EventBus::getHistoryByType(EventType type, const std::string &taskId) const {
 }
 
 void EventBus::clearHistory(const std::string &taskId) {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (taskId.empty()) {
     history_.clear();
   } else {
@@ -158,6 +189,25 @@ void EventBus::notifyListeners(const EventData &event) {
   for (const auto &sub : subscriptions_) {
     if (!sub.listener)
       continue;
+
+    // 全局钩子（onEvent）：接收所有事件，不过滤
+    if (sub.global) {
+      sub.listener(event);
+      continue;
+    }
+
+    // 按 taskId 订阅：只匹配指定 taskId
+    if (!sub.taskId.empty()) {
+      if (sub.taskId != event.taskId)
+        continue;
+      // 如果还指定了类型，按类型过滤
+      if (!sub.allEvents && sub.type != event.type)
+        continue;
+      sub.listener(event);
+      continue;
+    }
+
+    // 普通订阅（按类型或全部）
     if (!sub.allEvents && sub.type != event.type)
       continue;
     sub.listener(event);

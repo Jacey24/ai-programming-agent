@@ -3,6 +3,7 @@
     "name": "file.list",
     "description": "列出工作区内的文件和目录结构，支持递归深度控制",
     "risk_level": "safe",
+    "enabled": true,
     "params": {
       "path": {"type": "string", "description": "要列出的目录相对路径（可选，默认根目录）", "required": false},
       "depth": {"type": "integer", "description": "递归深度（1-5，可选，默认2）", "required": false}
@@ -40,6 +41,63 @@
     },
     "category": "file"
   },
+  "file.search": {
+    "name": "file.search",
+    "description": "在工作区内递归搜索文件内容（类似 grep），支持正则匹配",
+    "risk_level": "safe",
+    "params": {
+      "pattern": {"type": "string", "description": "要搜索的正则表达式", "required": true},
+      "root": {"type": "string", "description": "搜索根目录（可选，默认工作区根目录）", "required": false}
+    },
+    "category": "file"
+  },
+  "file.mkdir": {
+    "name": "file.mkdir",
+    "description": "创建目录，会一并创建所需的父目录",
+    "risk_level": "safe",
+    "params": {
+      "path": {"type": "string", "description": "要创建的目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
+  "file.rmdir": {
+    "name": "file.rmdir",
+    "description": "删除空目录，需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "path": {"type": "string", "description": "要删除的空目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
+  "file.remove": {
+    "name": "file.remove",
+    "description": "删除文件或目录（递归删除），需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "path": {"type": "string", "description": "要删除的文件或目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
+  "file.copy": {
+    "name": "file.copy",
+    "description": "复制文件或目录（递归复制），需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "source": {"type": "string", "description": "源文件或目录相对路径", "required": true},
+      "destination": {"type": "string", "description": "目标文件或目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
+  "file.move": {
+    "name": "file.move",
+    "description": "移动或重命名文件/目录，需要用户确认",
+    "risk_level": "medium",
+    "params": {
+      "source": {"type": "string", "description": "源文件或目录相对路径", "required": true},
+      "destination": {"type": "string", "description": "目标文件或目录相对路径", "required": true}
+    },
+    "category": "file"
+  },
   "cd": {
     "name": "cd",
     "description": "切换当前工作目录",
@@ -58,7 +116,7 @@
   },
   "shell.run": {
     "name": "shell.run",
-    "description": "在工作区内执行 Shell 命令（Sprint 2 实现）",
+    "description": "在工作区内执行 Shell 命令",
     "risk_level": "medium",
     "params": {
       "command": {"type": "string", "description": "要执行的 Shell 命令", "required": true},
@@ -69,23 +127,51 @@
   },
   "git.status": {
     "name": "git.status",
-    "description": "查看 Git 仓库状态（Sprint 2 实现）",
+    "description": "查看 Git 仓库状态",
     "risk_level": "safe",
     "params": {},
     "category": "git"
   },
   "git.diff": {
     "name": "git.diff",
-    "description": "查看 Git 文件变更详情（Sprint 2 实现）",
+    "description": "查看 Git 文件变更详情",
     "risk_level": "safe",
     "params": {
       "path": {"type": "string", "description": "指定文件路径（可选）", "required": false}
     },
     "category": "git"
   },
+  "git.commit": {
+    "name": "git.commit",
+    "description": "创建 Git commit：暂存所有变更并提交",
+    "risk_level": "dangerous",
+    "params": {
+      "message": {"type": "string", "description": "commit 信息，描述本次变更内容", "required": true}
+    },
+    "category": "git"
+  },
+  "git.log": {
+    "name": "git.log",
+    "description": "查看 Git 提交历史（--oneline 格式）",
+    "risk_level": "safe",
+    "params": {
+      "count": {"type": "integer", "description": "要显示的提交数量（可选，默认 20）", "required": false}
+    },
+    "category": "git"
+  },
+  "git.branch": {
+    "name": "git.branch",
+    "description": "查看或创建 Git 分支",
+    "risk_level": "medium",
+    "params": {
+      "action": {"type": "string", "description": "操作类型: list 查看分支, create 创建新分支", "required": false},
+      "name": {"type": "string", "description": "新分支名称（create 时必填）", "required": false}
+    },
+    "category": "git"
+  },
   "mcp.call": {
     "name": "mcp.call",
-    "description": "调用 MCP 外部服务工具（Sprint 2+ 实现）",
+    "description": "调用 MCP 外部服务工具",
     "risk_level": "medium",
     "params": {
       "server": {"type": "string", "description": "MCP 服务器名称", "required": true},

@@ -24,6 +24,8 @@ public:
         const std::string& plan,
         const std::string& current_step);
 
+    TaskRecord cancelTask(const std::string& task_id);
+
 private:
     sqlite3* db_;
 };

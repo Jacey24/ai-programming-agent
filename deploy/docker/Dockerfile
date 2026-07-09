@@ -31,7 +31,7 @@ COPY --from=builder /src/build/apps/agent-server/codepilot-agent-server /app/cod
 COPY --from=builder /src/build/apps/tui-client/codepilot-tui-client /app/codepilot-tui-client
 COPY config /app/config
 
-RUN mkdir -p /data /workspace /app/config \
+RUN mkdir -p /data /workspace /app/config /app/logs \
     && chmod +x /app/codepilot-agent-server /app/codepilot-tui-client
 
 EXPOSE 8080

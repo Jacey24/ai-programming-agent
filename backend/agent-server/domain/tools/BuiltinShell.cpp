@@ -1,6 +1,8 @@
 #include "BuiltinShell.h"
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 
 namespace codepilot {
@@ -147,6 +149,283 @@ ToolResult BuiltinShell::getWorkingDirectory(const json &args) {
 }
 
 // ============================================================
+// 新: file.search - 在工作区中搜索文件内容
+// ============================================================
+ToolResult BuiltinShell::searchFiles(const json &args) {
+  if (!args.contains("pattern")) {
+    return ToolResult::Err("Missing required parameter: pattern");
+  }
+
+  std::string pattern = args["pattern"].get<std::string>();
+  std::string root =
+      args.contains("root") ? args["root"].get<std::string>() : "";
+
+  if (pattern.empty()) {
+    return ToolResult::Err("Search pattern cannot be empty");
+  }
+
+  // 安全检查
+  if (!root.empty() && !workspace_->isPathSafe(root)) {
+    return ToolResult::Err(
+        "Search root is not safe or outside workspace: " + root, -2);
+  }
+
+  std::string searchRoot = workspace_->resolvePath(root);
+  std::regex searchRegex(pattern, std::regex::icase);
+
+  std::ostringstream output;
+  int matchCount = 0;
+  int fileCount = 0;
+
+  try {
+    for (const auto &entry :
+         std::filesystem::recursive_directory_iterator(searchRoot)) {
+      if (!entry.is_regular_file())
+        continue;
+
+      std::string filePath = entry.path().filename().string();
+
+      // 跳过隐藏文件、二进制和常见忽略目录
+      if (filePath[0] == '.')
+        continue;
+      std::string ext = entry.path().extension().string();
+      if (ext == ".exe" || ext == ".dll" || ext == ".obj" || ext == ".o" ||
+          ext == ".bin")
+        continue;
+
+      // 检查是否在忽略目录中
+      std::string parent = entry.path().parent_path().string();
+      bool ignored = false;
+      for (const auto &ignoredDir : {
+               "build",
+               ".git",
+               "node_modules",
+               ".venv",
+               "__pycache__",
+               ".cache",
+           }) {
+        if (parent.find(ignoredDir) != std::string::npos) {
+          ignored = true;
+          break;
+        }
+      }
+      if (ignored)
+        continue;
+
+      // 文件大小限制（5MB）
+      auto fsPath = entry.path();
+      std::error_code ec;
+      auto fileSize = std::filesystem::file_size(fsPath, ec);
+      if (ec || fileSize > 5 * 1024 * 1024)
+        continue;
+
+      std::ifstream file(fsPath);
+      if (!file.is_open())
+        continue;
+
+      std::string line;
+      int lineNum = 0;
+      bool fileHasMatch = false;
+
+      while (std::getline(file, line)) {
+        lineNum++;
+        try {
+          if (std::regex_search(line, searchRegex)) {
+            if (!fileHasMatch) {
+              output << entry.path()
+                            .lexically_relative(
+                                std::filesystem::path(searchRoot))
+                            .string()
+                     << ":\n";
+              fileHasMatch = true;
+              fileCount++;
+            }
+            output << "  " << lineNum << ": " << line << "\n";
+            matchCount++;
+          }
+        } catch (const std::regex_error &) {
+          return ToolResult::Err("Invalid regex pattern: " + pattern, -6);
+        }
+      }
+    }
+  } catch (const std::filesystem::filesystem_error &e) {
+    return ToolResult::Err("Filesystem error during search: " +
+                           std::string(e.what()));
+  }
+
+  std::ostringstream summary;
+  summary << "Search results for \"" << pattern << "\":\n";
+  summary << "  Matched " << matchCount << " lines in " << fileCount
+          << " files\n";
+  if (matchCount > 0) {
+    summary << "\n" << output.str();
+  }
+
+  return ToolResult::Ok(summary.str());
+}
+
+// ============================================================
+// 新: file.mkdir - 创建目录
+// ============================================================
+ToolResult BuiltinShell::makeDirectory(const json &args) {
+  if (!args.contains("path")) {
+    return ToolResult::Err("Missing required parameter: path");
+  }
+
+  std::string path = args["path"].get<std::string>();
+  if (!workspace_->isPathSafe(path)) {
+    return ToolResult::Err("Path is not safe or outside workspace: " + path,
+                           -2);
+  }
+
+  std::string fullPath = workspace_->resolvePath(path);
+  std::error_code ec;
+  if (std::filesystem::create_directories(fullPath, ec)) {
+    return ToolResult::Ok("Directory created successfully: " + path);
+  } else if (ec) {
+    return ToolResult::Err("Failed to create directory: " + path + " (" +
+                           ec.message() + ")");
+  } else {
+    return ToolResult::Ok("Directory already exists: " + path);
+  }
+}
+
+// ============================================================
+// 新: file.rmdir - 删除空目录
+// ============================================================
+ToolResult BuiltinShell::removeDirectory(const json &args) {
+  if (!args.contains("path")) {
+    return ToolResult::Err("Missing required parameter: path");
+  }
+
+  std::string path = args["path"].get<std::string>();
+  if (!workspace_->isPathSafe(path)) {
+    return ToolResult::Err("Path is not safe or outside workspace: " + path,
+                           -2);
+  }
+
+  std::string fullPath = workspace_->resolvePath(path);
+  if (!std::filesystem::exists(fullPath)) {
+    return ToolResult::Err("Directory not found: " + path, -4);
+  }
+  if (!std::filesystem::is_directory(fullPath)) {
+    return ToolResult::Err("Not a directory: " + path, -7);
+  }
+
+  std::error_code ec;
+  if (std::filesystem::remove(fullPath, ec)) {
+    return ToolResult::Ok("Directory removed successfully: " + path);
+  } else if (ec) {
+    return ToolResult::Err("Failed to remove directory: " + path + " (" +
+                           ec.message() + ")");
+  } else {
+    return ToolResult::Err("Directory not empty or could not be removed: " +
+                           path);
+  }
+}
+
+// ============================================================
+// 新: file.remove - 删除文件或递归删除目录
+// ============================================================
+ToolResult BuiltinShell::removeFile(const json &args) {
+  if (!args.contains("path")) {
+    return ToolResult::Err("Missing required parameter: path");
+  }
+
+  std::string path = args["path"].get<std::string>();
+  if (!workspace_->isPathSafe(path)) {
+    return ToolResult::Err("Path is not safe or outside workspace: " + path,
+                           -2);
+  }
+
+  std::string fullPath = workspace_->resolvePath(path);
+  if (!std::filesystem::exists(fullPath)) {
+    return ToolResult::Err("Path not found: " + path, -4);
+  }
+
+  std::error_code ec;
+  uintmax_t count = std::filesystem::remove_all(fullPath, ec);
+  if (ec) {
+    return ToolResult::Err("Failed to remove: " + path + " (" + ec.message() +
+                           ")");
+  }
+  return ToolResult::Ok("Removed " + std::to_string(count) +
+                        " item(s): " + path);
+}
+
+// ============================================================
+// 新: file.copy - 复制文件或目录
+// ============================================================
+ToolResult BuiltinShell::copyFile(const json &args) {
+  if (!args.contains("source") || !args.contains("destination")) {
+    return ToolResult::Err("Missing required parameters: source, destination");
+  }
+
+  std::string source = args["source"].get<std::string>();
+  std::string dest = args["destination"].get<std::string>();
+
+  if (!workspace_->isPathSafe(source)) {
+    return ToolResult::Err("Source path is not safe: " + source, -2);
+  }
+  if (!workspace_->isPathSafe(dest)) {
+    return ToolResult::Err("Destination path is not safe: " + dest, -2);
+  }
+
+  std::string fullSource = workspace_->resolvePath(source);
+  std::string fullDest = workspace_->resolvePath(dest);
+
+  if (!std::filesystem::exists(fullSource)) {
+    return ToolResult::Err("Source not found: " + source, -4);
+  }
+
+  std::error_code ec;
+  std::filesystem::copy_options opts =
+      std::filesystem::copy_options::recursive |
+      std::filesystem::copy_options::overwrite_existing;
+
+  std::filesystem::copy(fullSource, fullDest, opts, ec);
+  if (ec) {
+    return ToolResult::Err("Failed to copy: " + source + " -> " + dest + " (" +
+                           ec.message() + ")");
+  }
+  return ToolResult::Ok("Copied successfully: " + source + " -> " + dest);
+}
+
+// ============================================================
+// 新: file.move - 移动文件或目录
+// ============================================================
+ToolResult BuiltinShell::moveFile(const json &args) {
+  if (!args.contains("source") || !args.contains("destination")) {
+    return ToolResult::Err("Missing required parameters: source, destination");
+  }
+
+  std::string source = args["source"].get<std::string>();
+  std::string dest = args["destination"].get<std::string>();
+
+  if (!workspace_->isPathSafe(source)) {
+    return ToolResult::Err("Source path is not safe: " + source, -2);
+  }
+  if (!workspace_->isPathSafe(dest)) {
+    return ToolResult::Err("Destination path is not safe: " + dest, -2);
+  }
+
+  std::string fullSource = workspace_->resolvePath(source);
+  std::string fullDest = workspace_->resolvePath(dest);
+
+  if (!std::filesystem::exists(fullSource)) {
+    return ToolResult::Err("Source not found: " + source, -4);
+  }
+
+  std::error_code ec;
+  std::filesystem::rename(fullSource, fullDest, ec);
+  if (ec) {
+    return ToolResult::Err("Failed to move: " + source + " -> " + dest + " (" +
+                           ec.message() + ")");
+  }
+  return ToolResult::Ok("Moved successfully: " + source + " -> " + dest);
+}
+
+// ============================================================
 // getSystemPrompt - 获取标准化安全提示词
 // ============================================================
 std::string BuiltinShell::getSystemPrompt() const {
@@ -164,13 +443,21 @@ std::string BuiltinShell::getSystemPrompt() const {
   prompt << "- file.read: 读取文件内容，参数 path(必填), start_line(可选), "
             "end_line(可选)\n";
   prompt << "- file.write: 写入文件，参数 path(必填), content(必填)\n";
+  prompt << "- file.search: 搜索文件内容，参数 pattern(必填), root(可选)\n";
+  prompt << "- file.mkdir: 创建目录，参数 path(必填)\n";
+  prompt << "- file.rmdir: 删除空目录，参数 path(必填)\n";
+  prompt << "- file.remove: 删除文件或目录，参数 path(必填)\n";
+  prompt << "- file.copy: 复制文件或目录，参数 source(必填), "
+            "destination(必填)\n";
+  prompt << "- file.move: 移动文件或目录，参数 source(必填), "
+            "destination(必填)\n";
   prompt << "- file.apply_patch: 应用代码补丁，参数 file_path(必填), "
             "patch(必填)\n";
   prompt << "- cd: 切换工作目录，参数 path(必填)\n";
   prompt << "- pwd: 查看当前工作目录\n\n";
 
   prompt << "## 文件写入规则\n";
-  prompt << "- 写文件、删除文件、应用补丁均需要用户确认\n";
+  prompt << "- 写文件、删除文件、删除目录、复制、移动均需要用户确认\n";
   prompt << "- 应用补丁前应展示 diff 预览\n";
   return prompt.str();
 }
