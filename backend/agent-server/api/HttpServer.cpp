@@ -242,9 +242,27 @@ std::string HttpServer::handleRequest(const std::string& request) {
         SessionController controller(config_.databasePath);
         return controller.createSession(request);
     }
+    if (request.rfind("GET /api/v1/sessions/", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.getSession(request);
+    }
+    if (request.rfind("GET /api/v1/sessions?", 0) == 0 ||
+        request.rfind("GET /api/v1/sessions ", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.listSessions(request);
+    }
     if (request.rfind("POST /api/v1/workspaces ", 0) == 0) {
         WorkspaceController controller(config_.databasePath);
         return controller.createWorkspace(request);
+    }
+    if (request.rfind("GET /api/v1/workspaces/", 0) == 0) {
+        WorkspaceController controller(config_.databasePath);
+        return controller.getWorkspace(request);
+    }
+    if (request.rfind("GET /api/v1/workspaces?", 0) == 0 ||
+        request.rfind("GET /api/v1/workspaces ", 0) == 0) {
+        WorkspaceController controller(config_.databasePath);
+        return controller.listWorkspaces(request);
     }
     if (request.rfind("POST /api/v1/tasks ", 0) == 0) {
         TaskController controller(config_.databasePath);
