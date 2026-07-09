@@ -13,7 +13,8 @@ public:
         const std::string& taskId,
         const std::string& sessionId,
         const std::string& workspaceId,
-        const std::string& goal);
+        const std::string& goal,
+        sqlite3* db = nullptr);
 
     // Sprint 2：获取 Agent 实例，供外部使用 buildExecutorPrompt 等
     Agent* getAgent() { return agent_.get(); }

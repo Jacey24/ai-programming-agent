@@ -5,6 +5,8 @@
 #include "ResponseParser.h"
 #include "Planner.h"
 
+#include "infrastructure/storage/repositories/LogRepository.h"
+
 #include "application/ToolSystem.h"
 #include "domain/tools/Tool.h"
 
@@ -37,6 +39,11 @@ AgentResult Agent::executeTask(
     queue_.loadFromPlan(steps);
 
     context_.push_back("[plan] 已生成计划: " + planToJson(steps));
+
+    // Sprint 2 打通存储层：记录规划到 execution_logs（钟经添 LogRepository）
+    if (db_) {
+        LogRepository(db_).createLog(taskId, "planning", planToJson(steps));
+    }
 
     // ============================================================
     // 阶段 2：步骤执行 (Executor)
@@ -87,6 +94,11 @@ AgentResult Agent::executeTask(
         if (parsed.type == ResponseType::FinalAnswer || parsed.isDone) {
             // 步骤完成
             context_.push_back("[final] " + parsed.content);
+            // Sprint 2：记录步骤完成日志（钟经添 LogRepository）
+            if (db_) {
+                LogRepository(db_).createLog(taskId, "step_done",
+                    "步骤完成: " + step.action);
+            }
             queue_.markComplete();
             continue;
         }
@@ -119,7 +131,8 @@ AgentResult Agent::executeTask(
                             }
                         }
 
-                        toolResult = ToolSystem::getInstance().callTool(
+                        // Sprint 2：带权限检查的工具调用（周子涵 ToolSystem）
+                        toolResult = ToolSystem::getInstance().callToolWithPermission(
                             cmd.toolName, toolCtx, args);
                     } else {
                         toolResult.success = true;
@@ -140,6 +153,14 @@ AgentResult Agent::executeTask(
                     anyToolFailed = true;
                 }
                 context_.push_back(resultCtx.str());
+
+                // Sprint 2：写入工具调用日志到 execution_logs（钟经添 LogRepository）
+                if (db_) {
+                    LogRepository(db_).createLog(
+                        taskId,
+                        toolResult.success ? "tool_result" : "tool_error",
+                        resultCtx.str());
+                }
             }
 
             // 工具调用后，继续本步骤的下一轮循环（不 markComplete）
@@ -159,6 +180,10 @@ AgentResult Agent::executeTask(
 
         if (parsed.isFail) {
             context_.push_back("[fail] " + parsed.failReason);
+            // Sprint 2：记录步骤失败日志（钟经添 LogRepository）
+            if (db_) {
+                LogRepository(db_).createLog(taskId, "step_failed", parsed.failReason);
+            }
             queue_.markComplete();
             continue;
         }
