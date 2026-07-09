@@ -278,4 +278,66 @@ std::string TaskController::getTask(const std::string& request) {
     return response;
 }
 
+std::string TaskController::cancelTask(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string cancel_suffix = "/cancel";
+    if (full_segment.size() <= cancel_suffix.size() ||
+        full_segment.compare(full_segment.size() - cancel_suffix.size(), cancel_suffix.size(), cancel_suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /cancel"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - cancel_suffix.size());
+    if (task_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::string response;
+    try {
+        TaskService service(db);
+        const TaskRecord task = service.cancelTask(task_id);
+
+        std::ostringstream body;
+        body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
+             << R"(","session_id":")" << json_escape(task.session_id)
+             << R"(","workspace_id":")" << json_escape(task.workspace_id)
+             << R"(","goal":")" << json_escape(task.goal)
+             << R"(","status":")" << json_escape(task.status) << R"(")";
+        if (!task.plan.empty()) {
+            body << R"(,"plan":)" << task.plan;
+        }
+        if (!task.current_step.empty()) {
+            body << R"(,"current_step":")" << json_escape(task.current_step) << R"(")";
+        }
+        body << R"(,"created_at":")" << json_escape(task.created_at)
+             << R"(","updated_at":")" << json_escape(task.updated_at) << R"("}})";
+        response = http_response(body.str());
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        const std::string msg = error.what();
+        if (msg.find("not found") != std::string::npos) {
+            return http_response(
+                R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":")" + json_escape(msg) + R"("}})",
+                "404 Not Found");
+        }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(msg) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+    return response;
+}
+
 } // namespace codepilot
