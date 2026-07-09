@@ -51,4 +51,13 @@ void TaskService::updateExecution(
     repository.updateExecution(task_id, status, plan, current_step, currentTimestamp());
 }
 
+TaskRecord TaskService::cancelTask(const std::string& task_id) {
+    auto task = getTask(task_id);
+    if (!task) {
+        throw std::runtime_error("task not found");
+    }
+    updateExecution(task_id, "cancelled", task->plan, task->current_step);
+    return getTask(task_id).value();
+}
+
 } // namespace codepilot
