@@ -29,4 +29,12 @@ SessionRecord SessionService::createSession(const std::string& title) {
     return repository.createSession(generateId("session"), title, now, now);
 }
 
+std::vector<SessionRecord> SessionService::listSessions() {
+    return SessionRepository(db_).listAll();
+}
+
+std::optional<SessionRecord> SessionService::getSessionById(const std::string& session_id) {
+    return SessionRepository(db_).findById(session_id);
+}
+
 } // namespace codepilot

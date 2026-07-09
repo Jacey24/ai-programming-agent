@@ -18,6 +18,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/SessionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/TaskService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/WorkspaceService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Agent.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ContextBuilder.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Planner.cpp
@@ -48,6 +49,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/ToolCallRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/WorkspaceRepository.cpp
 )
 
 target_include_directories(codepilot-agent-server PRIVATE
