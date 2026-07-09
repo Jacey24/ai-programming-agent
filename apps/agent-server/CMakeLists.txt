@@ -2,12 +2,14 @@ add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/HttpServer.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/LogController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/PermissionController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/SessionController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/TaskController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ToolController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/AgentService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/LogService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/PermissionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/SessionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/TaskService.cpp
@@ -25,6 +27,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ToolRegistry.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/LogRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/PermissionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
