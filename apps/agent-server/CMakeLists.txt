@@ -24,10 +24,21 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskState.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/BuiltinShell.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/FileTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ShellTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/GitTool.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ToolRegistry.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/RiskDetector.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventDispatcher.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+<<<<<<< HEAD
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/LogRepository.cpp
+=======
+    ${CMAKE_SOURCE_DIR}/modules/common/logging/LogConfig.cpp
+    ${CMAKE_SOURCE_DIR}/modules/common/logging/Logger.cpp
+>>>>>>> 5e64a41 (chore&tool-docker修复与logger功能与文档加入)
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/PermissionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
@@ -38,6 +49,8 @@ target_include_directories(codepilot-agent-server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/backend/agent-server
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+    ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
+    ${CMAKE_SOURCE_DIR}/modules
 )
 
 target_link_libraries(codepilot-agent-server PRIVATE sqlite3)

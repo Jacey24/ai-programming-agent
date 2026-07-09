@@ -1,0 +1,43 @@
+{
+  "loggers": [
+    {
+      "name": "default",
+      "level": "debug",
+      "sinks": ["console", "file"],
+      "pattern": "[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%n] %v",
+      "file_path": "/app/logs/codepilot.log",
+      "max_file_size_mb": 10,
+      "max_files": 5
+    },
+    {
+      "name": "HttpServer",
+      "level": "info",
+      "sinks": ["console"]
+    },
+    {
+      "name": "ToolSystem",
+      "level": "debug",
+      "sinks": ["console", "file"]
+    },
+    {
+      "name": "AgentCore",
+      "level": "trace",
+      "sinks": ["console", "file"]
+    },
+    {
+      "name": "PermissionManager",
+      "level": "info",
+      "sinks": ["console", "file"]
+    },
+    {
+      "name": "Security",
+      "level": "warn",
+      "sinks": ["console"]
+    },
+    {
+      "name": "Database",
+      "level": "info",
+      "sinks": ["file"]
+    }
+  ]
+}
