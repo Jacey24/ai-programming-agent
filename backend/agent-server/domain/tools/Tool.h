@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-
 using json = nlohmann::json;
 
 namespace codepilot {
@@ -87,8 +86,10 @@ struct ToolResult {
     std::ostringstream oss;
     oss << "ToolResult{success=" << (success ? "true" : "false") << ", output='"
         << output << "'"
-        << ", error='" << error << "'"
-        << ", exitCode=" << exitCode << "}";
+        << ", error='" << error
+        << "'"
+           ", exitCode="
+        << exitCode << "}";
     return oss.str();
   }
 };
@@ -176,11 +177,25 @@ struct ToolSchema {
 };
 
 // ============================================================
+// 预定义的工组分组名称（只做规范常量用，不强制校验）
+// ============================================================
+namespace ToolGroups {
+constexpr const char *FILE = "file";
+constexpr const char *GIT = "git";
+constexpr const char *SHELL = "shell";
+constexpr const char *WEB = "web";
+constexpr const char *SKILL = "skill";
+constexpr const char *MCP = "mcp";
+constexpr const char *MISC = "misc";
+} // namespace ToolGroups
+
+// ============================================================
 // Tool 抽象基类（所有工具的统一接口）
 // 对齐整体架构说明.md 第9.2节，并扩展：
 // - riskLevel() 方法用于权限判断
 // - summary() / detail() 用于渐进式提示
 // - validate() 用于执行前参数校验
+// - group() 用于按功能域分组
 // ============================================================
 class Tool {
 public:
@@ -189,6 +204,11 @@ public:
   // --- 工具标识 ---
   virtual std::string name() const = 0;
   virtual std::string description() const = 0;
+
+  // --- 工具分组（功能域） ---
+  // 返回预定义分组名：file / git / shell / web / skill / mcp
+  // 默认实现返回 "misc"，单个工具可以重写
+  virtual std::string group() const { return ToolGroups::MISC; }
 
   // --- 元数据（供 LLM schema 生成和 API 展示） ---
   virtual ToolSchema schema() const = 0;

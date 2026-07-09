@@ -23,6 +23,7 @@ public:
 
   std::string name() const override;
   std::string description() const override;
+  std::string group() const override { return ToolGroups::SHELL; }
   ToolSchema schema() const override;
   RiskLevel riskLevel(const json &arguments) const override;
   ToolResult execute(const ToolContext &context,

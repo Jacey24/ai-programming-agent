@@ -32,8 +32,12 @@ ProcessResult ProcessRunner::execute(const std::string &command, int timeout) {
   // 重定向 stderr 到 stdout
   fullCmd += " 2>&1";
 
-  // 使用 _popen 执行
+  // 使用 popen / _popen 执行（跨平台）
+#ifdef _WIN32
   FILE *pipe = _popen(fullCmd.c_str(), "r");
+#else
+  FILE *pipe = popen(fullCmd.c_str(), "r");
+#endif
   if (!pipe) {
     result.success = false;
     result.errorOutput = "Failed to start process";
@@ -61,7 +65,11 @@ ProcessResult ProcessRunner::execute(const std::string &command, int timeout) {
     }
   }
 
+#ifdef _WIN32
   int exitCode = _pclose(pipe);
+#else
+  int exitCode = pclose(pipe);
+#endif
 
   result.output = output;
   result.errorOutput =

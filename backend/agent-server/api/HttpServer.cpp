@@ -1,7 +1,10 @@
 #include "api/HttpServer.h"
 
+#include "api/controllers/LogController.h"
+#include "api/controllers/PermissionController.h"
 #include "api/controllers/SessionController.h"
 #include "api/controllers/TaskController.h"
+#include "api/controllers/ToolController.h"
 #include "api/controllers/WorkspaceController.h"
 
 #include <arpa/inet.h>
@@ -250,8 +253,40 @@ std::string HttpServer::handleRequest(const std::string& request) {
         return controller.listTasks(request);
     }
     if (request.rfind("GET /api/v1/tasks/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/logs ") != std::string::npos) {
+            LogController controller(config_.databasePath);
+            return controller.listLogs(request);
+        }
         TaskController controller(config_.databasePath);
         return controller.getTask(request);
+    }
+    if (request.rfind("POST /api/v1/tasks/", 0) == 0) {
+        TaskController controller(config_.databasePath);
+        return controller.cancelTask(request);
+    }
+    if (request.rfind("GET /api/v1/tools?", 0) == 0 || request.rfind("GET /api/v1/tools ", 0) == 0) {
+        ToolController controller;
+        return controller.listTools();
+    }
+    if (request.rfind("GET /api/v1/tools/", 0) == 0) {
+        ToolController controller;
+        return controller.getToolDetail(request);
+    }
+    if (request.rfind("GET /api/v1/permissions/pending ", 0) == 0 ||
+        request.rfind("GET /api/v1/permissions?", 0) == 0 ||
+        request.rfind("GET /api/v1/permissions ", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.listPermissions(request);
+    }
+    if (request.rfind("GET /api/v1/permissions/", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.getPermission(request);
+    }
+    if (request.rfind("POST /api/v1/permissions/", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.handleAction(request);
     }
     return not_found_response();
 }
