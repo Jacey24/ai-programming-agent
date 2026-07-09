@@ -48,9 +48,46 @@ sqlite3_int64 LogRepository::createLog(
     return sqlite3_last_insert_rowid(db_);
 }
 
+std::optional<LogRecord> LogRepository::findById(sqlite3_int64 id) {
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id, task_id, type, content, created_at FROM execution_logs WHERE id = ?;";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(lastError());
+    }
+
+    sqlite3_bind_int64(stmt, 1, id);
+
+    const int step_result = sqlite3_step(stmt);
+    if (step_result == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        return std::nullopt;
+    }
+    if (step_result != SQLITE_ROW) {
+        const std::string error = lastError();
+        sqlite3_finalize(stmt);
+        throw std::runtime_error(error);
+    }
+
+    const auto* task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+    const auto* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+    const auto* content = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+
+    LogRecord log{
+        sqlite3_column_int64(stmt, 0),
+        task_id ? task_id : "",
+        type ? type : "",
+        content ? content : "",
+        created_at ? created_at : "",
+    };
+
+    sqlite3_finalize(stmt);
+    return log;
+}
+
 std::vector<LogRecord> LogRepository::findByTaskId(const std::string& task_id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, created_at FROM execution_logs WHERE task_id = ? ORDER BY id ASC LIMIT 200;";
+    const char* sql = "SELECT id, task_id, type, content, created_at FROM execution_logs WHERE task_id = ? ORDER BY created_at ASC, id ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -82,6 +119,27 @@ std::vector<LogRecord> LogRepository::findByTaskId(const std::string& task_id) {
 
     sqlite3_finalize(stmt);
     return logs;
+}
+
+sqlite3_int64 LogRepository::countByTaskId(const std::string& task_id) {
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT COUNT(*) FROM execution_logs WHERE task_id = ?;";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(lastError());
+    }
+
+    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+
+    const int step_result = sqlite3_step(stmt);
+    if (step_result != SQLITE_ROW) {
+        const std::string error = lastError();
+        sqlite3_finalize(stmt);
+        throw std::runtime_error(error);
+    }
+
+    const sqlite3_int64 count = sqlite3_column_int64(stmt, 0);
+    sqlite3_finalize(stmt);
+    return count;
 }
 
 std::string LogRepository::lastError() const {
