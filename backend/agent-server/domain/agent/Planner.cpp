@@ -67,7 +67,7 @@ std::vector<PlanStep> Planner::parsePlanFromResponse(
         return parsed.planSteps;
     }
 
-    return fallbackPlan(""); // 降级
+    return {};
 }
 
 std::vector<PlanStep> Planner::fallbackPlan(const std::string& goal) {

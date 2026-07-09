@@ -1,9 +1,11 @@
 #include "TaskController.h"
 
 #include "application/AgentService.h"
+#include "application/LogService.h"
 #include "application/TaskService.h"
 
 #include <exception>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -11,6 +13,8 @@
 #include <sqlite3.h>
 
 namespace {
+
+using json = nlohmann::json;
 
 std::string json_escape(const std::string& value) {
     std::ostringstream escaped;
@@ -70,6 +74,23 @@ std::string extract_json_string(const std::string& body, const std::string& key)
     return value;
 }
 
+std::string json_string_value(const json& body, const std::string& key) {
+    if (!body.contains(key) || !body.at(key).is_string()) {
+        return "";
+    }
+    return body.at(key).get<std::string>();
+}
+
+std::string log_type_from_content(const std::string& content) {
+    if (content.size() > 2 && content.front() == '[') {
+        const auto end = content.find(']');
+        if (end != std::string::npos && end > 1) {
+            return content.substr(1, end - 1);
+        }
+    }
+    return "agent";
+}
+
 std::string request_body(const std::string& request) {
     const std::size_t body_pos = request.find("\r\n\r\n");
     if (body_pos == std::string::npos) return "";
@@ -118,9 +139,16 @@ TaskController::TaskController(std::string database_path)
 
 std::string TaskController::createTask(const std::string& request) {
     const std::string body_content = request_body(request);
-    const std::string session_id = extract_json_string(body_content, "session_id");
-    const std::string workspace_id = extract_json_string(body_content, "workspace_id");
-    const std::string input = extract_json_string(body_content, "input");
+    json body = json::parse(body_content, nullptr, false);
+    if (body.is_discarded() || !body.is_object()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"request body must be valid JSON"}})",
+            "400 Bad Request");
+    }
+
+    const std::string session_id = json_string_value(body, "session_id");
+    const std::string workspace_id = json_string_value(body, "workspace_id");
+    const std::string input = json_string_value(body, "input");
     if (session_id.empty() || workspace_id.empty() || input.empty()) {
         return http_response(
             R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
@@ -148,6 +176,10 @@ std::string TaskController::createTask(const std::string& request) {
             agent_result.status.empty() ? "planned" : agent_result.status,
             agent_result.planJson,
             agent_result.currentStep);
+        LogService log_service(db);
+        for (const auto& entry : agent_result.logs) {
+            log_service.createLog(task.id, log_type_from_content(entry), entry);
+        }
 
         const auto updated = task_service.getTask(task.id);
         if (updated) {

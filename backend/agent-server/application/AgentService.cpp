@@ -3,6 +3,10 @@
 
 #include "domain/agent/Planner.h"
 #include "domain/agent/RoleRegistry.h"
+#include "infrastructure/llm/LlmClient.h"
+#include "infrastructure/llm/OpenAICompatibleClient.h"
+
+#include <memory>
 
 namespace codepilot {
 
@@ -19,10 +23,15 @@ AgentResult AgentService::runTask(
     // Sprint 2: 注入工具描述给 Agent
     std::string toolsDesc = getToolsDescription();
     agent.setToolsDescription(toolsDesc);
+    auto llmConfig = OpenAICompatibleClient::loadConfig("config/llm.json");
+    if (OpenAICompatibleClient::isConfigured(llmConfig)) {
+        agent.setLlmClient(std::make_shared<OpenAICompatibleClient>(llmConfig));
+    } else {
+        agent.setLlmClient(std::make_shared<MockLlmClient>());
+    }
 
     AgentResult result = agent.executeTask(taskId, sessionId, workspaceId, goal);
-    result.status = "pending";
-    result.currentStep = result.currentStep.empty() ? "pending execution" : result.currentStep;
+    result.currentStep = result.currentStep.empty() ? "completed" : result.currentStep;
     return result;
 }
 

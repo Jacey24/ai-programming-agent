@@ -8,6 +8,13 @@
       "output_format": "plan"
     },
     {
+      "name": "executor",
+      "description": "通用执行角色——负责按计划执行步骤和调用工具",
+      "prompt_template": "你是一名通用任务执行者。当前任务步骤：{current_step}\n已完成上下文：{context}\n可用工具列表：{tools}",
+      "visible_tools": ["file.list", "file.read", "file.apply_patch", "shell.run", "git.status", "git.diff"],
+      "output_format": "tool_call"
+    },
+    {
       "name": "coder",
       "description": "程序员角色——负责具体执行和工具调用",
       "prompt_template": "你是一名高级程序员。当前任务步骤：{current_step}\n已完成上下文：{context}\n可用工具列表：{tools}",

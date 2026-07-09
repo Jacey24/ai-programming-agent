@@ -1,7 +1,7 @@
 {
   "provider": "openai_compatible",
-  "base_url": "https://api.example.com/v1",
-  "model": "gpt-4.1",
+  "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+  "model": "doubao-seed-evolving",
   "api_key_env": "LLM_API_KEY",
-  "timeout_seconds": 120
+  "timeout_seconds": 15
 }
