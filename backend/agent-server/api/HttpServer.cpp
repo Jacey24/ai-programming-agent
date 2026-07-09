@@ -1,5 +1,6 @@
 #include "api/HttpServer.h"
 
+#include "api/controllers/PermissionController.h"
 #include "api/controllers/SessionController.h"
 #include "api/controllers/TaskController.h"
 #include "api/controllers/ToolController.h"
@@ -265,6 +266,18 @@ std::string HttpServer::handleRequest(const std::string& request) {
     if (request.rfind("GET /api/v1/tools/", 0) == 0) {
         ToolController controller;
         return controller.getToolDetail(request);
+    }
+    if (request.rfind("GET /api/v1/permissions?", 0) == 0 || request.rfind("GET /api/v1/permissions ", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.listPermissions(request);
+    }
+    if (request.rfind("GET /api/v1/permissions/", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.getPermission(request);
+    }
+    if (request.rfind("POST /api/v1/permissions/", 0) == 0) {
+        PermissionController controller(config_.databasePath);
+        return controller.handleAction(request);
     }
     return not_found_response();
 }
