@@ -1,9 +1,14 @@
 #include "WorkspaceController.h"
 
+#include "application/WorkspaceService.h"
+
 #include <chrono>
 #include <ctime>
+#include <exception>
 #include <sstream>
 #include <utility>
+#include <vector>
+
 #include <sqlite3.h>
 
 namespace {
@@ -84,6 +89,22 @@ std::string request_body(const std::string& request) {
     return request.substr(body_pos + 4);
 }
 
+std::string extract_path_segment(const std::string& request, const std::string& prefix) {
+    const std::size_t request_line_end = request.find("\r\n");
+    const std::string request_line = request.substr(0, request_line_end);
+    const std::size_t method_end = request_line.find(' ');
+    if (method_end == std::string::npos) return "";
+    const std::size_t path_start = method_end + 1;
+    const std::size_t prefix_pos = request_line.find(prefix, path_start);
+    if (prefix_pos == std::string::npos) return "";
+    const std::size_t segment_start = prefix_pos + prefix.size();
+    const std::size_t segment_end = request_line.find_first_of("? ", segment_start);
+    if (segment_end == std::string::npos) {
+        return request_line.substr(segment_start);
+    }
+    return request_line.substr(segment_start, segment_end - segment_start);
+}
+
 } // anonymous namespace
 
 namespace codepilot {
@@ -147,6 +168,93 @@ std::string WorkspaceController::createWorkspace(const std::string& request) {
                   << R"(","path":")" << json_escape(path)
                   << R"(","created_at":")" << now << R"("}})";
     return http_response(response_body.str());
+}
+
+std::string WorkspaceController::listWorkspaces(const std::string& /*request*/) {
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::vector<WorkspaceRecord> workspaces;
+    try {
+        WorkspaceService service(db);
+        workspaces = service.listWorkspaces();
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"items":[)";
+    for (std::size_t i = 0; i < workspaces.size(); ++i) {
+        const auto& ws = workspaces[i];
+        if (i > 0) {
+            body << ",";
+        }
+        body << R"({"id":")" << json_escape(ws.id)
+             << R"(","name":")" << json_escape(ws.name)
+             << R"(","path":")" << json_escape(ws.path)
+             << R"(","created_at":")" << json_escape(ws.created_at)
+             << R"("})";
+    }
+    body << "]}}";
+    return http_response(body.str());
+}
+
+std::string WorkspaceController::getWorkspace(const std::string& request) {
+    const std::string workspace_id = extract_path_segment(request, "/api/v1/workspaces/");
+    if (workspace_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::string response;
+    try {
+        WorkspaceService service(db);
+        const auto ws = service.getWorkspaceById(workspace_id);
+        if (!ws) {
+            response = http_response(
+                R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+                "404 Not Found");
+            sqlite3_close(db);
+            return response;
+        }
+
+        std::ostringstream body;
+        body << R"({"success":true,"data":{"id":")" << json_escape(ws->id)
+             << R"(","name":")" << json_escape(ws->name)
+             << R"(","path":")" << json_escape(ws->path)
+             << R"(","created_at":")" << json_escape(ws->created_at)
+             << R"("}})";
+        response = http_response(body.str());
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+    return response;
 }
 
 } // namespace codepilot
