@@ -3,7 +3,11 @@
 #include "RiskDetector.h"
 #include "domain/tools/Tool.h"
 #include "event/EventBus.h"
+
+#include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,10 +39,16 @@ struct PermissionRequest {
 // 职责：
 //   1. 检查工具调用是否需要用户确认
 //   2. 创建权限请求
-//   3. 处理用户批准/拒绝
-//   4. 发布权限相关事件
+//   3. **同步等待用户决策**（阻塞 Agent 直至用户点击同意/拒绝）
+//   4. 处理用户批准/拒绝（由 API 层回调触发）
+//   5. 发布权限相关事件
 //
 // 对齐整体架构说明.md 第10.2节
+//
+// ★ Sprint 2 新增：waitForResolution / resolvePermission 机制
+//    - createRequest 后，Agent 调用 waitForResolution 阻塞等待
+//    - 郑嘉娴的 API Controller 调用 resolvePermission() 来唤醒
+//    - 不依赖外部代码，纯内部 std::condition_variable 实现
 // ============================================================
 class PermissionManager {
 public:
@@ -49,12 +59,31 @@ public:
   bool requiresPermission(const std::string &toolName, RiskLevel riskLevel,
                           const json &arguments) const;
 
-  // --- 创建权限请求 ---
+  // --- 创建权限请求（非阻塞） ---
+  // 创建后调用 waitForResolution() 进入等待
   PermissionRequest createRequest(const std::string &taskId,
                                   const std::string &toolName,
                                   RiskLevel riskLevel, const json &arguments);
 
-  // --- 处理用户响应 ---
+  // --- ★ 新增：同步等待用户决策 ---
+  // 阻塞当前线程直到用户同意/拒绝，或超时
+  // 参数: requestId - createRequest 返回的 id
+  //       timeoutSeconds - 超时秒数（默认 120s）
+  // 返回: true = 用户同意, false = 用户拒绝/超时/请求不存在
+  // 线程安全：内部使用 condition_variable
+  bool waitForResolution(const std::string &requestId,
+                         int timeoutSeconds = 120);
+
+  // --- ★ 新增：外部解析权限请求（API 层回调入口） ---
+  // 郑嘉娴的 POST /api/v1/permissions/{id}/approve 调用此方法
+  // 钟经添的 Repository 恢复会话也可调用
+  // 会通知正在 waitForResolution 中等待的线程
+  // 参数: requestId - 请求 ID
+  //       approved - true 同意, false 拒绝
+  // 返回: 如果请求存在且状态为 Pending，则解析成功返回 true
+  bool resolvePermission(const std::string &requestId, bool approved);
+
+  // --- 处理用户响应（兼容旧接口，内部调用 resolvePermission） ---
   bool approve(const std::string &requestId);
   bool reject(const std::string &requestId);
 
@@ -69,6 +98,17 @@ public:
 private:
   std::shared_ptr<EventBus> eventBus_;
   std::unordered_map<std::string, PermissionRequest> requests_;
+
+  // ★ 新增：同步等待所需的数据结构
+  struct PendingWaiter {
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool resolved{false};
+    bool approved{false};
+  };
+  std::unordered_map<std::string, std::shared_ptr<PendingWaiter>> waiters_;
+  std::mutex waitersMutex_;
+
   size_t nextId_{1};
 
   std::string generateId();
