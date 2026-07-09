@@ -7,9 +7,15 @@
 
 #include "application/ToolSystem.h"
 #include "domain/tools/Tool.h"
+#include "event/EventBus.h"
+#include "infrastructure/llm/LlmClient.h"
 
 #include <chrono>
+#include <algorithm>
+#include <cctype>
 #include <ctime>
+#include <exception>
+#include <nlohmann/json.hpp>
 #include <sstream>
 
 namespace codepilot {
@@ -33,7 +39,24 @@ AgentResult Agent::executeTask(
     // ============================================================
     // 构建规划 prompt → LLM 调用方处理 → parsePlanFromResponse 解析
     // 这里直接走 fallbackPlan 作为降级，同时把 prompt 暴露为 buildPlanningPrompt
-    auto steps = planner_.generatePlan(goal);
+    publishTaskEvent(taskId, EventType::TaskPlanning, "Agent is planning the task");
+
+    std::vector<PlanStep> steps;
+    if (llmClient_) {
+        const std::string planningPrompt =
+            planner_.buildPlanningPrompt(goal, toolsDesc_);
+        LlmResponse planningResponse =
+            llmClient_->chat({planningPrompt, "", config_.toolTimeoutSeconds});
+        if (planningResponse.success) {
+            steps = Planner::parsePlanFromResponse(planningResponse.content);
+            context_.push_back("[planning_response] " + planningResponse.content);
+        } else {
+            context_.push_back("[planning_fallback] " + planningResponse.error);
+        }
+    }
+    if (steps.empty()) {
+        steps = planner_.generatePlan(goal);
+    }
     queue_.loadFromPlan(steps);
 
     context_.push_back("[plan] 已生成计划: " + planToJson(steps));
@@ -96,7 +119,8 @@ AgentResult Agent::executeTask(
             bool anyToolFailed = false;
 
             for (const auto& cmd : parsed.commands) {
-                context_.push_back("[tool] calling: " + cmd.toolName +
+                const std::string toolName = normalizeToolName(cmd.toolName);
+                context_.push_back("[tool] calling: " + toolName +
                     (cmd.toolArgs.empty() ? "" : " with args: " + cmd.toolArgs));
 
                 ToolContext toolCtx;
@@ -108,22 +132,12 @@ AgentResult Agent::executeTask(
                 try {
                     // 调用 ToolSystem 执行工具
                     if (ToolSystem::getInstance().isInitialized()) {
-                        // 将文本参数转为 JSON（简化版）
-                        json args;
-                        if (!cmd.toolArgs.empty()) {
-                            // 尝试解析 JSON 参数
-                            args = json::parse(cmd.toolArgs, nullptr, false);
-                            if (args.is_discarded()) {
-                                // 非 JSON，作为 path 或 command 参数
-                                args["input"] = cmd.toolArgs;
-                            }
-                        }
-
-                        toolResult = ToolSystem::getInstance().callTool(
-                            cmd.toolName, toolCtx, args);
+                        json args = buildToolArguments(toolName, cmd.toolArgs);
+                        toolResult = ToolSystem::getInstance().callToolWithPermission(
+                            toolName, toolCtx, args);
                     } else {
                         toolResult.success = true;
-                        toolResult.output = "[mock] tool not initialized, " + cmd.toolName;
+                        toolResult.output = "[mock] tool not initialized, " + toolName;
                     }
                 } catch (const std::exception& e) {
                     toolResult.success = false;
@@ -132,7 +146,7 @@ AgentResult Agent::executeTask(
 
                 // 结果追加到上下文
                 std::ostringstream resultCtx;
-                resultCtx << "[tool_result] " << cmd.toolName << ": ";
+                resultCtx << "[tool_result] " << toolName << ": ";
                 if (toolResult.success) {
                     resultCtx << "success\n" << toolResult.output;
                 } else {
@@ -185,6 +199,11 @@ AgentResult Agent::executeTask(
     result.currentStep = steps.empty() ? "none" : steps.back().action;
     result.createdAt = now;
     result.updatedAt = doneTime;
+    result.logs = context_;
+    publishTaskEvent(taskId,
+        result.status == "completed" ? EventType::TaskCompleted : EventType::TaskFailed,
+        result.status == "completed" ? "Agent task completed" : "Agent task failed",
+        "{\"status\":\"" + escapeJson(result.status) + "\"}");
     return result;
 }
 
@@ -204,8 +223,18 @@ ParsedResponse Agent::executeSingleStep(
         ContextBuilder::formatHistory(context_),
         toolsDesc_.empty() ? toolsToString(role.visibleTools) : toolsDesc_);
 
-    // Mock LLM 响应（占位，刘子恒替换此处）
-    rawLlmOutput = "<cmd>LIST</cmd>\nDONE: 步骤 '" + step.action + "' 已完成（mock）";
+    // Prefer the configured LLM client; fall back to a deterministic local result.
+    if (llmClient_) {
+        LlmResponse response =
+            llmClient_->chat({prompt, "", config_.toolTimeoutSeconds});
+        if (response.success && !response.content.empty()) {
+            rawLlmOutput = response.content;
+            return ResponseParser::parseAll(rawLlmOutput);
+        }
+        context_.push_back("[llm_fallback] " + response.error);
+    }
+
+    rawLlmOutput = "DONE: step '" + step.action + "' completed by mock fallback";
 
     return ResponseParser::parseAll(rawLlmOutput);
 }
@@ -275,6 +304,60 @@ bool Agent::isDeadlock(const std::vector<ParsedCommand>& commands) const {
         if (commands[i].toolArgs != prevCommands_[i].toolArgs) return false;
     }
     return true;
+}
+
+void Agent::publishTaskEvent(const std::string& taskId, EventType eventType,
+    const std::string& content, const std::string& metadataJson) const {
+    if (!ToolSystem::getInstance().isInitialized()) {
+        return;
+    }
+
+    json metadata = json::parse(metadataJson, nullptr, false);
+    if (metadata.is_discarded()) {
+        metadata = json::object();
+    }
+    ToolSystem::getInstance().eventBus().publish(
+        EventData::Create(taskId, eventType, content, metadata));
+}
+
+std::string Agent::normalizeToolName(const std::string& name) {
+    std::string normalized = name;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+    if (normalized == "list") return "file.list";
+    if (normalized == "read") return "file.read";
+    if (normalized == "write") return "file.write";
+    if (normalized == "patch") return "file.apply_patch";
+    if (normalized == "shell") return "shell.run";
+    if (normalized == "git_status") return "git.status";
+    if (normalized == "git_diff") return "git.diff";
+    return name;
+}
+
+json Agent::buildToolArguments(const std::string& toolName, const std::string& rawArgs) {
+    if (!rawArgs.empty()) {
+        json parsed = json::parse(rawArgs, nullptr, false);
+        if (!parsed.is_discarded()) {
+            return parsed;
+        }
+    }
+
+    json args = json::object();
+    if (rawArgs.empty()) {
+        return args;
+    }
+
+    if (toolName == "shell.run") {
+        args["command"] = rawArgs;
+    } else if (toolName == "file.read" || toolName == "file.list") {
+        args["path"] = rawArgs;
+    } else if (toolName == "file.apply_patch") {
+        args["patch"] = rawArgs;
+    } else {
+        args["input"] = rawArgs;
+    }
+    return args;
 }
 
 std::string Agent::toolsToString(const std::vector<std::string>& tools) {

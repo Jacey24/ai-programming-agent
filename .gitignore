@@ -27,6 +27,7 @@ storage/logs/
 
 # Config overrides (local)
 config/*.local.json
+config/*.key
 
 #docs
 docs/AppBootstrap 模块化拆分计划.md

@@ -4,13 +4,20 @@
 #include "TaskQueue.h"
 #include "TaskState.h"
 #include "ResponseParser.h"
+#include "event/EventTypes.h"
 
+#include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace codepilot {
 
+using json = nlohmann::json;
+
 class Planner;
+class LlmClient;
 
 struct AgentConfig {
     int maxSteps = 20;
@@ -29,6 +36,7 @@ struct AgentResult {
     std::string currentStep;
     std::string createdAt;
     std::string updatedAt;
+    std::vector<std::string> logs;
 };
 
 class Agent {
@@ -37,6 +45,7 @@ public:
 
     // 设置可用工具描述（由外部 ToolSystem 提供）
     void setToolsDescription(const std::string& desc) { toolsDesc_ = desc; }
+    void setLlmClient(std::shared_ptr<LlmClient> client) { llmClient_ = std::move(client); }
 
     AgentResult executeTask(
         const std::string& taskId,
@@ -73,6 +82,10 @@ private:
 
     // Sprint 2：死锁检测
     bool isDeadlock(const std::vector<ParsedCommand>& commands) const;
+    void publishTaskEvent(const std::string& taskId, EventType eventType,
+        const std::string& content, const std::string& metadataJson = "{}") const;
+    static std::string normalizeToolName(const std::string& name);
+    static json buildToolArguments(const std::string& toolName, const std::string& rawArgs);
 
     RoleRegistry& registry_;
     Planner& planner_;
@@ -80,6 +93,7 @@ private:
     AgentConfig config_;
     std::vector<std::string> context_;
     std::string toolsDesc_;  // 可用工具文本描述
+    std::shared_ptr<LlmClient> llmClient_;
 
     // 死锁检测状态
     std::vector<ParsedCommand> prevCommands_;

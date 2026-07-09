@@ -22,6 +22,8 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/RoleRegistry.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskQueue.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskState.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/BuiltinShell.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/FileTool.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ShellTool.cpp
@@ -89,3 +91,44 @@ target_include_directories(tool-tests PRIVATE
 target_link_libraries(tool-tests PRIVATE
     ${CMAKE_DL_LIBS}
 )
+
+if(CODEPILOT_BUILD_TESTS)
+add_executable(agent-loop-test
+    ${CMAKE_SOURCE_DIR}/tests/test_agent_loop.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Agent.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ContextBuilder.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Planner.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/PromptAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ResponseParser.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/RoleRegistry.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskQueue.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskState.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ToolRegistry.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/FileTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/BuiltinShell.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ShellTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/GitTool.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/RiskDetector.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/debug/Debugger.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventDispatcher.cpp
+)
+
+target_include_directories(agent-loop-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/backend/agent-server
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent
+    ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+)
+
+target_link_libraries(agent-loop-test PRIVATE
+    ${CMAKE_DL_LIBS}
+)
+
+add_test(NAME agent-loop-test COMMAND agent-loop-test)
+endif()
