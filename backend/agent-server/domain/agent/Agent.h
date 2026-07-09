@@ -5,6 +5,9 @@
 #include "TaskState.h"
 #include "ResponseParser.h"
 
+#include "infrastructure/storage/repositories/LogRepository.h"
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,6 +40,9 @@ public:
 
     // 设置可用工具描述（由外部 ToolSystem 提供）
     void setToolsDescription(const std::string& desc) { toolsDesc_ = desc; }
+
+    // Sprint 2：注入数据库句柄，用于日志持久化（db 来自郑嘉娴 TaskController）
+    void setDb(sqlite3* db) { db_ = db; }
 
     AgentResult executeTask(
         const std::string& taskId,
@@ -84,6 +90,9 @@ private:
     // 死锁检测状态
     std::vector<ParsedCommand> prevCommands_;
     int deadlockCount_ = 0;
+
+    // Sprint 2：数据库句柄（日志持久化，db 来自郑嘉娴 TaskController）
+    sqlite3* db_ = nullptr;
 };
 
 } // namespace codepilot
