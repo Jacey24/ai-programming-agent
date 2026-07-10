@@ -146,13 +146,11 @@ export function useAgentRuntime(options: {
         return { session: sessionRef.current, workspace: workspaceRef.current };
       }
 
-      const [session, workspace] = await Promise.all([
-        createSession(input.sessionTitle.trim() || "CodePilot Session"),
-        createWorkspace(
-          input.workspaceName.trim() || "codepilot-workspace",
-          input.workspacePath.trim() || "/workspace",
-        ),
-      ]);
+      const session = await createSession(input.sessionTitle.trim() || "CodePilot Session");
+      const workspace = await createWorkspace(
+        input.workspaceName.trim() || "codepilot-workspace",
+        input.workspacePath.trim() || "/workspace",
+      );
       sessionRef.current = session;
       workspaceRef.current = workspace;
       return { session, workspace };

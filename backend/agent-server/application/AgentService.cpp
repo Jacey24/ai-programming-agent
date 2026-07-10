@@ -55,17 +55,13 @@ AgentResult AgentService::runTask(
 
 ExecutionMode AgentService::resolveExecutionMode(const std::string& goal, ExecutionMode requestedMode) {
     if (requestedMode != ExecutionMode::Auto) return requestedMode;
-    std::string lower = goal;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    const std::vector<std::string> workspaceSignals = {
-        "创建文件", "修改这个项目", "修复代码", "重构", "运行测试", "编译", "workspace", "写入", "create file", "modify", "fix ", "refactor", "run test", "compile"};
-    for (const auto& signal : workspaceSignals) if (lower.find(signal) != std::string::npos) return ExecutionMode::WorkspaceAgent;
-    const std::vector<std::string> fileExtensions = {".py", ".cpp", ".cc", ".c", ".h", ".hpp", ".ts", ".tsx", ".js", ".json", ".md"};
-    for (const auto& extension : fileExtensions) if (lower.find(extension) != std::string::npos) return ExecutionMode::WorkspaceAgent;
-    const std::vector<std::string> answerSignals = {
-        "输出一段", "给出", "解释", "什么是", "算法示例", "output", "example", "explain", "what is"};
-    for (const auto& signal : answerSignals) if (lower.find(signal) != std::string::npos) return ExecutionMode::DirectAnswer;
-    return ExecutionMode::DirectAnswer;
+
+    // Auto mode must not silently turn an editing request into a read-only
+    // response. The old keyword classifier was too narrow and its fallback
+    // always selected DirectAnswer, which caused most normal requests to skip
+    // planning. Direct answers remain available through the explicit UI mode.
+    (void)goal;
+    return ExecutionMode::WorkspaceAgent;
 }
 
 std::string AgentService::getToolsDescription() {
