@@ -11,6 +11,8 @@ public:
     std::string createSession(const std::string& request);
     std::string listSessions(const std::string& request);
     std::string getSession(const std::string& request);
+    std::string updateSession(const std::string& request);
+    std::string deleteSession(const std::string& request);
 
 private:
     std::string databasePath_;
