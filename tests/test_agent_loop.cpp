@@ -30,12 +30,16 @@
 #include "RoleRegistry.h"
 #include <iostream>
 #include <string>
-#include <windows.h>  // Windows 平台
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 int main() {
+#ifdef _WIN32
     // 设置控制台为 UTF-8 编码
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
 
     std::cout << "=== CodePilot Agent Core 独立测试 ===" << std::endl;
     std::cout << std::endl;

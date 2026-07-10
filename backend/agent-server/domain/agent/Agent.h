@@ -4,20 +4,30 @@
 #include "TaskQueue.h"
 #include "TaskState.h"
 #include "ResponseParser.h"
-
-#include "infrastructure/storage/repositories/LogRepository.h"
+#include "event/EventTypes.h"
 
 #include <memory>
+#include <nlohmann/json.hpp>
+#include <sqlite3.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace codepilot {
 
+using json = nlohmann::json;
+
 class Planner;
+class LlmClient;
+struct ToolResult;
+struct EventData;
 
 struct AgentConfig {
-    int maxSteps = 20;
-    int toolTimeoutSeconds = 120;
+    int maxSteps = 6;
+    int maxRoundsPerStep = 3;
+    int toolTimeoutSeconds = 60;
+    bool autoRunSafeCommands = true;
+    bool requireFileWritePermission = true;
     int maxRetries = 1;          // Sprint 2：失败最大重试次数
     bool enableDeadlockCheck = true;  // Sprint 2：死锁检测
 };
@@ -32,6 +42,7 @@ struct AgentResult {
     std::string currentStep;
     std::string createdAt;
     std::string updatedAt;
+    std::vector<std::string> logs;
 };
 
 class Agent {
@@ -40,15 +51,20 @@ public:
 
     // 设置可用工具描述（由外部 ToolSystem 提供）
     void setToolsDescription(const std::string& desc) { toolsDesc_ = desc; }
+    void setLlmClient(std::shared_ptr<LlmClient> client) { llmClient_ = std::move(client); }
 
     // Sprint 2：注入数据库句柄，用于日志持久化（db 来自郑嘉娴 TaskController）
     void setDb(sqlite3* db) { db_ = db; }
+    void setConfig(const AgentConfig& config) { config_ = config; }
 
     AgentResult executeTask(
         const std::string& taskId,
         const std::string& sessionId,
         const std::string& workspaceId,
         const std::string& goal);
+    AgentResult executeDirectAnswer(
+        const std::string& taskId, const std::string& sessionId,
+        const std::string& workspaceId, const std::string& goal);
 
     // Sprint 2：构建执行期 Prompt（给 LLM 调用方使用）
     // step: 当前步骤描述
@@ -56,7 +72,8 @@ public:
     // 返回: 完整的 prompt 文本
     std::string buildExecutorPrompt(
         const PlanStep& step,
-        const RoleConfig& role) const;
+        const RoleConfig& role,
+        const std::string& goal) const;
 
 private:
     // 工具辅助
@@ -64,6 +81,21 @@ private:
     std::string planToJson(const std::vector<PlanStep>& steps);
     std::string escapeJson(const std::string& s);
     std::string iso8601Now();
+
+    // Sprint 2：持久化落库（周子涵）
+    //   将任务事件写入 task_events 表，将工具调用写入 tool_calls 表
+    //   落库失败不影响 Agent 主流程
+    void persistTaskEvent(const EventData& event) const;
+    void persistToolCall(const std::string& taskId, const std::string& toolName,
+        const json& arguments, const ToolResult& result) const;
+    void persistAndPublishFileChange(const std::string& taskId,
+        const std::string& toolName, const json& arguments) const;
+    static std::string generateEventId();
+    static std::string generateToolCallId();
+    static std::string generateFileChangeId();
+    static bool isFileMutatingTool(const std::string& toolName);
+    static std::string extractChangedPath(const std::string& toolName, const json& arguments);
+    static std::string inferChangeType(const std::string& toolName);
 
     // Sprint 2：单步执行（构建 prompt → 模拟 LLM 响应 → 解析 → 工具调用/完成）
     // rawLlmOutput: [out] LLM 输出的原始文本（由外部 LLM 调用方填充）
@@ -79,6 +111,13 @@ private:
 
     // Sprint 2：死锁检测
     bool isDeadlock(const std::vector<ParsedCommand>& commands) const;
+    void publishTaskEvent(const std::string& taskId, EventType eventType,
+        const std::string& content, const std::string& metadataJson = "{}") const;
+    static std::string normalizeToolName(const std::string& name);
+    static json buildToolArguments(const std::string& toolName, const std::string& rawArgs);
+    // 将 "key=value" 形式参数解析为 JSON 对象（带标量类型推断）
+    static json parseKeyValueArgs(const std::string& rawArgs);
+    static json coerceScalar(const std::string& value);
 
     RoleRegistry& registry_;
     Planner& planner_;
@@ -86,6 +125,7 @@ private:
     AgentConfig config_;
     std::vector<std::string> context_;
     std::string toolsDesc_;  // 可用工具文本描述
+    std::shared_ptr<LlmClient> llmClient_;
 
     // 死锁检测状态
     std::vector<ParsedCommand> prevCommands_;

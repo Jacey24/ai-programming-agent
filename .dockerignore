@@ -1,4 +1,6 @@
 build/
+storage/
+workspace/
 .git/
 .vs/
 .vscode/
@@ -6,3 +8,6 @@ build/
 __pycache__/
 *.swp
 *.swo
+frontend/web/node_modules/
+frontend/web/dist/
+frontend/web/.npm-cache/

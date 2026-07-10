@@ -25,6 +25,9 @@ private:
     std::string createChatResponse(const std::string& request) const;
     std::string chatHistoryResponse() const;
 
+    // SSE 实时事件流：保持 socket 长连接，回放历史事件并订阅 EventBus 实时推送
+    void streamTaskEvents(int client_fd, const std::string& task_id);
+
     HttpServerConfig config_;
 };
 

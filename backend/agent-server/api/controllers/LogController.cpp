@@ -1,4 +1,5 @@
 #include "LogController.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "application/LogService.h"
 
@@ -79,7 +80,7 @@ std::string LogController::listLogs(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(

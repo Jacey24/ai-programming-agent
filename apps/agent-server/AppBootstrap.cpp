@@ -4,6 +4,7 @@
 #include "infrastructure/storage/repositories/FileChangeRepository.h"
 #include "infrastructure/storage/repositories/PermissionRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "common/logging/Logger.h"
 
@@ -92,13 +93,14 @@ std::string extract_workspace_root(const std::string &config_path) {
 
 bool initialize_database(const std::string &path, std::string &error) {
   sqlite3 *db = nullptr;
-  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+  if (codepilot::openSqliteConnection(path.c_str(), &db) != SQLITE_OK) {
     error = db ? sqlite3_errmsg(db) : "sqlite3_open failed";
     if (db) {
       sqlite3_close(db);
     }
     return false;
   }
+  codepilot::configureSqliteDatabase(db);
 
   const char *schema = R"SQL(
 CREATE TABLE IF NOT EXISTS system_health (

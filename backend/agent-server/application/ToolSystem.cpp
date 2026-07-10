@@ -177,9 +177,11 @@ ToolResult ToolSystem::callTool(const std::string &name,
   }
 
   // 发布 ToolStarted 事件（EventBus 内部有锁）
+  json startedMeta{{"tool_name", name}, {"arguments", arguments}};
+  const auto callId = context.options.find("tool_call_id");
+  if (callId != context.options.end()) startedMeta["tool_call_id"] = callId->second;
   eventBus_->publish(EventData::Create(
-      context.taskId, EventType::ToolStarted, "Starting tool: " + name,
-      {{"tool_name", name}, {"arguments", arguments}}));
+      context.taskId, EventType::ToolStarted, "Starting tool: " + name, startedMeta));
 
   // ---- 重复指令检测（写锁范围尽可能小） ----
   std::string key = name + ":" + hashArguments(arguments);
@@ -280,10 +282,14 @@ ToolResult ToolSystem::callTool(const std::string &name,
   meta["tool_name"] = name;
   meta["success"] = result.success;
   meta["exit_code"] = result.exitCode;
+  if (callId != context.options.end()) meta["tool_call_id"] = callId->second;
   if (result.metadata.contains("duplicate_warning")) {
     meta["duplicate_warning"] = result.metadata["duplicate_warning"];
   }
 
+  const std::string output = (result.success ? result.output : result.error).substr(0, 4000);
+  eventBus_->publish(EventData::Create(
+      context.taskId, EventType::ToolOutput, output, meta));
   eventBus_->publish(EventData::Create(
       context.taskId, EventType::ToolFinished,
       result.success ? "Tool finished" : "Tool failed: " + result.error, meta));
@@ -307,6 +313,18 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
 
   // 检查配置覆盖中的风险等级
   RiskLevel level = tool->riskLevel(arguments);
+  const auto optionEnabled = [&context](const char* name, bool fallback) {
+    const auto it = context.options.find(name);
+    return it == context.options.end() ? fallback : it->second == "true";
+  };
+  const bool fileWrite = name == "file.write" || name == "file.apply_patch";
+  if (fileWrite && !optionEnabled("require_file_write_permission", true)) {
+    level = RiskLevel::Safe;
+  }
+  if (name == "shell.run" && level == RiskLevel::Safe &&
+      !optionEnabled("auto_run_safe_commands", true)) {
+    level = RiskLevel::Medium;
+  }
   {
     std::shared_lock lock(mutex_);
     auto configIt = configOverrides_.find(name);

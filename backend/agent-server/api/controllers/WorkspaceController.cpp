@@ -1,4 +1,5 @@
 #include "WorkspaceController.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "application/WorkspaceService.h"
 
@@ -126,7 +127,7 @@ std::string WorkspaceController::createWorkspace(const std::string& request) {
     const std::string now = current_timestamp();
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -172,7 +173,7 @@ std::string WorkspaceController::createWorkspace(const std::string& request) {
 
 std::string WorkspaceController::listWorkspaces(const std::string& /*request*/) {
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -219,7 +220,7 @@ std::string WorkspaceController::getWorkspace(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(

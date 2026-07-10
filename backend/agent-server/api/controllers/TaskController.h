@@ -12,6 +12,8 @@ public:
     std::string listTasks(const std::string& request);
     std::string getTask(const std::string& request);
     std::string cancelTask(const std::string& request);
+    std::string listToolCalls(const std::string& request);
+    std::string listEventHistory(const std::string& request);
 
 private:
     std::string databasePath_;

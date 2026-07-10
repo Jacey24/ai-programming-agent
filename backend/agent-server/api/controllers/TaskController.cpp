@@ -1,16 +1,26 @@
 #include "TaskController.h"
 
 #include "application/AgentService.h"
+#include "application/ToolSystem.h"
+#include "application/LogService.h"
 #include "application/TaskService.h"
+#include "infrastructure/storage/repositories/EventRepository.h"
+#include "infrastructure/storage/repositories/ToolCallRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include <exception>
+#include <algorithm>
+#include <nlohmann/json.hpp>
 #include <sstream>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include <sqlite3.h>
 
 namespace {
+
+using json = nlohmann::json;
 
 std::string json_escape(const std::string& value) {
     std::ostringstream escaped;
@@ -70,6 +80,23 @@ std::string extract_json_string(const std::string& body, const std::string& key)
     return value;
 }
 
+std::string json_string_value(const json& body, const std::string& key) {
+    if (!body.contains(key) || !body.at(key).is_string()) {
+        return "";
+    }
+    return body.at(key).get<std::string>();
+}
+
+std::string log_type_from_content(const std::string& content) {
+    if (content.size() > 2 && content.front() == '[') {
+        const auto end = content.find(']');
+        if (end != std::string::npos && end > 1) {
+            return content.substr(1, end - 1);
+        }
+    }
+    return "agent";
+}
+
 std::string request_body(const std::string& request) {
     const std::size_t body_pos = request.find("\r\n\r\n");
     if (body_pos == std::string::npos) return "";
@@ -118,17 +145,34 @@ TaskController::TaskController(std::string database_path)
 
 std::string TaskController::createTask(const std::string& request) {
     const std::string body_content = request_body(request);
-    const std::string session_id = extract_json_string(body_content, "session_id");
-    const std::string workspace_id = extract_json_string(body_content, "workspace_id");
-    const std::string input = extract_json_string(body_content, "input");
+    json body = json::parse(body_content, nullptr, false);
+    if (body.is_discarded() || !body.is_object()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"request body must be valid JSON"}})",
+            "400 Bad Request");
+    }
+
+    const std::string session_id = json_string_value(body, "session_id");
+    const std::string workspace_id = json_string_value(body, "workspace_id");
+    const std::string input = json_string_value(body, "input");
     if (session_id.empty() || workspace_id.empty() || input.empty()) {
         return http_response(
             R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
             "400 Bad Request");
     }
+    const json options = body.contains("options") && body["options"].is_object()
+        ? body["options"] : json::object();
+    TaskRunOptions runOptions;
+    const std::string executionMode = options.value("execution_mode", "auto");
+    runOptions.mode = executionMode == "answer" ? ExecutionMode::DirectAnswer
+        : executionMode == "workspace" ? ExecutionMode::WorkspaceAgent : ExecutionMode::Auto;
+    runOptions.autoRunSafeCommands = options.value("auto_run_safe_commands", true);
+    runOptions.requireFileWritePermission = options.value("require_permission_for_file_write", true);
+    runOptions.maxSteps = std::clamp(options.value("max_steps", 6), 1, 20);
+    runOptions.maxRoundsPerStep = std::clamp(options.value("max_rounds_per_step", 3), 1, 6);
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -140,18 +184,17 @@ std::string TaskController::createTask(const std::string& request) {
     try {
         TaskService task_service(db);
         task = task_service.createTask(session_id, workspace_id, input);
-
-        AgentService agent_service;
-        const AgentResult agent_result = agent_service.runTask(task.id, session_id, workspace_id, input, db);
-        task_service.updateExecution(
-            task.id,
-            agent_result.status.empty() ? "planned" : agent_result.status,
-            agent_result.planJson,
-            agent_result.currentStep);
-
-        const auto updated = task_service.getTask(task.id);
-        if (updated) {
-            task = *updated;
+        // 先置为 running，真正的执行在后台线程里异步完成
+        task_service.updateExecution(task.id, "running", task.plan, task.current_step);
+        const auto refreshed = task_service.getTask(task.id);
+        if (refreshed) {
+            task = *refreshed;
+        }
+        EventData created = EventData::Create(task.id, EventType::TaskCreated,
+            "任务已创建，正在启动 Agent", json{{"status", "running"}});
+        EventRepository(db).create(created.id, created.taskId, created.typeToString(), created.content, created.metadata.dump());
+        if (ToolSystem::getInstance().isInitialized()) {
+            ToolSystem::getInstance().eventBus().publish(created);
         }
     } catch (const std::exception& error) {
         sqlite3_close(db);
@@ -161,6 +204,40 @@ std::string TaskController::createTask(const std::string& request) {
     }
 
     sqlite3_close(db);
+
+    // 后台异步执行 Agent：自开一个独立的 SQLite 连接，
+    // 执行过程中产生的事件通过 EventBus 实时推送给 SSE 连接。
+    const std::string db_path = databasePath_;
+    const std::string task_id = task.id;
+    std::thread([db_path, task_id, session_id, workspace_id, input, runOptions]() {
+        sqlite3* worker_db = nullptr;
+        if (openSqliteConnection(db_path.c_str(), &worker_db) != SQLITE_OK) {
+            if (worker_db) { sqlite3_close(worker_db); }
+            return;
+        }
+        try {
+            AgentService agent_service;
+            const AgentResult agent_result =
+                agent_service.runTask(task_id, session_id, workspace_id, input, worker_db, runOptions);
+            TaskService task_service(worker_db);
+            task_service.updateExecution(
+                task_id,
+                agent_result.status.empty() ? "completed" : agent_result.status,
+                agent_result.planJson,
+                agent_result.currentStep);
+            LogService log_service(worker_db);
+            for (const auto& entry : agent_result.logs) {
+                log_service.createLog(task_id, log_type_from_content(entry), entry);
+            }
+        } catch (const std::exception&) {
+            try {
+                TaskService task_service(worker_db);
+                task_service.updateExecution(task_id, "failed", "", "");
+            } catch (...) {
+            }
+        }
+        sqlite3_close(worker_db);
+    }).detach();
 
     std::ostringstream response_body;
     response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
@@ -181,7 +258,7 @@ std::string TaskController::createTask(const std::string& request) {
 
 std::string TaskController::listTasks(const std::string& request) {
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -231,7 +308,7 @@ std::string TaskController::getTask(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -295,7 +372,7 @@ std::string TaskController::cancelTask(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -333,6 +410,129 @@ std::string TaskController::cancelTask(const std::string& request) {
         }
         return http_response(
             R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(msg) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+    return response;
+}
+
+std::string TaskController::listToolCalls(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string suffix = "/tool-calls";
+    if (full_segment.size() <= suffix.size() ||
+        full_segment.compare(full_segment.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /tool-calls"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - suffix.size());
+    if (task_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::string response;
+    try {
+        ToolCallRepository repo(db);
+        const std::vector<ToolCallRecord> calls = repo.findByTaskId(task_id);
+
+        std::ostringstream body;
+        body << R"({"success":true,"data":{"task_id":")" << json_escape(task_id)
+             << R"(","items":[)";
+        for (std::size_t i = 0; i < calls.size(); ++i) {
+            const auto& call = calls[i];
+            if (i > 0) {
+                body << ",";
+            }
+            body << R"({"id":")" << json_escape(call.id)
+                 << R"(","task_id":")" << json_escape(call.task_id)
+                 << R"(","tool_name":")" << json_escape(call.tool_name)
+                 << R"(","arguments":")" << json_escape(call.arguments)
+                 << R"(","success":)" << (call.success ? "true" : "false")
+                 << R"(,"result":")" << json_escape(call.result)
+                 << R"(","exit_code":)" << call.exit_code
+                 << R"(,"created_at":")" << json_escape(call.created_at) << R"("})";
+        }
+        body << "]}}";
+        response = http_response(body.str());
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+    return response;
+}
+
+std::string TaskController::listEventHistory(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string suffix = "/events/history";
+    if (full_segment.size() <= suffix.size() ||
+        full_segment.compare(full_segment.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /events/history"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - suffix.size());
+    if (task_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::string response;
+    try {
+        EventRepository repo(db);
+        const std::vector<EventRecord> events = repo.findByTaskId(task_id);
+
+        std::ostringstream body;
+        body << R"({"success":true,"data":{"task_id":")" << json_escape(task_id)
+             << R"(","items":[)";
+        for (std::size_t i = 0; i < events.size(); ++i) {
+            const auto& event = events[i];
+            if (i > 0) {
+                body << ",";
+            }
+            body << R"({"id":")" << json_escape(event.id)
+                 << R"(","task_id":")" << json_escape(event.task_id)
+                 << R"(","type":")" << json_escape(event.type)
+                 << R"(","content":")" << json_escape(event.content)
+                 << R"(","metadata":)";
+            json metadata = json::parse(event.metadata, nullptr, false);
+            if (metadata.is_discarded()) {
+                metadata = json::object();
+            }
+            body << metadata.dump()
+                 << R"(,"created_at":")" << json_escape(event.created_at) << R"("})";
+        }
+        body << "]}}";
+        response = http_response(body.str());
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
             "500 Internal Server Error");
     }
 
