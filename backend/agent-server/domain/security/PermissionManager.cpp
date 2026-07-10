@@ -74,7 +74,10 @@ PermissionRequest PermissionManager::createRequest(const std::string &taskId,
   req.status = PermissionStatus::Pending;
   req.createdAt = currentTimestamp();
 
-  requests_[req.id] = req;
+  {
+    std::lock_guard<std::mutex> lock(requestsMutex_);
+    requests_[req.id] = req;
+  }
 
   // ★ 自动创建等待器
   {
@@ -147,15 +150,22 @@ bool PermissionManager::waitForResolution(const std::string &requestId,
 // ============================================================
 bool PermissionManager::resolvePermission(const std::string &requestId,
                                           bool approved) {
-  // 更新请求状态
-  auto it = requests_.find(requestId);
-  if (it == requests_.end() || it->second.status != PermissionStatus::Pending) {
-    return false;
+  // 更新请求状态（在锁内完成，并拷贝发布事件所需字段）
+  std::string toolName;
+  std::string taskId;
+  {
+    std::lock_guard<std::mutex> lock(requestsMutex_);
+    auto it = requests_.find(requestId);
+    if (it == requests_.end() ||
+        it->second.status != PermissionStatus::Pending) {
+      return false;
+    }
+    it->second.status =
+        approved ? PermissionStatus::Approved : PermissionStatus::Rejected;
+    it->second.resolvedAt = currentTimestamp();
+    toolName = it->second.toolName;
+    taskId = it->second.taskId;
   }
-
-  it->second.status =
-      approved ? PermissionStatus::Approved : PermissionStatus::Rejected;
-  it->second.resolvedAt = currentTimestamp();
 
   // 通知等待的线程
   std::shared_ptr<PendingWaiter> waiter;
@@ -177,12 +187,12 @@ bool PermissionManager::resolvePermission(const std::string &requestId,
   // 发布权限解析事件
   json meta;
   meta["request_id"] = requestId;
-  meta["tool_name"] = it->second.toolName;
+  meta["tool_name"] = toolName;
   meta["approved"] = approved;
 
   if (eventBus_) {
     eventBus_->publish(
-        EventData::Create(it->second.taskId, EventType::PermissionResolved,
+        EventData::Create(taskId, EventType::PermissionResolved,
                           approved ? "权限已批准" : "权限已拒绝", meta));
   }
 
@@ -201,13 +211,15 @@ bool PermissionManager::reject(const std::string &requestId) {
 }
 
 void PermissionManager::expire(const std::string &requestId) {
-  auto it = requests_.find(requestId);
-  if (it == requests_.end()) {
-    return;
+  {
+    std::lock_guard<std::mutex> lock(requestsMutex_);
+    auto it = requests_.find(requestId);
+    if (it == requests_.end()) {
+      return;
+    }
+    it->second.status = PermissionStatus::Expired;
+    it->second.resolvedAt = currentTimestamp();
   }
-
-  it->second.status = PermissionStatus::Expired;
-  it->second.resolvedAt = currentTimestamp();
 
   // 如果有人在等待，也通知他们（false = 拒绝/超时）
   std::shared_ptr<PendingWaiter> waiter;
@@ -238,6 +250,7 @@ PermissionRequest *PermissionManager::getRequest(const std::string &requestId) {
 std::vector<PermissionRequest>
 PermissionManager::getPendingRequests(const std::string &taskId) const {
   std::vector<PermissionRequest> result;
+  std::lock_guard<std::mutex> lock(requestsMutex_);
   for (const auto &[id, req] : requests_) {
     if (req.status != PermissionStatus::Pending) {
       continue;
@@ -247,6 +260,16 @@ PermissionManager::getPendingRequests(const std::string &taskId) const {
     }
   }
   return result;
+}
+
+std::optional<PermissionRequest>
+PermissionManager::getRequestCopy(const std::string &requestId) const {
+  std::lock_guard<std::mutex> lock(requestsMutex_);
+  auto it = requests_.find(requestId);
+  if (it == requests_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
 }
 
 } // namespace codepilot

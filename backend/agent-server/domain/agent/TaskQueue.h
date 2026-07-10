@@ -18,6 +18,7 @@ public:
     bool hasNext() const;
     PlanStep current() const;
     void markComplete();
+    void markFailed();
     void insertAfterCurrent(const PlanStep& step);
 
     // 任务状态推导（替代硬编码 TaskState）

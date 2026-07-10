@@ -106,28 +106,36 @@ bool RoleRegistry::loadFromFile(const std::string& configPath) {
                 RoleConfig role;
                 std::size_t fieldPos = 0;
 
+                // NOTE: find() returns the position of the KEY's opening quote.
+                // extractString/extractStringArray must start scanning AFTER the
+                // key literal, otherwise the key name itself is parsed as the value.
                 fieldPos = roleJson.find("\"name\"", 0);
                 if (fieldPos != std::string::npos) {
+                    fieldPos += std::strlen("\"name\"");
                     role.name = extractString(roleJson, fieldPos);
                 }
 
                 fieldPos = roleJson.find("\"description\"", 0);
                 if (fieldPos != std::string::npos) {
+                    fieldPos += std::strlen("\"description\"");
                     role.description = extractString(roleJson, fieldPos);
                 }
 
                 fieldPos = roleJson.find("\"prompt_template\"", 0);
                 if (fieldPos != std::string::npos) {
+                    fieldPos += std::strlen("\"prompt_template\"");
                     role.promptTemplate = extractString(roleJson, fieldPos);
                 }
 
                 fieldPos = roleJson.find("\"visible_tools\"", 0);
                 if (fieldPos != std::string::npos) {
+                    fieldPos += std::strlen("\"visible_tools\"");
                     role.visibleTools = extractStringArray(roleJson, fieldPos);
                 }
 
                 fieldPos = roleJson.find("\"output_format\"", 0);
                 if (fieldPos != std::string::npos) {
+                    fieldPos += std::strlen("\"output_format\"");
                     role.outputFormat = extractString(roleJson, fieldPos);
                 }
 

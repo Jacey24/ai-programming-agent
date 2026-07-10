@@ -8,9 +8,7 @@
 
 #include <memory>
 #include <nlohmann/json.hpp>
-#include "infrastructure/storage/repositories/LogRepository.h"
-
-#include <memory>
+#include <sqlite3.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +19,7 @@ using json = nlohmann::json;
 
 class Planner;
 class LlmClient;
+struct ToolResult;
 
 struct AgentConfig {
     int maxSteps = 20;
@@ -74,6 +73,16 @@ private:
     std::string escapeJson(const std::string& s);
     std::string iso8601Now();
 
+    // Sprint 2：持久化落库（周子涵）
+    //   将任务事件写入 task_events 表，将工具调用写入 tool_calls 表
+    //   落库失败不影响 Agent 主流程
+    void persistTaskEvent(const std::string& taskId, EventType type,
+        const std::string& content, const json& metadata) const;
+    void persistToolCall(const std::string& taskId, const std::string& toolName,
+        const json& arguments, const ToolResult& result) const;
+    static std::string generateEventId();
+    static std::string generateToolCallId();
+
     // Sprint 2：单步执行（构建 prompt → 模拟 LLM 响应 → 解析 → 工具调用/完成）
     // rawLlmOutput: [out] LLM 输出的原始文本（由外部 LLM 调用方填充）
     // 返回: 解析后的响应
@@ -92,6 +101,9 @@ private:
         const std::string& content, const std::string& metadataJson = "{}") const;
     static std::string normalizeToolName(const std::string& name);
     static json buildToolArguments(const std::string& toolName, const std::string& rawArgs);
+    // 将 "key=value" 形式参数解析为 JSON 对象（带标量类型推断）
+    static json parseKeyValueArgs(const std::string& rawArgs);
+    static json coerceScalar(const std::string& value);
 
     RoleRegistry& registry_;
     Planner& planner_;
