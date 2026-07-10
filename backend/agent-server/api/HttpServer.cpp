@@ -45,7 +45,7 @@ std::string http_response(const std::string& body, const std::string& status = "
     response << "HTTP/1.1 " << status << "\r\n"
              << "Content-Type: application/json; charset=utf-8\r\n"
              << "Access-Control-Allow-Origin: *\r\n"
-             << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+             << "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS\r\n"
              << "Access-Control-Allow-Headers: Content-Type\r\n"
              << "Connection: close\r\n"
              << "Content-Length: " << body.size() << "\r\n\r\n"
@@ -56,7 +56,7 @@ std::string http_response(const std::string& body, const std::string& status = "
 std::string options_response() {
     return "HTTP/1.1 204 No Content\r\n"
            "Access-Control-Allow-Origin: *\r\n"
-           "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+           "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS\r\n"
            "Access-Control-Allow-Headers: Content-Type\r\n"
            "Connection: close\r\n"
            "Content-Length: 0\r\n\r\n";
@@ -245,6 +245,14 @@ std::string HttpServer::handleRequest(const std::string& request) {
     if (request.rfind("GET /api/v1/sessions/", 0) == 0) {
         SessionController controller(config_.databasePath);
         return controller.getSession(request);
+    }
+    if (request.rfind("PATCH /api/v1/sessions/", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.updateSession(request);
+    }
+    if (request.rfind("DELETE /api/v1/sessions/", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.deleteSession(request);
     }
     if (request.rfind("GET /api/v1/sessions?", 0) == 0 ||
         request.rfind("GET /api/v1/sessions ", 0) == 0) {
