@@ -2,6 +2,7 @@
 
 #include "application/AgentService.h"
 #include "application/TaskService.h"
+#include "event/EventDispatcher.h"
 
 #include <exception>
 #include <sstream>
@@ -9,6 +10,9 @@
 #include <vector>
 
 #include <sqlite3.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace {
 
@@ -338,6 +342,55 @@ std::string TaskController::cancelTask(const std::string& request) {
 
     sqlite3_close(db);
     return response;
+}
+
+void TaskController::handleEvents(int client_fd,
+                                  const std::string& task_id,
+                                  EventDispatcher& dispatcher,
+                                  const std::atomic_bool& running) {
+    // 1. 发送 SSE 响应头
+    constexpr const char* sse_headers =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/event-stream\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: keep-alive\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "\r\n";
+    send(client_fd, sse_headers, std::char_traits<char>::length(sse_headers), 0);
+
+    // 2. 通过 EventDispatcher 注册 SSE 客户端
+    const std::string client_id = dispatcher.registerClient(
+        task_id,
+        [client_fd](const std::string& data) {
+            send(client_fd, data.data(), data.size(), 0);
+        });
+
+    // 3. 重放历史事件（先注册再重放，避免事件丢失窗口）
+    dispatcher.replayHistory(client_id, task_id);
+
+    // 4. 保持连接，检测客户端断开
+    while (running.load()) {
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(client_fd, &read_fds);
+
+        timeval timeout{};
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        const int ready = select(client_fd + 1, &read_fds, nullptr, nullptr, &timeout);
+        if (ready > 0) {
+            char buf[1];
+            const ssize_t n = recv(client_fd, buf, sizeof(buf), 0);
+            if (n <= 0) {
+                break; // 客户端断开
+            }
+        }
+    }
+
+    // 5. 清理
+    dispatcher.unregisterClient(client_id);
+    close(client_fd);
 }
 
 } // namespace codepilot
