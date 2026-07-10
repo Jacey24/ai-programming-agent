@@ -37,4 +37,13 @@ std::optional<SessionRecord> SessionService::getSessionById(const std::string& s
     return SessionRepository(db_).findById(session_id);
 }
 
+SessionRecord SessionService::updateSessionTitle(const std::string& id, const std::string& title) {
+    const std::string now = currentTimestamp();
+    return SessionRepository(db_).updateTitle(id, title, now);
+}
+
+bool SessionService::deleteSession(const std::string& id) {
+    return SessionRepository(db_).deleteById(id);
+}
+
 } // namespace codepilot
