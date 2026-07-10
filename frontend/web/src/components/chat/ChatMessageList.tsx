@@ -1,4 +1,7 @@
-import { AlertTriangle, Bot, Check, Circle, Loader2, ShieldAlert, User, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, Circle, Copy, Loader2, ShieldAlert, User, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { FileChangeCard } from "./FileChangeCard";
 import { ToolCallCard } from "./ToolCallCard";
@@ -12,15 +15,34 @@ interface ChatMessageListProps {
 }
 
 export function ChatMessageList({ state, onOpenFile, onResolvePermission }: ChatMessageListProps) {
-  const events = state.events.items.slice().reverse();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const [nearBottom, setNearBottom] = useState(true);
+  const events = useMemo(() => latestToolEvents(state.events.items.slice().reverse()), [state.events.items]);
   const pendingPermissionIds = new Set(state.permissions.items.map((permission) => permission.id));
 
+  useEffect(() => {
+    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [nearBottom, state.events.items.length, state.pendingPrompt, state.permissions.items.length, state.submitting, state.activeTask?.status]);
+
+  const onScroll = () => {
+    const element = scrollRef.current;
+    if (element) setNearBottom(element.scrollHeight - element.scrollTop - element.clientHeight < 120);
+  };
+
   return (
-    <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-      {state.activeTask?.goal ? (
+    <div ref={scrollRef} onScroll={onScroll} className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      {state.pendingPrompt || state.activeTask?.goal ? (
         <Bubble icon={User} tone="user">
-          {state.activeTask.goal}
+          {state.pendingPrompt || state.activeTask?.goal}
         </Bubble>
+      ) : null}
+
+      {state.submitting && state.events.items.length === 0 ? (
+        <StatusMessage title="正在创建任务并连接 Agent…" status="running" />
+      ) : null}
+      {!state.submitting && state.activeTask && state.streamStatus === "connecting" && state.events.items.length === 0 ? (
+        <StatusMessage title="正在连接实时执行流…" status="running" />
       ) : null}
 
       {!events.length && !state.activeTask ? (
@@ -62,6 +84,7 @@ export function ChatMessageList({ state, onOpenFile, onResolvePermission }: Chat
           {state.error}
         </Bubble>
       ) : null}
+      <div ref={bottomRef} />
     </div>
   );
 }
@@ -90,7 +113,7 @@ function EventView({
   }
 
   if (type === "agent_message") {
-    return <Bubble icon={Bot} tone="assistant">{event.content || ""}</Bubble>;
+    return <Bubble icon={Bot} tone="assistant"><MessageContent content={event.content || ""} /></Bubble>;
   }
 
   if (type === "tool_started" || type === "tool_finished" || type === "tool_output") {
@@ -99,7 +122,7 @@ function EventView({
     return (
       <ToolCallCard
         toolName={toolName}
-        status={type === "tool_started" ? "running" : stringMeta(metadata, "success") === "false" || metadata.success === false ? "failed" : "success"}
+        status={type === "tool_started" || type === "tool_output" ? "running" : stringMeta(metadata, "success") === "false" || metadata.success === false ? "failed" : "success"}
         arguments={metadata.arguments ?? safeJson(matchingCall?.arguments)}
         output={event.content || matchingCall?.result}
       />
@@ -134,7 +157,7 @@ function EventView({
   }
 
   if (type === "task_completed") {
-    return <Bubble icon={Bot} tone="assistant">{event.content || "Task completed."}</Bubble>;
+    return <StatusMessage title="✓ 任务完成" status="success" />;
   }
 
   if (type === "task_failed" || type === "task_cancelled") {
@@ -162,6 +185,29 @@ function Bubble({ icon: Icon, tone, children }: { icon: typeof Bot; tone: "user"
       {user ? <Icon className="mt-1 h-4 w-4 shrink-0 text-cyan-300" /> : null}
     </div>
   );
+}
+
+function MessageContent({ content }: { content: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    code({ className, children, ...props }) {
+      const text = String(children).replace(/\n$/, "");
+      const language = /language-(\w+)/.exec(className || "")?.[1];
+      if (!className) return <code className="rounded bg-slate-800 px-1 py-0.5 font-mono text-xs" {...props}>{children}</code>;
+      return <CodeBlock text={text} language={language} />;
+    },
+    pre({ children }) { return <>{children}</>; },
+  }}>
+    {content}
+  </ReactMarkdown>;
+}
+
+function CodeBlock({ text, language }: { text: string; language?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => { await navigator.clipboard?.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1200); };
+  return <div className="my-2 max-w-full overflow-hidden rounded border border-slate-700 bg-slate-950">
+    <div className="flex items-center justify-between border-b border-slate-800 px-2 py-1 text-[10px] text-slate-500"><span>{language || "code"}</span><button type="button" onClick={() => void copy()} className="inline-flex items-center gap-1 hover:text-cyan-300"><Copy className="h-3 w-3" />{copied ? "Copied" : "Copy"}</button></div>
+    <pre className="custom-scrollbar max-w-full overflow-x-auto p-3 font-mono text-xs leading-5"><code>{text}</code></pre>
+  </div>;
 }
 
 function StatusMessage({ title, detail, status }: { title: string; detail?: string; status: "running" | "success" | "failed" }) {
@@ -236,7 +282,22 @@ function stringMeta(metadata: Record<string, unknown>, key: string) {
 
 function metadataPermissionId(metadata: unknown) {
   const object = objectMetadata(metadata);
-  return stringMeta(object, "permission_id") || stringMeta(object, "id");
+  return stringMeta(object, "permission_id") || stringMeta(object, "request_id") || stringMeta(object, "id");
+}
+
+function latestToolEvents(events: TaskEventRecord[]) {
+  const latest = new Map<string, number>();
+  events.forEach((event, index) => {
+    if (["tool_started", "tool_output", "tool_finished"].includes(event.type || "")) {
+      const metadata = objectMetadata(event.metadata);
+      latest.set(stringMeta(metadata, "tool_call_id") || `${stringMeta(metadata, "tool_name")}:${index}`, index);
+    }
+  });
+  return events.filter((event, index) => {
+    if (!["tool_started", "tool_output", "tool_finished"].includes(event.type || "")) return true;
+    const metadata = objectMetadata(event.metadata);
+    return latest.get(stringMeta(metadata, "tool_call_id") || `${stringMeta(metadata, "tool_name")}:${index}`) === index;
+  });
 }
 
 function eventToPermission(event: TaskEventRecord): PermissionRecord {

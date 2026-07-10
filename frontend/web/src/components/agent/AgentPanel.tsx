@@ -21,7 +21,8 @@ const defaultForm: CreateTaskInput = {
   taskInput: "",
   autoRunSafeCommands: true,
   requireFileWritePermission: true,
-  maxSteps: 10,
+  maxSteps: 6,
+  executionMode: "auto",
 };
 
 export function AgentPanel({ state, onSubmitTask, onCancelTask, onRefreshHistory, onResolvePermission, className = "" }: AgentPanelProps) {

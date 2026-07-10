@@ -1,12 +1,14 @@
 #include "TaskController.h"
 
 #include "application/AgentService.h"
+#include "application/ToolSystem.h"
 #include "application/LogService.h"
 #include "application/TaskService.h"
 #include "infrastructure/storage/repositories/EventRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
 
 #include <exception>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <thread>
@@ -157,6 +159,16 @@ std::string TaskController::createTask(const std::string& request) {
             R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
             "400 Bad Request");
     }
+    const json options = body.contains("options") && body["options"].is_object()
+        ? body["options"] : json::object();
+    TaskRunOptions runOptions;
+    const std::string executionMode = options.value("execution_mode", "auto");
+    runOptions.mode = executionMode == "answer" ? ExecutionMode::DirectAnswer
+        : executionMode == "workspace" ? ExecutionMode::WorkspaceAgent : ExecutionMode::Auto;
+    runOptions.autoRunSafeCommands = options.value("auto_run_safe_commands", true);
+    runOptions.requireFileWritePermission = options.value("require_permission_for_file_write", true);
+    runOptions.maxSteps = std::clamp(options.value("max_steps", 6), 1, 20);
+    runOptions.maxRoundsPerStep = std::clamp(options.value("max_rounds_per_step", 3), 1, 6);
 
     sqlite3* db = nullptr;
     if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
@@ -177,6 +189,12 @@ std::string TaskController::createTask(const std::string& request) {
         if (refreshed) {
             task = *refreshed;
         }
+        EventData created = EventData::Create(task.id, EventType::TaskCreated,
+            "任务已创建，正在启动 Agent", json{{"status", "running"}});
+        EventRepository(db).create(created.id, created.taskId, created.typeToString(), created.content, created.metadata.dump());
+        if (ToolSystem::getInstance().isInitialized()) {
+            ToolSystem::getInstance().eventBus().publish(created);
+        }
     } catch (const std::exception& error) {
         sqlite3_close(db);
         return http_response(
@@ -190,7 +208,7 @@ std::string TaskController::createTask(const std::string& request) {
     // 执行过程中产生的事件通过 EventBus 实时推送给 SSE 连接。
     const std::string db_path = databasePath_;
     const std::string task_id = task.id;
-    std::thread([db_path, task_id, session_id, workspace_id, input]() {
+    std::thread([db_path, task_id, session_id, workspace_id, input, runOptions]() {
         sqlite3* worker_db = nullptr;
         if (sqlite3_open(db_path.c_str(), &worker_db) != SQLITE_OK) {
             if (worker_db) { sqlite3_close(worker_db); }
@@ -199,7 +217,7 @@ std::string TaskController::createTask(const std::string& request) {
         try {
             AgentService agent_service;
             const AgentResult agent_result =
-                agent_service.runTask(task_id, session_id, workspace_id, input, worker_db);
+                agent_service.runTask(task_id, session_id, workspace_id, input, worker_db, runOptions);
             TaskService task_service(worker_db);
             task_service.updateExecution(
                 task_id,

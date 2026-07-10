@@ -179,6 +179,7 @@ export interface CreateTaskInput {
   autoRunSafeCommands: boolean;
   requireFileWritePermission: boolean;
   maxSteps: number;
+  executionMode: "auto" | "answer" | "workspace";
 }
 
 export interface ListState<T> {

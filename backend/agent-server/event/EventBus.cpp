@@ -1,5 +1,7 @@
 #include "EventBus.h"
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <chrono>
 #include <ctime>
 #include <sstream>
@@ -78,7 +80,7 @@ std::string EventData::serialize() const {
 
 EventData EventData::Create(const std::string &taskId, EventType type,
                             const std::string &content, const json &metadata) {
-  static size_t counter = 0;
+  static std::atomic<std::uint64_t> counter{0};
   EventData data;
   data.id = "event_" + std::to_string(++counter);
   data.taskId = taskId;

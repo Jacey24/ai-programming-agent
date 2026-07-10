@@ -20,10 +20,14 @@ using json = nlohmann::json;
 class Planner;
 class LlmClient;
 struct ToolResult;
+struct EventData;
 
 struct AgentConfig {
-    int maxSteps = 20;
-    int toolTimeoutSeconds = 120;
+    int maxSteps = 6;
+    int maxRoundsPerStep = 3;
+    int toolTimeoutSeconds = 60;
+    bool autoRunSafeCommands = true;
+    bool requireFileWritePermission = true;
     int maxRetries = 1;          // Sprint 2：失败最大重试次数
     bool enableDeadlockCheck = true;  // Sprint 2：死锁检测
 };
@@ -51,12 +55,16 @@ public:
 
     // Sprint 2：注入数据库句柄，用于日志持久化（db 来自郑嘉娴 TaskController）
     void setDb(sqlite3* db) { db_ = db; }
+    void setConfig(const AgentConfig& config) { config_ = config; }
 
     AgentResult executeTask(
         const std::string& taskId,
         const std::string& sessionId,
         const std::string& workspaceId,
         const std::string& goal);
+    AgentResult executeDirectAnswer(
+        const std::string& taskId, const std::string& sessionId,
+        const std::string& workspaceId, const std::string& goal);
 
     // Sprint 2：构建执行期 Prompt（给 LLM 调用方使用）
     // step: 当前步骤描述
@@ -77,8 +85,7 @@ private:
     // Sprint 2：持久化落库（周子涵）
     //   将任务事件写入 task_events 表，将工具调用写入 tool_calls 表
     //   落库失败不影响 Agent 主流程
-    void persistTaskEvent(const std::string& taskId, EventType type,
-        const std::string& content, const json& metadata) const;
+    void persistTaskEvent(const EventData& event) const;
     void persistToolCall(const std::string& taskId, const std::string& toolName,
         const json& arguments, const ToolResult& result) const;
     void persistAndPublishFileChange(const std::string& taskId,
