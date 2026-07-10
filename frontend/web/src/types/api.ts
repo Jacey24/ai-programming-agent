@@ -38,6 +38,37 @@ export interface WorkspaceRecord {
   created_at?: string;
 }
 
+export interface WorkspaceFileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  size?: number;
+}
+
+export interface WorkspaceTreePayload {
+  workspace_id: string;
+  root: string;
+  items: WorkspaceFileEntry[];
+}
+
+export interface WorkspaceFileContent {
+  path: string;
+  name: string;
+  language: string;
+  content: string;
+  size: number;
+  readonly: boolean;
+}
+
+export interface OpenFileTab {
+  path: string;
+  name: string;
+  language: string;
+  content: string;
+  loading: boolean;
+  error: string;
+}
+
 export interface TaskRecord {
   id: string;
   session_id?: string;

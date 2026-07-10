@@ -8,6 +8,7 @@
 #include "api/controllers/TaskController.h"
 #include "api/controllers/ToolController.h"
 #include "api/controllers/WorkspaceController.h"
+#include "api/controllers/WorkspaceFileController.h"
 
 #include "application/TaskService.h"
 #include "application/ToolSystem.h"
@@ -310,6 +311,16 @@ std::string HttpServer::handleRequest(const std::string& request) {
         return controller.createWorkspace(request);
     }
     if (request.rfind("GET /api/v1/workspaces/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/files/tree") != std::string::npos) {
+            WorkspaceFileController controller(config_.databasePath);
+            return controller.getTree(request);
+        }
+        if (request_line.find("/files/content") != std::string::npos) {
+            WorkspaceFileController controller(config_.databasePath);
+            return controller.getFileContent(request);
+        }
         WorkspaceController controller(config_.databasePath);
         return controller.getWorkspace(request);
     }
@@ -456,6 +467,11 @@ void HttpServer::streamTaskEvents(int client_fd, const std::string& task_id) {
                     data["task_id"] = ev.task_id;
                     data["type"] = ev.type;
                     data["content"] = ev.content;
+                    json metadata = json::parse(ev.metadata, nullptr, false);
+                    if (metadata.is_discarded()) {
+                        metadata = json::object();
+                    }
+                    data["metadata"] = metadata;
                     data["created_at"] = ev.created_at;
                     write_frame(ev.type, data.dump());
                     if (is_terminal(ev.type)) {

@@ -500,8 +500,13 @@ std::string TaskController::listEventHistory(const std::string& request) {
                  << R"(","task_id":")" << json_escape(event.task_id)
                  << R"(","type":")" << json_escape(event.type)
                  << R"(","content":")" << json_escape(event.content)
-                 << R"(","metadata":")" << json_escape(event.metadata)
-                 << R"(","created_at":")" << json_escape(event.created_at) << R"("})";
+                 << R"(","metadata":)";
+            json metadata = json::parse(event.metadata, nullptr, false);
+            if (metadata.is_discarded()) {
+                metadata = json::object();
+            }
+            body << metadata.dump()
+                 << R"(,"created_at":")" << json_escape(event.created_at) << R"("})";
         }
         body << "]}}";
         response = http_response(body.str());

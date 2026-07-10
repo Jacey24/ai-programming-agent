@@ -11,6 +11,12 @@ export const endpoints = {
   task(taskId: string) {
     return `${API_BASE}/tasks/${encodeURIComponent(taskId)}`;
   },
+  workspaceTree(workspaceId: string) {
+    return `${API_BASE}/workspaces/${encodeURIComponent(workspaceId)}/files/tree`;
+  },
+  workspaceFileContent(workspaceId: string) {
+    return `${API_BASE}/workspaces/${encodeURIComponent(workspaceId)}/files/content`;
+  },
   taskCancel(taskId: string) {
     return `${this.task(taskId)}/cancel`;
   },

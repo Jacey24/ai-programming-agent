@@ -64,7 +64,8 @@ public:
     // 返回: 完整的 prompt 文本
     std::string buildExecutorPrompt(
         const PlanStep& step,
-        const RoleConfig& role) const;
+        const RoleConfig& role,
+        const std::string& goal) const;
 
 private:
     // 工具辅助
@@ -80,8 +81,14 @@ private:
         const std::string& content, const json& metadata) const;
     void persistToolCall(const std::string& taskId, const std::string& toolName,
         const json& arguments, const ToolResult& result) const;
+    void persistAndPublishFileChange(const std::string& taskId,
+        const std::string& toolName, const json& arguments) const;
     static std::string generateEventId();
     static std::string generateToolCallId();
+    static std::string generateFileChangeId();
+    static bool isFileMutatingTool(const std::string& toolName);
+    static std::string extractChangedPath(const std::string& toolName, const json& arguments);
+    static std::string inferChangeType(const std::string& toolName);
 
     // Sprint 2：单步执行（构建 prompt → 模拟 LLM 响应 → 解析 → 工具调用/完成）
     // rawLlmOutput: [out] LLM 输出的原始文本（由外部 LLM 调用方填充）

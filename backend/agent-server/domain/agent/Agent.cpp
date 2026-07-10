@@ -7,6 +7,7 @@
 
 #include "infrastructure/storage/repositories/LogRepository.h"
 #include "infrastructure/storage/repositories/EventRepository.h"
+#include "infrastructure/storage/repositories/FileChangeRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
 
 #include "application/ToolSystem.h"
@@ -105,7 +106,7 @@ AgentResult Agent::executeTask(
         context_.push_back("[round] " + roundCtx);
 
         // 2b. 构建执行期 Prompt（留接口，刘子恒后续填 LLM 调用）
-        std::string prompt = buildExecutorPrompt(step, *role);
+        std::string prompt = buildExecutorPrompt(step, *role, goal);
         context_.push_back("[prompt] " + prompt);
 
         // 2c. Sprint 2 占位: LLM 调用
@@ -175,9 +176,9 @@ AgentResult Agent::executeTask(
                 json toolArgs = buildToolArguments(toolName, cmd.toolArgs);
 
                 // Sprint 2：工具开始事件落库到 task_events（周子涵持久化落库）
-                persistTaskEvent(taskId, EventType::ToolStarted,
+                publishTaskEvent(taskId, EventType::ToolStarted,
                     "Calling tool: " + toolName,
-                    json{{"tool_name", toolName}, {"arguments", toolArgs}});
+                    json{{"tool_name", toolName}, {"arguments", toolArgs}}.dump());
 
                 ToolResult toolResult;
                 try {
@@ -216,13 +217,17 @@ AgentResult Agent::executeTask(
                 // Sprint 2：工具调用落库到 tool_calls（周子涵持久化落库）
                 persistToolCall(taskId, toolName, toolArgs, toolResult);
 
+                if (toolResult.success && isFileMutatingTool(toolName)) {
+                    persistAndPublishFileChange(taskId, toolName, toolArgs);
+                }
+
                 // Sprint 2：工具完成事件落库到 task_events（周子涵持久化落库）
-                persistTaskEvent(taskId, EventType::ToolFinished,
+                publishTaskEvent(taskId, EventType::ToolFinished,
                     toolResult.success ? ("Tool finished: " + toolName)
                                        : ("Tool failed: " + toolName),
                     json{{"tool_name", toolName},
                          {"success", toolResult.success},
-                         {"exit_code", toolResult.exitCode}});
+                         {"exit_code", toolResult.exitCode}}.dump());
             }
 
             // 工具调用后，继续本步骤的下一轮循环（不 markComplete）
@@ -308,7 +313,7 @@ ParsedResponse Agent::executeSingleStep(
 {
     // 使用带输出格式约束（<cmd>/DONE/FAIL）的执行期 Prompt，
     // 与记录到上下文的 [prompt] 保持一致，避免模型照抄历史里的 <plan> 结构。
-    std::string prompt = buildExecutorPrompt(step, role);
+    std::string prompt = buildExecutorPrompt(step, role, goal);
 
     // Prefer the configured LLM client; fall back to a deterministic local result.
     if (llmClient_) {
@@ -360,7 +365,8 @@ std::string describeToolUsage(const std::string& tool) {
 
 std::string Agent::buildExecutorPrompt(
     const PlanStep& step,
-    const RoleConfig& role) const {
+    const RoleConfig& role,
+    const std::string& goal) const {
     std::string prompt;
 
     // System Prompt — 来自角色配置
@@ -401,6 +407,18 @@ std::string Agent::buildExecutorPrompt(
     prompt += "\n";
 
     // 当前任务
+    prompt += "## 用户原始需求\n";
+    prompt += goal + "\n\n";
+
+    prompt += "## 编程任务成果交付规则\n";
+    prompt += "1. 用户要求编写、生成或实现代码时，必须将代码写入 workspace 中的真实文件。\n";
+    prompt += "2. 用户未指定文件名时，根据语言和任务生成合理文件名。\n";
+    prompt += "3. 不允许只在 DONE 中输出代码而不创建或修改文件。\n";
+    prompt += "4. 写入文件后，使用 file.read 检查文件内容。\n";
+    prompt += "5. 可以运行时，使用 shell.run 执行最小验证。\n";
+    prompt += "6. 文件成功创建并验证后，立即返回 DONE，不要重复 file.list 或 file.read。\n";
+    prompt += "7. 同一目录最多探索一次；确认目标文件不存在后应直接创建。\n\n";
+
     prompt += "## 当前步骤\n";
     prompt += step.action + "\n\n";
 
@@ -494,6 +512,30 @@ void Agent::persistToolCall(const std::string& taskId, const std::string& toolNa
     }
 }
 
+void Agent::persistAndPublishFileChange(const std::string& taskId,
+    const std::string& toolName, const json& arguments) const {
+    const std::string path = extractChangedPath(toolName, arguments);
+    if (path.empty()) {
+        return;
+    }
+
+    const std::string changeType = inferChangeType(toolName);
+    if (db_) {
+        try {
+            FileChangeRepository(db_).create(
+                generateFileChangeId(), taskId, path, changeType, "");
+        } catch (const std::exception&) {
+            // File change persistence should not block the tool result.
+        }
+    }
+
+    publishTaskEvent(taskId, EventType::FileChanged,
+        "File changed: " + path,
+        json{{"path", path},
+             {"change_type", changeType},
+             {"tool_name", toolName}}.dump());
+}
+
 std::string Agent::generateEventId() {
     static std::atomic<std::uint64_t> counter{0};
     const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -504,6 +546,67 @@ std::string Agent::generateToolCallId() {
     static std::atomic<std::uint64_t> counter{0};
     const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
     return "toolcall_" + std::to_string(ts) + "_" + std::to_string(++counter);
+}
+
+std::string Agent::generateFileChangeId() {
+    static std::atomic<std::uint64_t> counter{0};
+    const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
+    return "filechange_" + std::to_string(ts) + "_" + std::to_string(++counter);
+}
+
+bool Agent::isFileMutatingTool(const std::string& toolName) {
+    return toolName == "file.write" ||
+           toolName == "file.apply_patch" ||
+           toolName == "file.mkdir" ||
+           toolName == "file.remove" ||
+           toolName == "file.rmdir" ||
+           toolName == "file.move" ||
+           toolName == "file.copy";
+}
+
+std::string Agent::extractChangedPath(const std::string& toolName, const json& arguments) {
+    const auto readString = [&](const char* key) -> std::string {
+        if (arguments.contains(key) && arguments.at(key).is_string()) {
+            return arguments.at(key).get<std::string>();
+        }
+        return "";
+    };
+
+    if (toolName == "file.apply_patch") {
+        const std::string filePath = readString("file_path");
+        if (!filePath.empty()) {
+            return filePath;
+        }
+    }
+    if (toolName == "file.move" || toolName == "file.copy") {
+        const std::string destination = readString("destination");
+        if (!destination.empty()) {
+            return destination;
+        }
+        const std::string to = readString("to");
+        if (!to.empty()) {
+            return to;
+        }
+    }
+
+    const std::string path = readString("path");
+    if (!path.empty()) {
+        return path;
+    }
+    return readString("file_path");
+}
+
+std::string Agent::inferChangeType(const std::string& toolName) {
+    if (toolName == "file.remove" || toolName == "file.rmdir") {
+        return "deleted";
+    }
+    if (toolName == "file.move") {
+        return "moved";
+    }
+    if (toolName == "file.copy" || toolName == "file.write" || toolName == "file.mkdir") {
+        return "created";
+    }
+    return "modified";
 }
 
 std::string Agent::normalizeToolName(const std::string& name) {
