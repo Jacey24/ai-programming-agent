@@ -65,6 +65,8 @@ export function ChatMessageList({ state, onOpenFile, onResolvePermission }: Chat
           resolvingPermissionIds={state.resolvingPermissionIds}
           onOpenFile={onOpenFile}
           onResolvePermission={onResolvePermission}
+          hasLaterEvent={index < events.length - 1}
+          taskSettled={["completed", "failed", "cancelled"].includes(state.activeTask?.status || "")}
         />
       ))}
 
@@ -96,6 +98,8 @@ function EventView({
   resolvingPermissionIds,
   onOpenFile,
   onResolvePermission,
+  hasLaterEvent,
+  taskSettled,
 }: {
   event: TaskEventRecord;
   toolCalls: ToolCallRecord[];
@@ -104,12 +108,14 @@ function EventView({
   resolvingPermissionIds: string[];
   onOpenFile: (path: string) => void;
   onResolvePermission: (permissionId: string, approved: boolean) => void;
+  hasLaterEvent: boolean;
+  taskSettled: boolean;
 }) {
   const type = event.type || "";
   const metadata = objectMetadata(event.metadata);
 
   if (type === "task_planning") {
-    return <StatusMessage title="Planning" detail={event.content || "Agent is planning the task."} status="running" />;
+    return <StatusMessage title="Planning" detail={event.content || "Agent is planning the task."} status={hasLaterEvent || taskSettled ? "success" : "running"} />;
   }
 
   if (type === "agent_message") {
@@ -141,6 +147,10 @@ function EventView({
     );
   }
 
+  if (type === "permission_resolved") {
+    return <StatusMessage title="Permission resolved" detail={event.content || "权限处理完成"} status="success" />;
+  }
+
   if (type === "file_changed") {
     const path = stringMeta(metadata, "path");
     if (!path) {
@@ -168,7 +178,11 @@ function EventView({
     return <StatusMessage title="Task created" detail={event.content || event.task_id || ""} status="success" />;
   }
 
-  return <StatusMessage title={type || "Event"} detail={event.content || ""} status="running" />;
+  if (type === "stream_end") {
+    return <StatusMessage title="Execution stream ended" detail={event.content || ""} status="success" />;
+  }
+
+  return <StatusMessage title={type || "Event"} detail={event.content || ""} status={hasLaterEvent || taskSettled ? "success" : "running"} />;
 }
 
 function Bubble({ icon: Icon, tone, children }: { icon: typeof Bot; tone: "user" | "assistant" | "error"; children: React.ReactNode }) {

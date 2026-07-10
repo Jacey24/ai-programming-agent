@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     sqlite3 \
+    python3 \
+    python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
