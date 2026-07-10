@@ -1,5 +1,6 @@
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
+#include "event/EventDispatcher.h"
 #include "infrastructure/storage/repositories/EventRepository.h"
 #include "infrastructure/storage/repositories/FileChangeRepository.h"
 #include "infrastructure/storage/repositories/PermissionRepository.h"
@@ -218,12 +219,19 @@ int run_agent_server(const std::string &config_path) {
     LOG_ERROR("SQLite error: {}", database_error);
   }
 
+  // SSE 分发器：接入 ToolSystem 统一事件总线
+  // ToolSystem::eventBus() 是工具执行、权限、调试等模块发布事件的唯一总线
+  codepilot::EventDispatcher event_dispatcher(
+      codepilot::ToolSystem::getInstance().eventBus());
+
   codepilot::HttpServerConfig server_config;
   server_config.host = "0.0.0.0";
   server_config.port = 8080;
   server_config.databasePath = database_path;
   server_config.databaseConnected = database_connected;
   server_config.databaseError = database_error;
+  server_config.eventBus = &codepilot::ToolSystem::getInstance().eventBus();
+  server_config.eventDispatcher = &event_dispatcher;
 
   codepilot::HttpServer server(server_config);
   const int result = server.run(running);

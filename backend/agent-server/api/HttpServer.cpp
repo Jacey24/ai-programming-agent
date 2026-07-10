@@ -8,6 +8,7 @@
 #include "api/controllers/TaskController.h"
 #include "api/controllers/ToolController.h"
 #include "api/controllers/WorkspaceController.h"
+#include "event/EventDispatcher.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -45,7 +46,7 @@ std::string http_response(const std::string& body, const std::string& status = "
     response << "HTTP/1.1 " << status << "\r\n"
              << "Content-Type: application/json; charset=utf-8\r\n"
              << "Access-Control-Allow-Origin: *\r\n"
-             << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+             << "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS\r\n"
              << "Access-Control-Allow-Headers: Content-Type\r\n"
              << "Connection: close\r\n"
              << "Content-Length: " << body.size() << "\r\n\r\n"
@@ -56,7 +57,7 @@ std::string http_response(const std::string& body, const std::string& status = "
 std::string options_response() {
     return "HTTP/1.1 204 No Content\r\n"
            "Access-Control-Allow-Origin: *\r\n"
-           "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+           "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS\r\n"
            "Access-Control-Allow-Headers: Content-Type\r\n"
            "Connection: close\r\n"
            "Content-Length: 0\r\n\r\n";
@@ -128,6 +129,29 @@ std::size_t content_length(const std::string& request) {
     } catch (...) {
         return 0;
     }
+}
+
+// 检查是否为 SSE 事件流请求（GET /api/v1/tasks/{task_id}/events）
+bool is_sse_event_request(const std::string& request) {
+    const std::size_t line_end = request.find("\r\n");
+    if (line_end == std::string::npos) return false;
+    const std::string request_line = request.substr(0, line_end);
+    return request_line.find("GET /api/v1/tasks/") == 0 &&
+           request_line.find("/events ") != std::string::npos;
+}
+
+// 从 SSE 请求中提取 task_id
+std::string extract_sse_task_id(const std::string& request) {
+    const std::size_t line_end = request.find("\r\n");
+    if (line_end == std::string::npos) return "";
+    const std::string request_line = request.substr(0, line_end);
+    const std::string prefix = "/api/v1/tasks/";
+    const std::size_t id_start = request_line.find(prefix);
+    if (id_start == std::string::npos) return "";
+    const std::size_t id_begin = id_start + prefix.size();
+    const std::size_t id_end = request_line.find("/events", id_begin);
+    if (id_end == std::string::npos) return "";
+    return request_line.substr(id_begin, id_end - id_begin);
 }
 
 std::string read_http_request(int client_fd) {
@@ -211,9 +235,22 @@ int HttpServer::run(const std::atomic_bool& running) {
         if (ready > 0 && FD_ISSET(server_fd, &read_fds)) {
             const int client_fd = accept(server_fd, nullptr, nullptr);
             if (client_fd >= 0) {
-                std::thread([this, client_fd]() {
+                std::thread([this, client_fd, &running]() {
                     const std::string request = read_http_request(client_fd);
-                    const std::string response = request.empty() ? not_found_response() : handleRequest(request);
+                    if (request.empty()) {
+                        const std::string response = not_found_response();
+                        send(client_fd, response.data(), response.size(), 0);
+                        close(client_fd);
+                        return;
+                    }
+
+                    // SSE 事件流：绕过普通请求/响应模式
+                    if (is_sse_event_request(request)) {
+                        handleStreamRequest(client_fd, request, running);
+                        return;
+                    }
+
+                    const std::string response = handleRequest(request);
                     send(client_fd, response.data(), response.size(), 0);
                     close(client_fd);
                 }).detach();
@@ -223,6 +260,32 @@ int HttpServer::run(const std::atomic_bool& running) {
 
     close(server_fd);
     return 0;
+}
+
+void HttpServer::handleStreamRequest(int client_fd,
+                                     const std::string& request,
+                                     const std::atomic_bool& running) {
+    const std::string task_id = extract_sse_task_id(request);
+    if (task_id.empty()) {
+        const std::string error = http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})",
+            "400 Bad Request");
+        send(client_fd, error.data(), error.size(), 0);
+        close(client_fd);
+        return;
+    }
+
+    if (!config_.eventDispatcher) {
+        const std::string error = http_response(
+            R"({"success":false,"error":{"code":"INTERNAL_ERROR","message":"event dispatcher not configured"}})",
+            "500 Internal Server Error");
+        send(client_fd, error.data(), error.size(), 0);
+        close(client_fd);
+        return;
+    }
+
+    TaskController controller(config_.databasePath);
+    controller.handleEvents(client_fd, task_id, *config_.eventDispatcher, running);
 }
 
 std::string HttpServer::handleRequest(const std::string& request) {
@@ -245,6 +308,14 @@ std::string HttpServer::handleRequest(const std::string& request) {
     if (request.rfind("GET /api/v1/sessions/", 0) == 0) {
         SessionController controller(config_.databasePath);
         return controller.getSession(request);
+    }
+    if (request.rfind("PATCH /api/v1/sessions/", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.updateSession(request);
+    }
+    if (request.rfind("DELETE /api/v1/sessions/", 0) == 0) {
+        SessionController controller(config_.databasePath);
+        return controller.deleteSession(request);
     }
     if (request.rfind("GET /api/v1/sessions?", 0) == 0 ||
         request.rfind("GET /api/v1/sessions ", 0) == 0) {

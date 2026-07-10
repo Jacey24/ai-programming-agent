@@ -15,6 +15,8 @@ public:
     SessionRecord createSession(const std::string& title);
     std::vector<SessionRecord> listSessions();
     std::optional<SessionRecord> getSessionById(const std::string& session_id);
+    SessionRecord updateSessionTitle(const std::string& id, const std::string& title);
+    bool deleteSession(const std::string& id);
 
 private:
     sqlite3* db_;

@@ -31,7 +31,7 @@ std::string http_response(const std::string& body, const std::string& status = "
     response << "HTTP/1.1 " << status << "\r\n"
              << "Content-Type: application/json; charset=utf-8\r\n"
              << "Access-Control-Allow-Origin: *\r\n"
-             << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+             << "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS\r\n"
              << "Access-Control-Allow-Headers: Content-Type\r\n"
              << "Connection: close\r\n"
              << "Content-Length: " << body.size() << "\r\n\r\n"
@@ -234,6 +234,97 @@ std::string SessionController::getSession(const std::string& request) {
 
     sqlite3_close(db);
     return response;
+}
+
+std::string SessionController::updateSession(const std::string& request) {
+    const std::string session_id = extract_path_segment(request, "/api/v1/sessions/");
+    if (session_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id is required"}})",
+            "400 Bad Request");
+    }
+
+    const std::string req_body = request_body(request);
+    const std::string title = extract_json_string(req_body, "title");
+    if (title.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"title is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    SessionRecord session;
+    try {
+        SessionService service(db);
+        session = service.updateSessionTitle(session_id, title);
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        const std::string what = error.what();
+        const bool not_found = what.find("not found") != std::string::npos;
+        const std::string status = not_found ? "404 Not Found" : "500 Internal Server Error";
+        const std::string code   = not_found ? "SESSION_NOT_FOUND" : "DATABASE_ERROR";
+        return http_response(
+            R"({"success":false,"error":{"code":")" + code + R"(","message":")" + json_escape(what) + R"("}})",
+            status);
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream response_body;
+    response_body << R"({"success":true,"data":{"id":")" << json_escape(session.id)
+                  << R"(","title":")" << json_escape(session.title)
+                  << R"(","created_at":")" << json_escape(session.created_at)
+                  << R"(","updated_at":")" << json_escape(session.updated_at) << R"("}})";
+    return http_response(response_body.str());
+}
+
+std::string SessionController::deleteSession(const std::string& request) {
+    const std::string session_id = extract_path_segment(request, "/api/v1/sessions/");
+    if (session_id.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id is required"}})",
+            "400 Bad Request");
+    }
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    bool deleted = false;
+    try {
+        SessionService service(db);
+        deleted = service.deleteSession(session_id);
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")"
+            + json_escape(error.what())
+            + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    if (!deleted) {
+        return http_response(
+            R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
+            "404 Not Found");
+    }
+
+    return http_response(R"({"success":true})");
 }
 
 } // namespace codepilot
