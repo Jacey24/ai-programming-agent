@@ -46,6 +46,11 @@ bool Workspace::isPathSafe(const std::string &relativePath) const {
     return false;
   }
 
+  std::filesystem::path candidate(relativePath);
+  if (candidate.is_absolute() || relativePath.find(':') != std::string::npos) {
+    return false;
+  }
+
   // 3. 禁止访问隐藏文件（以 . 开头）
   std::filesystem::path p(relativePath);
   for (const auto &part : p) {

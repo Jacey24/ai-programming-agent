@@ -1,14 +1,17 @@
-import { useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
-import { AgentPanel } from "./components/agent/AgentPanel";
-import { EditorShell } from "./components/editor/EditorShell";
+import { AgentChatPanel } from "./components/chat/AgentChatPanel";
+import { CodeEditor } from "./components/editor/CodeEditor";
+import { FileExplorer } from "./components/explorer/FileExplorer";
 import { HistoryPage } from "./components/history/HistoryPage";
 import { ActivityBar } from "./components/layout/ActivityBar";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TerminalHeader } from "./components/layout/TerminalHeader";
-import { WorkspaceExplorer } from "./components/layout/WorkspaceExplorer";
 import { useAgentRuntime } from "./hooks/useAgentRuntime";
+import { useWorkspaceWorkbench } from "./hooks/useWorkspaceWorkbench";
 import type { AppAction, AppState, HeaderStatus } from "./types";
+import type { AgentState } from "./store/agentReducer";
 
 const initialState: AppState = {
   activeView: "explorer",
@@ -30,6 +33,36 @@ export default function App() {
   const [uiState, dispatch] = useReducer(reducer, initialState);
   const runtime = useAgentRuntime();
   const agent = runtime.state;
+  const workbench = useWorkspaceWorkbench({ workspaceId: agent.workspace?.id || agent.activeTask?.workspace_id || "" });
+  const { refreshTree, openFile } = workbench;
+  const handledFileEvents = useRef<Set<string>>(new Set());
+  const lastTerminalTask = useRef<string>("");
+
+  useEffect(() => {
+    const fileEvent = agent.events.items.find((event) => event.type === "file_changed" && metadataPath(event.metadata));
+    if (!fileEvent) {
+      return;
+    }
+    const key = fileEvent.id || `${fileEvent.created_at}:${fileEvent.content}`;
+    if (handledFileEvents.current.has(key)) {
+      return;
+    }
+    handledFileEvents.current.add(key);
+    const path = metadataPath(fileEvent.metadata);
+    void refreshTree().then(() => openFile(path));
+  }, [agent.events.items, openFile, refreshTree]);
+
+  useEffect(() => {
+    const task = agent.activeTask;
+    if (!task?.id || !["completed", "failed", "cancelled"].includes(task.status || "")) {
+      return;
+    }
+    if (lastTerminalTask.current === task.id) {
+      return;
+    }
+    lastTerminalTask.current = task.id;
+    void refreshTree();
+  }, [agent.activeTask, refreshTree]);
 
   const headerStatuses = useMemo<HeaderStatus[]>(() => {
     const health = agent.health.data;
@@ -70,10 +103,7 @@ export default function App() {
       <TerminalHeader statuses={headerStatuses} onRefresh={runtime.refreshHealth} />
 
       <main className="flex min-h-0 flex-1 overflow-hidden border-y border-slate-800/90">
-        <ActivityBar
-          activeView={uiState.activeView}
-          onChange={(view) => dispatch({ type: "setActiveView", view })}
-        />
+        <ActivityBar activeView={uiState.activeView} onChange={(view) => dispatch({ type: "setActiveView", view })} />
         {uiState.activeView === "history" ? (
           <HistoryPage
             history={agent.history}
@@ -83,49 +113,39 @@ export default function App() {
             onSelectTask={(task) => {
               runtime.selectHistoryItem(task);
               dispatch({ type: "setActiveView", view: "explorer" });
-              dispatch({ type: "setActiveEditorTab", tab: "overview" });
             }}
           />
         ) : (
           <>
-            <WorkspaceExplorer
-              activeView={uiState.activeView}
-              history={agent.history}
-              permissions={agent.permissions}
-              logs={agent.logs}
-              toolCalls={agent.toolCalls}
-              fileChanges={agent.fileChanges}
-              activeTask={agent.activeTask}
-              activeTaskId={agent.activeTask?.id || ""}
-              onRefreshHistory={runtime.refreshHistory}
-              onSelectHistoryItem={(item) => {
-                runtime.selectHistoryItem(item);
-                dispatch({ type: "setActiveView", view: "explorer" });
-                dispatch({ type: "setActiveEditorTab", tab: "overview" });
-              }}
+            <FileExplorer
+              workspace={agent.workspace}
+              tree={workbench.state.fileTree}
+              expandedDirectories={workbench.state.expandedDirectories}
+              activeFilePath={workbench.state.activeFilePath}
+              onRefresh={workbench.refreshTree}
+              onToggleDirectory={workbench.toggleDirectory}
+              onOpenFile={workbench.openFile}
             />
-            <EditorShell
-              className={uiState.activeView === "permissions" ? "hidden xl:flex" : "flex"}
-              activeTab={uiState.activeEditorTab}
-              onSelectTab={(tab) => dispatch({ type: "setActiveEditorTab", tab })}
-              task={agent.activeTask}
-              chatFallback={agent.chatFallback}
-              logs={agent.logs}
-              toolCalls={agent.toolCalls}
-              fileChanges={agent.fileChanges}
-              replay={agent.replay}
+            <CodeEditor
+              files={workbench.state.openFiles}
+              activeFilePath={workbench.state.activeFilePath}
+              onSelectFile={workbench.selectFile}
+              onCloseFile={workbench.closeFile}
             />
-            <AgentPanel
-              className={uiState.activeView === "permissions" ? "flex flex-1" : "hidden xl:flex"}
+            <AgentChatPanel
               state={agent}
-              onSubmitTask={runtime.submitTask}
-              onCancelTask={runtime.cancelActiveTask}
-              onRefreshHistory={runtime.refreshHistory}
+              onSubmit={runtime.submitTask}
+              onCancel={runtime.cancelActiveTask}
               onResolvePermission={runtime.resolvePermission}
+              onOpenFile={workbench.openFile}
             />
           </>
         )}
       </main>
+
+      {uiState.activeView !== "history" ? (
+        <BottomPanel agent={agent} panel={workbench.state.bottomPanel} onChange={workbench.setBottomPanel} />
+      ) : null}
 
       <StatusBar
         sessionId={agent.session?.id || agent.activeTask?.session_id || "-"}
@@ -136,4 +156,68 @@ export default function App() {
       />
     </div>
   );
+}
+
+function BottomPanel({
+  agent,
+  panel,
+  onChange,
+}: {
+  agent: AgentState;
+  panel: "terminal" | "output" | "problems" | "task-log" | null;
+  onChange: (panel: "terminal" | "output" | "problems" | "task-log" | null) => void;
+}) {
+  const open = panel !== null;
+  const labels = [
+    { id: "terminal" as const, label: "Tool Calls" },
+    { id: "output" as const, label: "File Changes" },
+    { id: "task-log" as const, label: "Task Log" },
+    { id: "problems" as const, label: "Replay" },
+  ];
+
+  return (
+    <section className="shrink-0 border-t border-slate-800 bg-[#0b1220]">
+      <div className="flex h-9 items-center gap-1 px-3">
+        {labels.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onChange(panel === item.id ? null : item.id)}
+            className={`h-7 rounded px-3 font-mono text-xs ${panel === item.id ? "bg-cyan-400/10 text-cyan-200" : "text-slate-500 hover:bg-white/5 hover:text-slate-200"}`}
+          >
+            {item.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onChange(open ? null : "terminal")}
+          className="ml-auto grid h-7 w-7 place-items-center rounded text-slate-500 hover:bg-white/5 hover:text-slate-200"
+          title={open ? "Collapse bottom panel" : "Expand bottom panel"}
+        >
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </button>
+      </div>
+      {open ? (
+        <div className="custom-scrollbar h-44 overflow-auto border-t border-slate-800 p-3 font-mono text-xs text-slate-400">
+          <pre className="whitespace-pre-wrap leading-5">
+            {panel === "terminal"
+              ? JSON.stringify(agent.toolCalls.items, null, 2)
+              : panel === "output"
+                ? JSON.stringify(agent.fileChanges.items, null, 2)
+                : panel === "task-log"
+                  ? agent.logs.items.map((log) => `[${log.type || "log"}] ${log.content || ""}`).join("\n\n")
+                  : JSON.stringify(agent.replay.items, null, 2)}
+          </pre>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function metadataPath(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") {
+    return "";
+  }
+  const path = (metadata as { path?: unknown }).path;
+  return typeof path === "string" ? path : "";
 }

@@ -21,7 +21,7 @@ import {
   isTerminalTask,
   TERMINAL_TASK_STATUSES,
 } from "../store/agentReducer";
-import type { ChatMessageRecord, CreateTaskInput, TaskEventRecord, TaskRecord } from "../types/api";
+import type { ChatMessageRecord, CreateTaskInput, SessionRecord, TaskEventRecord, TaskRecord, WorkspaceRecord } from "../types/api";
 import { isEndpointUnavailable } from "../api/client";
 
 function messageFromError(error: unknown) {
@@ -32,7 +32,10 @@ function isTaskRecord(item: TaskRecord | ChatMessageRecord): item is TaskRecord 
   return typeof (item as TaskRecord).status === "string" || typeof (item as TaskRecord).session_id === "string";
 }
 
-export function useAgentRuntime() {
+export function useAgentRuntime(options: {
+  onFileChanged?: (path: string) => void | Promise<void>;
+  onTaskSettled?: () => void | Promise<void>;
+} = {}) {
   const [state, dispatch] = useReducer(agentReducer, initialAgentState);
   const pollTimer = useRef<number | null>(null);
   const activePollTaskId = useRef<string>("");
@@ -41,6 +44,8 @@ export function useAgentRuntime() {
   const eventSource = useRef<EventSource | null>(null);
   const activeStreamTaskId = useRef<string>("");
   const seenEventIds = useRef<Set<string>>(new Set());
+  const sessionRef = useRef<SessionRecord | null>(null);
+  const workspaceRef = useRef<WorkspaceRecord | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current !== null) {
@@ -135,6 +140,24 @@ export function useAgentRuntime() {
     }
   }, []);
 
+  const ensureRuntimeContext = useCallback(
+    async (input: CreateTaskInput) => {
+      if (sessionRef.current && workspaceRef.current) {
+        return { session: sessionRef.current, workspace: workspaceRef.current };
+      }
+
+      const session = await createSession(input.sessionTitle.trim() || "CodePilot Session");
+      const workspace = await createWorkspace(
+        input.workspaceName.trim() || "codepilot-workspace",
+        input.workspacePath.trim() || "/workspace",
+      );
+      sessionRef.current = session;
+      workspaceRef.current = workspace;
+      return { session, workspace };
+    },
+    [],
+  );
+
   const startPermissionPolling = useCallback(
     (taskId?: string) => {
       stopPermissionPolling();
@@ -168,6 +191,7 @@ export function useAgentRuntime() {
             stopPolling();
             stopPermissionPolling();
             void refreshHistory();
+            void options.onTaskSettled?.();
             return;
           }
         } catch (error) {
@@ -181,7 +205,7 @@ export function useAgentRuntime() {
       void tick();
       pollTimer.current = window.setInterval(tick, 2500);
     },
-    [refreshArtifacts, refreshHistory, stopPolling],
+    [options, refreshArtifacts, refreshHistory, stopPolling],
   );
 
   const startEventStream = useCallback(
@@ -221,6 +245,13 @@ export function useAgentRuntime() {
           void refreshPermissions(taskId);
         }
 
+        if (event.type === "file_changed") {
+          const path = metadataPath(event.metadata);
+          if (path) {
+            void options.onFileChanged?.(path);
+          }
+        }
+
         if (event.type === "task_completed" || event.type === "task_failed" || event.type === "task_cancelled") {
           closeEventStream("closed");
           stopPolling();
@@ -228,6 +259,7 @@ export function useAgentRuntime() {
           void refreshArtifacts(taskId);
           void refreshPermissions(taskId);
           void refreshHistory();
+          void options.onTaskSettled?.();
           void getTask(taskId).then((task) => dispatch({ type: "taskUpdated", task })).catch(() => undefined);
         }
 
@@ -242,6 +274,7 @@ export function useAgentRuntime() {
                 stopPolling();
                 stopPermissionPolling();
                 void refreshHistory();
+                void options.onTaskSettled?.();
               } else {
                 pollTask(taskId);
               }
@@ -271,7 +304,7 @@ export function useAgentRuntime() {
         pollTask(taskId);
       };
     },
-    [closeEventStream, pollTask, refreshArtifacts, refreshHistory, stopPolling],
+    [closeEventStream, options, pollTask, refreshArtifacts, refreshHistory, stopPolling],
   );
 
   const submitTask = useCallback(
@@ -280,12 +313,8 @@ export function useAgentRuntime() {
       stopPolling();
       dispatch({ type: "submitStart" });
 
-      let session = null;
-      let workspace = null;
-
       try {
-        session = await createSession(input.sessionTitle.trim() || "CodePilot Task");
-        workspace = await createWorkspace(input.workspaceName.trim() || "codepilot-workspace", input.workspacePath.trim() || "/workspace");
+        const { session, workspace } = await ensureRuntimeContext(input);
 
         try {
           const task = await createTask(session.id, workspace.id, input.taskInput, {
@@ -314,7 +343,7 @@ export function useAgentRuntime() {
         dispatch({ type: "submitError", error: messageFromError(error) });
       }
     },
-    [closeEventStream, refreshArtifacts, refreshEventHistory, refreshHistory, startEventStream, startPermissionPolling, stopPolling],
+    [closeEventStream, ensureRuntimeContext, refreshArtifacts, refreshEventHistory, refreshHistory, startEventStream, startPermissionPolling, stopPolling],
   );
 
   const cancelActiveTask = useCallback(async () => {
@@ -404,6 +433,11 @@ export function useAgentRuntime() {
     };
   }, [closeEventStream, refreshHealth, refreshHistory, refreshPermissions, stopPermissionPolling, stopPolling]);
 
+  useEffect(() => {
+    sessionRef.current = state.session;
+    workspaceRef.current = state.workspace;
+  }, [state.session, state.workspace]);
+
   return {
     state,
     refreshHealth,
@@ -447,4 +481,12 @@ function parseSseEvent(eventName: string, message: MessageEvent<string>): TaskEv
       content: message.data,
     };
   }
+}
+
+function metadataPath(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") {
+    return "";
+  }
+  const path = (metadata as { path?: unknown }).path;
+  return typeof path === "string" ? path : "";
 }

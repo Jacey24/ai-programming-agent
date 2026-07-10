@@ -10,6 +10,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/TaskController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ToolController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceFileController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/AgentService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/LogService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/FileChangeService.cpp
