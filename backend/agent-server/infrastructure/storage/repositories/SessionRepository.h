@@ -25,11 +25,6 @@ public:
         const std::string& updated_at);
     std::optional<SessionRecord> findById(const std::string& session_id);
     std::vector<SessionRecord> listAll();
-    SessionRecord updateTitle(
-        const std::string& id,
-        const std::string& title,
-        const std::string& updated_at);
-    bool deleteById(const std::string& id);
 
 private:
     sqlite3* db_;
