@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 struct SessionRecord {
     std::string id;
@@ -23,6 +24,7 @@ public:
         const std::string& created_at,
         const std::string& updated_at);
     std::optional<SessionRecord> findById(const std::string& session_id);
+    std::vector<SessionRecord> listAll();
 
 private:
     sqlite3* db_;

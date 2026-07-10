@@ -89,3 +89,36 @@ std::optional<SessionRecord> SessionRepository::findById(const std::string& sess
 std::string SessionRepository::lastError() const {
     return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
 }
+
+std::vector<SessionRecord> SessionRepository::listAll() {
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id, title, created_at, updated_at FROM sessions ORDER BY created_at DESC;";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(lastError());
+    }
+
+    std::vector<SessionRecord> sessions;
+    int step_result = SQLITE_ROW;
+    while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        const auto* title = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        const auto* updated_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+
+        sessions.push_back(SessionRecord{
+            id ? id : "",
+            title ? title : "",
+            created_at ? created_at : "",
+            updated_at ? updated_at : "",
+        });
+    }
+
+    if (step_result != SQLITE_DONE) {
+        const std::string error = lastError();
+        sqlite3_finalize(stmt);
+        throw std::runtime_error(error);
+    }
+
+    sqlite3_finalize(stmt);
+    return sessions;
+}

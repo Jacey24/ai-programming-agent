@@ -14,7 +14,8 @@ AgentResult AgentService::runTask(
     const std::string& taskId,
     const std::string& sessionId,
     const std::string& workspaceId,
-    const std::string& goal) {
+    const std::string& goal,
+    sqlite3* db) {
     RoleRegistry registry;
     registry.loadFromFile("config/agent_roles.json");
     Planner planner(registry);
@@ -28,6 +29,10 @@ AgentResult AgentService::runTask(
         agent.setLlmClient(std::make_shared<OpenAICompatibleClient>(llmConfig));
     } else {
         agent.setLlmClient(std::make_shared<MockLlmClient>());
+    }
+    // Sprint 2：注入数据库句柄，打通存储层（db 来自郑嘉娴 TaskController）
+    if (db) {
+        agent.setDb(db);
     }
 
     AgentResult result = agent.executeTask(taskId, sessionId, workspaceId, goal);
