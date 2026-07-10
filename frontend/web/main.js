@@ -20,6 +20,7 @@ const state = {
   permissionTimer: 0,
   eventSource: null,
   events: [],
+  activeMobileView: "run",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -27,6 +28,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const refreshButton = $("#refreshButton");
 const refreshHistoryButton = $("#refreshHistoryButton");
+const historyInlineRefresh = $("#historyInlineRefresh");
 const refreshPermissionsButton = $("#refreshPermissionsButton");
 const serverStatus = $("#serverStatus");
 const serverMeta = $("#serverMeta");
@@ -62,8 +64,12 @@ const replayList = $("#replayList");
 const historyList = $("#historyList");
 const responseBody = $("#responseBody");
 const lastEndpoint = $("#lastEndpoint");
+const statusSession = $("[data-status-session]");
+const statusWorkspace = $("[data-status-workspace]");
+const statusTask = $("[data-status-task]");
 
 function setState(element, text, variant) {
+  if (!element) return;
   element.textContent = text;
   element.classList.remove("ok", "bad", "waiting", "idle");
   if (variant) {
@@ -71,9 +77,15 @@ function setState(element, text, variant) {
   }
 }
 
+function setText(element, text) {
+  if (element) {
+    element.textContent = text;
+  }
+}
+
 function showResponse(endpoint, data) {
-  lastEndpoint.textContent = endpoint;
-  responseBody.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  setText(lastEndpoint, endpoint);
+  setText(responseBody, typeof data === "string" ? data : JSON.stringify(data, null, 2));
 }
 
 function normalizeError(data, fallback) {
@@ -127,20 +139,21 @@ async function optionalJson(endpoint, fallbackItems = []) {
 function renderDatabaseStatus(database) {
   if (typeof database === "string") {
     setState(databaseStatus, database, "ok");
-    databaseMeta.textContent = "后端返回数据库类型";
+    setText(databaseMeta, "后端返回数据库类型");
     return;
   }
 
   if (database?.connected === true) {
     setState(databaseStatus, "已连接", "ok");
-    databaseMeta.textContent = database.path
-      ? `${database.type || "sqlite"}: ${database.path}`
-      : database.type || "sqlite";
+    setText(
+      databaseMeta,
+      database.path ? `${database.type || "sqlite"}: ${database.path}` : database.type || "sqlite",
+    );
     return;
   }
 
   setState(databaseStatus, "未知", "waiting");
-  databaseMeta.textContent = "健康检查未返回数据库连接详情";
+  setText(databaseMeta, "健康检查未返回数据库连接详情");
 }
 
 async function refreshStatus() {
@@ -154,34 +167,42 @@ async function refreshStatus() {
     const backendOk = data?.success === true && ["ok", "healthy"].includes(payload.status);
 
     setState(serverStatus, backendOk ? "运行中" : "异常", backendOk ? "ok" : "bad");
-    serverMeta.textContent = payload.service
-      ? `${payload.service} ${payload.version || ""}`.trim()
-      : endpoints.health;
+    setText(
+      serverMeta,
+      payload.service ? `${payload.service} ${payload.version || ""}`.trim() : endpoints.health,
+    );
     renderDatabaseStatus(payload.database);
   } catch (error) {
     setState(serverStatus, "连接失败", "bad");
     setState(databaseStatus, "未知", "bad");
-    serverMeta.textContent = endpoints.health;
-    databaseMeta.textContent = "请确认 codepilot-server 已启动";
+    setText(serverMeta, endpoints.health);
+    setText(databaseMeta, "请确认 codepilot-server 已启动");
     showResponse(endpoints.health, String(error.message || error));
   } finally {
     refreshButton.disabled = false;
   }
 }
 
+function syncFooterIdentity() {
+  setText(statusSession, state.sessionId || "-");
+  setText(statusWorkspace, state.workspaceId || "-");
+  setText(statusTask, state.taskId || "-");
+}
+
 function updateIdentity(session, workspace, task) {
   if (session?.id) {
     state.sessionId = session.id;
-    sessionId.textContent = session.id;
+    setText(sessionId, session.id);
   }
   if (workspace?.id) {
     state.workspaceId = workspace.id;
-    workspaceId.textContent = workspace.id;
+    setText(workspaceId, workspace.id);
   }
   if (task?.id) {
     state.taskId = task.id;
-    taskId.textContent = task.id;
+    setText(taskId, task.id);
   }
+  syncFooterIdentity();
 }
 
 function normalizePlan(plan) {
@@ -210,9 +231,9 @@ function renderTask(task) {
   const failed = ["failed", "cancelled"].includes(status);
 
   setState(taskStatus, status, failed ? "bad" : done ? "ok" : "waiting");
-  taskMeta.textContent = task.id ? `Task ${task.id}` : "已创建任务";
-  taskStatusDetail.textContent = status;
-  taskMode.textContent = done ? "任务已结束" : "任务已创建，正在执行或等待权限";
+  setText(taskMeta, task.id ? `Task ${task.id}` : "已创建任务");
+  setText(taskStatusDetail, status);
+  setText(taskMode, done ? "任务已结束" : "任务已创建，正在执行或等待权限");
 
   const plan = normalizePlan(task.plan);
   const lines = [
@@ -221,7 +242,7 @@ function renderTask(task) {
     task.current_step ? `当前步骤：${task.current_step}` : "",
     plan.length ? `计划：\n${plan.map((item, index) => `${index + 1}. ${item}`).join("\n")}` : "",
   ].filter(Boolean);
-  taskResult.textContent = lines.join("\n\n");
+  setText(taskResult, lines.join("\n\n"));
 }
 
 async function createSession(title) {
@@ -263,26 +284,26 @@ async function submitChatFallback(prompt) {
     body: JSON.stringify({ prompt }),
   });
 
-  taskMode.textContent = "当前后端使用 Sprint 1 chat 接口";
+  setText(taskMode, "当前后端使用 Sprint 1 chat 接口");
   setState(taskStatus, "chat 完成", "ok");
-  taskStatusDetail.textContent = "chat";
-  taskResult.textContent = data?.data?.response || "后端未返回 response 字段";
+  setText(taskStatusDetail, "chat");
+  setText(taskResult, data?.data?.response || "后端未返回 response 字段");
+}
+
+function resetContainer(container, text) {
+  container.replaceChildren();
+  container.textContent = text;
+  container.classList.add("muted");
 }
 
 function resetTaskPanels() {
   state.events = [];
-  eventTimeline.textContent = "暂无执行事件";
-  eventTimeline.classList.add("muted");
-  permissionList.textContent = "暂无待确认权限";
-  permissionList.classList.add("muted");
-  logList.textContent = "暂无日志";
-  logList.classList.add("muted");
-  toolCallList.textContent = "暂无工具调用";
-  toolCallList.classList.add("muted");
-  fileChangeList.textContent = "暂无文件变更";
-  fileChangeList.classList.add("muted");
-  replayList.textContent = "暂无回放数据";
-  replayList.classList.add("muted");
+  resetContainer(eventTimeline, "暂无执行事件");
+  resetContainer(permissionList, "暂无待确认权限");
+  resetContainer(logList, "暂无日志");
+  resetContainer(toolCallList, "暂无工具调用");
+  resetContainer(fileChangeList, "暂无文件变更");
+  resetContainer(replayList, "暂无回放数据");
 }
 
 async function submitTask(event) {
@@ -290,18 +311,19 @@ async function submitTask(event) {
   const input = taskInput.value.trim();
 
   if (!input) {
-    taskResult.textContent = "请输入任务内容";
+    setText(taskResult, "请输入任务内容");
     taskInput.focus();
     return;
   }
 
   submitTaskButton.disabled = true;
   setState(taskStatus, "提交中", "waiting");
-  taskMeta.textContent = "正在调用后端接口";
-  taskMode.textContent = "创建 session、workspace 和 task";
-  taskResult.textContent = "请求中...";
+  setText(taskMeta, "正在调用后端接口");
+  setText(taskMode, "创建 session、workspace 和 task");
+  setText(taskResult, "请求中...");
   closeEventStream();
   resetTaskPanels();
+  activateMobileView("run");
 
   try {
     const session = await createSession(sessionTitleInput.value.trim() || "CodePilot 任务");
@@ -330,17 +352,17 @@ async function submitTask(event) {
         await refreshHistory();
       } catch (fallbackError) {
         setState(taskStatus, "提交失败", "bad");
-        taskMeta.textContent = "任务接口和 chat 接口均不可用";
-        taskMode.textContent = "接口调用失败";
-        taskResult.textContent = fallbackError.message;
+        setText(taskMeta, "任务接口和 chat 接口均不可用");
+        setText(taskMode, "接口调用失败");
+        setText(taskResult, fallbackError.message);
       }
       return;
     }
 
     setState(taskStatus, "提交失败", "bad");
-    taskMeta.textContent = "请查看接口 JSON";
-    taskMode.textContent = "接口调用失败";
-    taskResult.textContent = error.message;
+    setText(taskMeta, "请查看接口 JSON");
+    setText(taskMode, "接口调用失败");
+    setText(taskResult, error.message);
   } finally {
     submitTaskButton.disabled = false;
   }
@@ -362,8 +384,8 @@ async function pollTask(taskIdValue) {
       window.clearTimeout(state.permissionTimer);
     }
   } catch (error) {
-    taskMode.textContent = "任务详情轮询失败";
-    taskResult.textContent = error.message;
+    setText(taskMode, "任务详情轮询失败");
+    setText(taskResult, error.message);
   }
 }
 
@@ -373,7 +395,7 @@ function closeEventStream() {
     state.eventSource = null;
   }
   setState(streamStatus, "未连接", "idle");
-  streamMeta.textContent = "创建任务后自动订阅 SSE";
+  setText(streamMeta, "创建任务后自动订阅 SSE");
 }
 
 function connectEventStream(taskIdValue) {
@@ -382,14 +404,14 @@ function connectEventStream(taskIdValue) {
 
   if (!window.EventSource) {
     setState(streamStatus, "不支持", "bad");
-    streamMeta.textContent = "当前浏览器不支持 EventSource";
+    setText(streamMeta, "当前浏览器不支持 EventSource");
     return;
   }
 
   const source = new EventSource(url);
   state.eventSource = source;
   setState(streamStatus, "连接中", "waiting");
-  streamMeta.textContent = url;
+  setText(streamMeta, url);
 
   source.onopen = () => {
     setState(streamStatus, "已连接", "ok");
@@ -416,7 +438,7 @@ function connectEventStream(taskIdValue) {
 
   source.onerror = () => {
     setState(streamStatus, "已断开", "bad");
-    streamMeta.textContent = "SSE 不可用时使用轮询和历史接口";
+    setText(streamMeta, "SSE 不可用时使用轮询和历史接口");
   };
 }
 
@@ -430,6 +452,7 @@ function appendEventFromSse(type, rawData) {
   state.events.unshift(event);
   renderEvents(state.events);
   if (event.type === "permission_required") {
+    activateMobileView("security");
     refreshPermissions();
   }
   if (["tool_finished", "file_changed", "task_completed", "task_failed"].includes(event.type)) {
@@ -439,13 +462,12 @@ function appendEventFromSse(type, rawData) {
 
 function renderEvents(items) {
   if (!items.length) {
-    eventTimeline.textContent = "暂无执行事件";
-    eventTimeline.classList.add("muted");
+    resetContainer(eventTimeline, "暂无执行事件");
     return;
   }
 
   eventTimeline.classList.remove("muted");
-  eventTimeline.innerHTML = "";
+  eventTimeline.replaceChildren();
   for (const item of items.slice(0, 80)) {
     eventTimeline.append(createTimelineItem(item.type || "event", item.content || "", item.created_at, item.metadata));
   }
@@ -482,15 +504,16 @@ function createTimelineItem(type, content, time, metadata) {
 }
 
 function statusClass(value) {
-  if (String(value).includes("failed") || String(value).includes("reject")) return "bad";
-  if (String(value).includes("completed") || String(value).includes("approve")) return "ok";
-  if (String(value).includes("permission") || String(value).includes("running")) return "waiting";
+  const text = String(value);
+  if (text.includes("failed") || text.includes("reject") || text.includes("cancelled")) return "bad";
+  if (text.includes("completed") || text.includes("approve") || text.includes("success")) return "ok";
+  if (text.includes("permission") || text.includes("running") || text.includes("started")) return "waiting";
   return "idle";
 }
 
 async function cancelCurrentTask() {
   if (!state.taskId) {
-    taskResult.textContent = "当前没有可取消的任务";
+    setText(taskResult, "当前没有可取消的任务");
     return;
   }
 
@@ -502,8 +525,8 @@ async function cancelCurrentTask() {
     renderTask(data.data);
     closeEventStream();
   } catch (error) {
-    taskMode.textContent = "取消任务失败";
-    taskResult.textContent = error.message;
+    setText(taskMode, "取消任务失败");
+    setText(taskResult, error.message);
   }
 }
 
@@ -521,44 +544,61 @@ async function refreshTaskArtifacts() {
 
 async function refreshLogs() {
   const data = await optionalJson(endpointForTask("/logs"));
-  renderStackList(logList, data.data.items || [], (item) => ({
-    title: item.type || "log",
-    meta: item.created_at || "",
-    body: item.content || "",
-  }), "暂无日志", data.data.unavailable);
+  renderStackList(
+    logList,
+    data.data.items || [],
+    (item) => ({
+      title: item.type || "log",
+      meta: item.created_at || "",
+      body: item.content || "",
+    }),
+    "暂无日志",
+    data.data.unavailable,
+  );
 }
 
 async function refreshToolCalls() {
   const data = await optionalJson(endpointForTask("/tool-calls"));
-  renderStackList(toolCallList, data.data.items || [], (item) => ({
-    title: item.tool_name || "tool",
-    meta: item.created_at || "",
-    body: JSON.stringify({ arguments: item.arguments, success: item.success, result: item.result }, null, 2),
-    code: true,
-  }), "暂无工具调用", data.data.unavailable);
+  renderStackList(
+    toolCallList,
+    data.data.items || [],
+    (item) => ({
+      title: item.tool_name || "tool",
+      meta: item.created_at || "",
+      body: JSON.stringify({ arguments: item.arguments, success: item.success, result: item.result }, null, 2),
+      code: true,
+    }),
+    "暂无工具调用",
+    data.data.unavailable,
+  );
 }
 
 async function refreshFileChanges() {
   const data = await optionalJson(endpointForTask("/file-changes"));
-  renderStackList(fileChangeList, data.data.items || [], (item) => ({
-    title: `${item.change_type || "changed"} · ${item.file_path || "-"}`,
-    meta: item.created_at || "",
-    body: item.diff || item.content || "未返回 diff",
-    code: Boolean(item.diff),
-  }), "暂无文件变更", data.data.unavailable);
+  renderStackList(
+    fileChangeList,
+    data.data.items || [],
+    (item) => ({
+      title: `${item.change_type || "changed"} · ${item.file_path || "-"}`,
+      meta: item.created_at || "",
+      body: item.diff || item.content || "未返回 diff",
+      code: Boolean(item.diff),
+    }),
+    "暂无文件变更",
+    data.data.unavailable,
+  );
 }
 
 async function refreshReplay() {
   const data = await optionalJson(endpointForTask("/replay"));
   const timeline = data.data.timeline || [];
   if (!timeline.length) {
-    replayList.textContent = data.data.unavailable ? "历史回放接口未实现" : "暂无回放数据";
-    replayList.classList.add("muted");
+    resetContainer(replayList, data.data.unavailable ? "历史回放接口暂未实现" : "暂无回放数据");
     return;
   }
 
   replayList.classList.remove("muted");
-  replayList.innerHTML = "";
+  replayList.replaceChildren();
   for (const item of timeline) {
     replayList.append(
       createTimelineItem(
@@ -573,13 +613,12 @@ async function refreshReplay() {
 
 function renderStackList(container, items, mapItem, emptyText, unavailable) {
   if (!items.length) {
-    container.textContent = unavailable ? `${emptyText}，接口暂未实现` : emptyText;
-    container.classList.add("muted");
+    resetContainer(container, unavailable ? `${emptyText}，接口暂未实现` : emptyText);
     return;
   }
 
   container.classList.remove("muted");
-  container.innerHTML = "";
+  container.replaceChildren();
   for (const item of items) {
     const view = mapItem(item);
     const article = document.createElement("article");
@@ -608,8 +647,7 @@ async function refreshPermissions() {
     const data = await optionalJson(endpoints.permissionsPending);
     renderPermissions(data.data.items || [], data.data.unavailable);
   } catch (error) {
-    permissionList.textContent = `权限加载失败：${error.message}`;
-    permissionList.classList.add("muted");
+    resetContainer(permissionList, `权限加载失败：${error.message}`);
   } finally {
     refreshPermissionsButton.disabled = false;
   }
@@ -618,13 +656,12 @@ async function refreshPermissions() {
 function renderPermissions(items, unavailable) {
   const visibleItems = state.taskId ? items.filter((item) => item.task_id === state.taskId) : items;
   if (!visibleItems.length) {
-    permissionList.textContent = unavailable ? "权限接口暂未实现" : "暂无待确认权限";
-    permissionList.classList.add("muted");
+    resetContainer(permissionList, unavailable ? "权限接口暂未实现" : "暂无待确认权限");
     return;
   }
 
   permissionList.classList.remove("muted");
-  permissionList.innerHTML = "";
+  permissionList.replaceChildren();
   for (const item of visibleItems) {
     const article = document.createElement("article");
     article.className = "permission-card";
@@ -643,15 +680,15 @@ function renderPermissions(items, unavailable) {
     reason.textContent = item.reason || item.id || "";
 
     const actions = document.createElement("div");
-    actions.className = "actions small-actions";
+    actions.className = "small-actions";
     const approve = document.createElement("button");
     approve.type = "button";
-    approve.textContent = "同意";
+    approve.textContent = "授权通过";
     approve.addEventListener("click", () => resolvePermission(item.id, true));
     const reject = document.createElement("button");
     reject.type = "button";
     reject.className = "secondary";
-    reject.textContent = "拒绝";
+    reject.textContent = "阻断拒绝";
     reject.addEventListener("click", () => resolvePermission(item.id, false));
     actions.append(approve, reject);
 
@@ -674,8 +711,7 @@ async function resolvePermission(permissionId, approved) {
     await refreshPermissions();
     await refreshTaskArtifacts();
   } catch (error) {
-    permissionList.textContent = `权限处理失败：${error.message}`;
-    permissionList.classList.add("muted");
+    resetContainer(permissionList, `权限处理失败：${error.message}`);
   }
 }
 
@@ -692,13 +728,12 @@ function schedulePermissionRefresh() {
 
 function renderHistory(items, mode) {
   if (!items.length) {
-    historyList.textContent = "暂无历史记录";
-    historyList.classList.add("muted");
+    resetContainer(historyList, "暂无历史记录");
     return;
   }
 
   historyList.classList.remove("muted");
-  historyList.innerHTML = "";
+  historyList.replaceChildren();
 
   for (const item of items) {
     const row = document.createElement("article");
@@ -744,6 +779,7 @@ async function selectHistoryTask(task) {
   renderTask(task);
   resetTaskPanels();
   connectEventStream(task.id);
+  activateMobileView("run");
   await refreshTaskArtifacts();
   await refreshPermissions();
 }
@@ -760,24 +796,29 @@ async function refreshChatHistory() {
 
 async function refreshHistory() {
   refreshHistoryButton.disabled = true;
+  if (historyInlineRefresh) {
+    historyInlineRefresh.disabled = true;
+  }
   try {
     await refreshTaskHistory();
   } catch (taskError) {
     try {
       await refreshChatHistory();
     } catch (chatError) {
-      historyList.textContent = `历史记录加载失败：${chatError.message || taskError.message}`;
-      historyList.classList.add("muted");
+      resetContainer(historyList, `历史记录加载失败：${chatError.message || taskError.message}`);
     }
   } finally {
     refreshHistoryButton.disabled = false;
+    if (historyInlineRefresh) {
+      historyInlineRefresh.disabled = false;
+    }
   }
 }
 
 function clearTask() {
   taskInput.value = "";
-  taskResult.textContent = "暂无任务结果";
-  taskMode.textContent = "等待任务提交";
+  setText(taskResult, "暂无任务结果");
+  setText(taskMode, "等待任务提交");
   taskInput.focus();
 }
 
@@ -787,14 +828,55 @@ function activateTab(button) {
   $$(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === activePanel));
 }
 
-refreshButton.addEventListener("click", refreshStatus);
-refreshHistoryButton.addEventListener("click", refreshHistory);
-refreshPermissionsButton.addEventListener("click", refreshPermissions);
-taskForm.addEventListener("submit", submitTask);
-cancelTaskButton.addEventListener("click", cancelCurrentTask);
-clearTaskButton.addEventListener("click", clearTask);
-$$(".tab").forEach((tab) => tab.addEventListener("click", () => activateTab(tab)));
+function activateMobileView(view) {
+  state.activeMobileView = view;
+  $$(".activity-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === view);
+  });
 
+  const panelMap = {
+    setup: [".side-panel"],
+    history: [".side-panel"],
+    run: [".workbench"],
+    security: [".agent-panel"],
+    json: [".workbench"],
+  };
+
+  $$(".side-panel, .workbench, .agent-panel").forEach((panel) => {
+    panel.classList.remove("mobile-active");
+  });
+  for (const selector of panelMap[view] || [".workbench"]) {
+    const panel = $(selector);
+    if (panel) {
+      panel.classList.add("mobile-active");
+    }
+  }
+
+  if (view === "json") {
+    const jsonTab = $('.tab[data-tab="json"]');
+    if (jsonTab) activateTab(jsonTab);
+  }
+}
+
+function bindEvents() {
+  refreshButton.addEventListener("click", refreshStatus);
+  refreshHistoryButton.addEventListener("click", refreshHistory);
+  if (historyInlineRefresh) {
+    historyInlineRefresh.addEventListener("click", refreshHistory);
+  }
+  refreshPermissionsButton.addEventListener("click", refreshPermissions);
+  taskForm.addEventListener("submit", submitTask);
+  cancelTaskButton.addEventListener("click", cancelCurrentTask);
+  clearTaskButton.addEventListener("click", clearTask);
+  $$(".tab").forEach((tab) => tab.addEventListener("click", () => activateTab(tab)));
+  $$(".activity-button").forEach((button) => {
+    button.addEventListener("click", () => activateMobileView(button.dataset.view));
+  });
+}
+
+bindEvents();
+activateMobileView("run");
+syncFooterIdentity();
 refreshStatus();
 refreshHistory();
 refreshPermissions();

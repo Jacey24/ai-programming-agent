@@ -7,52 +7,162 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">CodePilot Web Console</p>
-          <h1>任务执行控制台</h1>
-          <p>创建会话、工作区和任务，跟踪 Agent 执行、权限确认、文件变更与历史回放。</p>
+    <main class="ide-shell">
+      <header class="ide-topbar">
+        <div class="brand-block" aria-label="CodePilot">
+          <span class="brand-icon" aria-hidden="true">CP</span>
+          <div>
+            <h1>CodePilot Web</h1>
+            <p>Agent IDE 工作台</p>
+          </div>
         </div>
+
+        <section class="status-strip" aria-label="系统状态">
+          <article class="status-chip">
+            <span>Backend</span>
+            <strong id="serverStatus">检查中</strong>
+            <small id="serverMeta">http://127.0.0.1:8080/api/v1/health</small>
+          </article>
+          <article class="status-chip">
+            <span>Database</span>
+            <strong id="databaseStatus">检查中</strong>
+            <small id="databaseMeta">SQLite</small>
+          </article>
+          <article class="status-chip">
+            <span>Task</span>
+            <strong id="taskStatus">未创建</strong>
+            <small id="taskMeta">等待提交</small>
+          </article>
+          <article class="status-chip">
+            <span>SSE</span>
+            <strong id="streamStatus">未连接</strong>
+            <small id="streamMeta">创建任务后自动订阅</small>
+          </article>
+        </section>
+
         <div class="topbar-actions">
-          <button id="refreshButton" type="button">刷新状态</button>
-          <button id="refreshHistoryButton" class="secondary" type="button">刷新历史</button>
+          <button id="refreshButton" class="icon-button" type="button" title="刷新状态" aria-label="刷新状态">
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button id="refreshHistoryButton" class="icon-button" type="button" title="刷新历史" aria-label="刷新历史">
+            <span aria-hidden="true">◎</span>
+          </button>
         </div>
       </header>
 
-      <section class="status-grid" aria-label="系统状态">
-        <article class="metric">
-          <span>后端服务</span>
-          <strong id="serverStatus">检查中</strong>
-          <small id="serverMeta">http://127.0.0.1:8080/api/v1/health</small>
-        </article>
-        <article class="metric">
-          <span>数据库</span>
-          <strong id="databaseStatus">检查中</strong>
-          <small id="databaseMeta">SQLite</small>
-        </article>
-        <article class="metric">
-          <span>当前任务</span>
-          <strong id="taskStatus">未创建</strong>
-          <small id="taskMeta">等待提交</small>
-        </article>
-        <article class="metric">
-          <span>事件流</span>
-          <strong id="streamStatus">未连接</strong>
-          <small id="streamMeta">创建任务后自动订阅 SSE</small>
-        </article>
-      </section>
+      <div class="ide-body">
+        <nav class="activity-bar" aria-label="工作台视图">
+          <button class="activity-button active" data-view="setup" type="button" title="任务配置" aria-label="任务配置">
+            <span aria-hidden="true">◇</span>
+          </button>
+          <button class="activity-button" data-view="run" type="button" title="执行监控" aria-label="执行监控">
+            <span aria-hidden="true">▶</span>
+          </button>
+          <button class="activity-button" data-view="security" type="button" title="权限审批" aria-label="权限审批">
+            <span aria-hidden="true">!</span>
+          </button>
+          <button class="activity-button" data-view="history" type="button" title="任务历史" aria-label="任务历史">
+            <span aria-hidden="true">◷</span>
+          </button>
+          <button class="activity-button activity-bottom" data-view="json" type="button" title="接口 JSON" aria-label="接口 JSON">
+            <span aria-hidden="true">{}</span>
+          </button>
+        </nav>
 
-      <section class="command-layout">
-        <form class="panel task-panel" id="taskForm">
-          <div class="panel-heading">
-            <div>
-              <h2>提交任务</h2>
-              <p>严格按接口文档依次调用 sessions、workspaces、tasks。</p>
+        <aside class="side-panel workspace-panel" data-mobile-panel="setup">
+          <section class="panel-section">
+            <header class="section-header">
+              <span>Workspace</span>
+              <strong>会话与工作区</strong>
+            </header>
+            <div class="identity-grid">
+              <div>
+                <span>Session</span>
+                <strong id="sessionId">-</strong>
+              </div>
+              <div>
+                <span>Workspace</span>
+                <strong id="workspaceId">-</strong>
+              </div>
+              <div>
+                <span>Task</span>
+                <strong id="taskId">-</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong id="taskStatusDetail">-</strong>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div class="form-grid">
+          <section class="panel-section history-panel" data-mobile-panel="history">
+            <header class="section-header inline">
+              <div>
+                <span>History</span>
+                <strong>任务历史</strong>
+              </div>
+              <button id="historyInlineRefresh" class="mini-button" type="button">刷新</button>
+            </header>
+            <div id="historyList" class="history-list muted">暂无历史记录</div>
+          </section>
+        </aside>
+
+        <section class="workbench" data-mobile-panel="run">
+          <header class="editor-tabs" role="tablist" aria-label="任务详情">
+            <button class="tab active" data-tab="logs" type="button">日志</button>
+            <button class="tab" data-tab="tools" type="button">工具调用</button>
+            <button class="tab" data-tab="changes" type="button">文件变更</button>
+            <button class="tab" data-tab="replay" type="button">历史回放</button>
+            <button class="tab" data-tab="json" type="button">接口 JSON</button>
+          </header>
+
+          <section class="task-overview">
+            <div>
+              <span class="eyebrow">Execution State</span>
+              <h2>任务状态</h2>
+              <p id="taskMode">等待任务提交</p>
+            </div>
+            <pre id="taskResult" class="terminal-output">暂无任务结果</pre>
+          </section>
+
+          <section class="event-console">
+            <header class="section-header">
+              <span>Timeline</span>
+              <strong>执行事件</strong>
+            </header>
+            <div id="eventTimeline" class="timeline muted">暂无执行事件</div>
+          </section>
+
+          <section class="tab-panels">
+            <div id="logsPanel" class="tab-panel active">
+              <div id="logList" class="stack-list muted">暂无日志</div>
+            </div>
+            <div id="toolsPanel" class="tab-panel">
+              <div id="toolCallList" class="stack-list muted">暂无工具调用</div>
+            </div>
+            <div id="changesPanel" class="tab-panel">
+              <div id="fileChangeList" class="stack-list muted">暂无文件变更</div>
+            </div>
+            <div id="replayPanel" class="tab-panel">
+              <div id="replayList" class="timeline muted">暂无回放数据</div>
+            </div>
+            <div id="jsonPanel" class="tab-panel" data-mobile-panel="json">
+              <p id="lastEndpoint" class="endpoint">等待请求</p>
+              <pre id="responseBody" class="terminal-output">等待请求...</pre>
+            </div>
+          </section>
+        </section>
+
+        <aside class="agent-panel" data-mobile-panel="security">
+          <form class="agent-card task-panel" id="taskForm">
+            <header class="agent-header">
+              <div>
+                <span class="eyebrow">Agent Prompt</span>
+                <h2>提交任务</h2>
+              </div>
+              <span class="live-dot" aria-hidden="true"></span>
+            </header>
+
             <label>
               会话标题
               <input id="sessionTitle" name="sessionTitle" value="Sprint 2 前端联调" />
@@ -61,135 +171,61 @@
               工作区名称
               <input id="workspaceName" name="workspaceName" value="codepilot-workspace" />
             </label>
-          </div>
-
-          <label>
-            工作区路径
-            <input id="workspacePath" name="workspacePath" value="/workspace" />
-          </label>
-
-          <label>
-            任务输入
-            <textarea
-              id="taskInput"
-              name="taskInput"
-              rows="8"
-              placeholder="例如：列出 workspace 文件并返回结果"
-            ></textarea>
-          </label>
-
-          <div class="option-row">
-            <label class="check-label">
-              <input id="autoRunSafeCommands" type="checkbox" checked />
-              自动执行安全命令
+            <label>
+              工作区路径
+              <input id="workspacePath" name="workspacePath" value="/workspace" />
             </label>
-            <label class="check-label">
-              <input id="requireFileWritePermission" type="checkbox" checked />
-              写文件需要确认
+            <label>
+              任务输入
+              <textarea
+                id="taskInput"
+                name="taskInput"
+                rows="8"
+                placeholder="例如：列出 workspace 文件并返回结果"
+              ></textarea>
             </label>
-            <label class="max-steps-label">
-              最大步数
-              <input id="maxSteps" type="number" min="1" max="50" value="10" />
-            </label>
-          </div>
 
-          <div class="actions">
-            <button id="submitTaskButton" type="submit">创建任务</button>
-            <button id="cancelTaskButton" class="secondary" type="button">取消任务</button>
-            <button id="clearTaskButton" class="ghost" type="button">清空</button>
-          </div>
-        </form>
-
-        <section class="panel task-detail-panel">
-          <div class="panel-heading">
-            <div>
-              <h2>任务状态</h2>
-              <p id="taskMode">等待任务提交</p>
+            <div class="option-stack">
+              <label class="check-label">
+                <input id="autoRunSafeCommands" type="checkbox" checked />
+                <span>自动执行安全命令</span>
+              </label>
+              <label class="check-label">
+                <input id="requireFileWritePermission" type="checkbox" checked />
+                <span>写文件需要确认</span>
+              </label>
+              <label class="max-steps-label">
+                <span>最大步数</span>
+                <input id="maxSteps" type="number" min="1" max="50" value="10" />
+              </label>
             </div>
-          </div>
 
-          <dl class="detail-list">
-            <div>
-              <dt>Session</dt>
-              <dd id="sessionId">-</dd>
+            <div class="actions">
+              <button id="submitTaskButton" type="submit">创建任务</button>
+              <button id="cancelTaskButton" class="secondary" type="button">取消</button>
+              <button id="clearTaskButton" class="ghost" type="button">清空</button>
             </div>
-            <div>
-              <dt>Workspace</dt>
-              <dd id="workspaceId">-</dd>
-            </div>
-            <div>
-              <dt>Task</dt>
-              <dd id="taskId">-</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd id="taskStatusDetail">-</dd>
-            </div>
-          </dl>
+          </form>
 
-          <div class="plan-box" id="taskResult">暂无任务结果</div>
-        </section>
-      </section>
+          <section class="agent-card permission-card-shell">
+            <header class="section-header inline">
+              <div>
+                <span>Security</span>
+                <strong>权限确认</strong>
+              </div>
+              <button id="refreshPermissionsButton" class="mini-button" type="button">检查</button>
+            </header>
+            <div id="permissionList" class="stack-list muted">暂无待确认权限</div>
+          </section>
+        </aside>
+      </div>
 
-      <section class="activity-layout">
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>执行事件</h2>
-              <p>SSE 实时事件，断开时保留历史查询结果。</p>
-            </div>
-          </div>
-          <div id="eventTimeline" class="timeline muted">暂无执行事件</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading inline-heading">
-            <div>
-              <h2>权限确认</h2>
-              <p>读取 pending 权限并调用 approve/reject。</p>
-            </div>
-            <button id="refreshPermissionsButton" class="secondary compact" type="button">检查</button>
-          </div>
-          <div id="permissionList" class="stack-list muted">暂无待确认权限</div>
-        </section>
-      </section>
-
-      <section class="tabs-panel panel">
-        <div class="tabs" role="tablist" aria-label="任务详情">
-          <button class="tab active" data-tab="logs" type="button">日志</button>
-          <button class="tab" data-tab="tools" type="button">工具调用</button>
-          <button class="tab" data-tab="changes" type="button">文件变更</button>
-          <button class="tab" data-tab="replay" type="button">历史回放</button>
-          <button class="tab" data-tab="json" type="button">接口 JSON</button>
-        </div>
-
-        <div id="logsPanel" class="tab-panel active">
-          <div id="logList" class="stack-list muted">暂无日志</div>
-        </div>
-        <div id="toolsPanel" class="tab-panel">
-          <div id="toolCallList" class="stack-list muted">暂无工具调用</div>
-        </div>
-        <div id="changesPanel" class="tab-panel">
-          <div id="fileChangeList" class="stack-list muted">暂无文件变更</div>
-        </div>
-        <div id="replayPanel" class="tab-panel">
-          <div id="replayList" class="timeline muted">暂无回放数据</div>
-        </div>
-        <div id="jsonPanel" class="tab-panel">
-          <p id="lastEndpoint" class="endpoint">等待请求</p>
-          <pre id="responseBody">等待请求...</pre>
-        </div>
-      </section>
-
-      <section class="panel history-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>任务历史</h2>
-            <p>读取任务列表；后端未实现时回退到 Sprint 1 chat 历史。</p>
-          </div>
-        </div>
-        <div id="historyList" class="history-list muted">暂无历史记录</div>
-      </section>
+      <footer class="bottom-status" aria-label="当前上下文">
+        <span>Session <strong data-status-session>-</strong></span>
+        <span>Workspace <strong data-status-workspace>-</strong></span>
+        <span>Task <strong data-status-task>-</strong></span>
+        <span class="connection">CodePilot API · 127.0.0.1:8080</span>
+      </footer>
     </main>
 
     <script src="./main.js"></script>

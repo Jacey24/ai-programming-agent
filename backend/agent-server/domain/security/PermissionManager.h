@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -95,9 +96,16 @@ public:
   std::vector<PermissionRequest>
   getPendingRequests(const std::string &taskId = "") const;
 
+  // 线程安全地按 id 拷贝一份请求（供 API 层跨线程读取）
+  std::optional<PermissionRequest>
+  getRequestCopy(const std::string &requestId) const;
+
 private:
   std::shared_ptr<EventBus> eventBus_;
   std::unordered_map<std::string, PermissionRequest> requests_;
+  // 保护 requests_：Agent 线程(createRequest/waitForResolution 超时 expire)与
+  // API 线程(getPendingRequests/getRequestCopy/resolvePermission)会并发访问。
+  mutable std::mutex requestsMutex_;
 
   // ★ 新增：同步等待所需的数据结构
   struct PendingWaiter {

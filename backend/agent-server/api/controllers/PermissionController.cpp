@@ -1,13 +1,14 @@
 #include "PermissionController.h"
 
-#include "application/PermissionService.h"
+#include "application/ToolSystem.h"
+#include "domain/security/PermissionManager.h"
+#include "domain/tools/Tool.h"
 
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <utility>
 #include <vector>
-
-#include <sqlite3.h>
 
 namespace {
 
@@ -72,53 +73,46 @@ std::string extract_query_string(const std::string& request, const std::string& 
 
 namespace codepilot {
 
+// 将内存中的权限请求序列化为 API JSON（字段与前端 main.js 对齐）。
+static std::string permission_to_json(const PermissionRequest& perm) {
+    const std::string args =
+        perm.arguments.is_null() ? std::string("") : perm.arguments.dump();
+    std::ostringstream body;
+    body << R"({"id":")" << json_escape(perm.id)
+         << R"(","task_id":")" << json_escape(perm.taskId)
+         << R"(","tool_name":")" << json_escape(perm.toolName)
+         << R"(","risk_level":")" << json_escape(riskLevelToString(perm.riskLevel))
+         << R"(","action":")" << json_escape(perm.toolName)
+         << R"(","reason":")" << json_escape(args)
+         << R"(","status":")" << json_escape(perm.statusToString())
+         << R"(","created_at":")" << json_escape(perm.createdAt) << R"(")";
+    if (!perm.resolvedAt.empty()) {
+        body << R"(,"resolved_at":")" << json_escape(perm.resolvedAt) << R"(")";
+    }
+    body << "}";
+    return body.str();
+}
+
 PermissionController::PermissionController(std::string database_path)
     : databasePath_(std::move(database_path)) {}
 
 std::string PermissionController::listPermissions(const std::string& request) {
     const std::string task_id = extract_query_string(request, "task_id");
 
-    sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
-        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-        if (db) { sqlite3_close(db); }
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
+    if (!ToolSystem::getInstance().isInitialized()) {
+        return http_response(R"({"success":true,"data":{"items":[]}})");
     }
 
-    std::vector<PermissionRequest> permissions;
-    try {
-        PermissionService service(db);
-        permissions = service.listPendingRequests(task_id);
-    } catch (const std::exception& error) {
-        sqlite3_close(db);
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    sqlite3_close(db);
+    const auto permissions =
+        ToolSystem::getInstance().permissionManager().getPendingRequests(task_id);
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"items":[)";
     for (std::size_t i = 0; i < permissions.size(); ++i) {
-        const auto& perm = permissions[i];
         if (i > 0) {
             body << ",";
         }
-        body << R"({"id":")" << json_escape(perm.id)
-             << R"(","task_id":")" << json_escape(perm.task_id)
-             << R"(","tool_name":")" << json_escape(perm.tool_name)
-             << R"(","risk_level":")" << json_escape(perm.risk_level)
-             << R"(","action":")" << json_escape(perm.action)
-             << R"(","reason":")" << json_escape(perm.reason)
-             << R"(","status":")" << json_escape(perm.status)
-             << R"(","created_at":")" << json_escape(perm.created_at) << R"(")";
-        if (!perm.resolved_at.empty()) {
-            body << R"(,"resolved_at":")" << json_escape(perm.resolved_at) << R"(")";
-        }
-        body << "}";
+        body << permission_to_json(permissions[i]);
     }
     body << "]}}";
     return http_response(body.str());
@@ -132,50 +126,23 @@ std::string PermissionController::getPermission(const std::string& request) {
             "400 Bad Request");
     }
 
-    sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
-        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-        if (db) { sqlite3_close(db); }
+    if (!ToolSystem::getInstance().isInitialized()) {
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
-            "500 Internal Server Error");
+            R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
+            "404 Not Found");
     }
 
-    std::string response;
-    try {
-        PermissionService service(db);
-        const auto perm = service.getRequest(perm_id);
-        if (!perm) {
-            response = http_response(
-                R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
-                "404 Not Found");
-            sqlite3_close(db);
-            return response;
-        }
-
-        std::ostringstream body;
-        body << R"({"success":true,"data":{"id":")" << json_escape(perm->id)
-             << R"(","task_id":")" << json_escape(perm->task_id)
-             << R"(","tool_name":")" << json_escape(perm->tool_name)
-             << R"(","risk_level":")" << json_escape(perm->risk_level)
-             << R"(","action":")" << json_escape(perm->action)
-             << R"(","reason":")" << json_escape(perm->reason)
-             << R"(","status":")" << json_escape(perm->status)
-             << R"(","created_at":")" << json_escape(perm->created_at) << R"(")";
-        if (!perm->resolved_at.empty()) {
-            body << R"(,"resolved_at":")" << json_escape(perm->resolved_at) << R"(")";
-        }
-        body << "}}";
-        response = http_response(body.str());
-    } catch (const std::exception& error) {
-        sqlite3_close(db);
+    const auto perm =
+        ToolSystem::getInstance().permissionManager().getRequestCopy(perm_id);
+    if (!perm) {
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
-            "500 Internal Server Error");
+            R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
+            "404 Not Found");
     }
 
-    sqlite3_close(db);
-    return response;
+    std::ostringstream body;
+    body << R"({"success":true,"data":)" << permission_to_json(*perm) << "}";
+    return http_response(body.str());
 }
 
 std::string PermissionController::handleAction(const std::string& request) {
@@ -202,66 +169,38 @@ std::string PermissionController::handleAction(const std::string& request) {
             "400 Bad Request");
     }
 
-    sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
-        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-        if (db) { sqlite3_close(db); }
+    if (!ToolSystem::getInstance().isInitialized()) {
         return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
+            "404 Not Found");
+    }
+
+    auto& manager = ToolSystem::getInstance().permissionManager();
+    const auto existing = manager.getRequestCopy(perm_id);
+    if (!existing) {
+        return http_response(
+            R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
+            "404 Not Found");
+    }
+    if (existing->statusToString() != "pending") {
+        return http_response(
+            R"({"success":false,"error":{"code":"ALREADY_RESOLVED","message":"permission request already resolved"}})",
+            "400 Bad Request");
+    }
+
+    // ★ 关键修复：直接解析内存中的权限请求，唤醒正在 waitForResolution 阻塞的 Agent 线程。
+    const bool ok = manager.resolvePermission(perm_id, is_approve);
+    if (!ok) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to resolve permission"}})",
             "500 Internal Server Error");
     }
 
-    std::string response;
-    try {
-        PermissionService service(db);
-
-        const auto perm = service.getRequest(perm_id);
-        if (!perm) {
-            response = http_response(
-                R"({"success":false,"error":{"code":"PERMISSION_NOT_FOUND","message":"permission request not found"}})",
-                "404 Not Found");
-            sqlite3_close(db);
-            return response;
-        }
-
-        if (perm->status != "pending") {
-            response = http_response(
-                R"({"success":false,"error":{"code":"ALREADY_RESOLVED","message":"permission request already resolved"}})",
-                "400 Bad Request");
-            sqlite3_close(db);
-            return response;
-        }
-
-        const bool ok = is_approve ? service.approveRequest(perm_id) : service.rejectRequest(perm_id);
-        if (!ok) {
-            response = http_response(
-                R"({"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to update permission status"}})",
-                "500 Internal Server Error");
-            sqlite3_close(db);
-            return response;
-        }
-
-        const auto updated = service.getRequest(perm_id);
-        const std::string new_status = is_approve ? "approved" : "rejected";
-        const std::string resolved_at = updated ? updated->resolved_at : "";
-
-        std::ostringstream body;
-        body << R"({"success":true,"data":{"id":")" << json_escape(perm_id)
-             << R"(","status":")" << new_status << R"(")";
-        if (!resolved_at.empty()) {
-            body << R"(,"resolved_at":")" << json_escape(resolved_at) << R"(")";
-        }
-        body << "}}";
-        response = http_response(body.str());
-    } catch (const std::exception& error) {
-        sqlite3_close(db);
-        return http_response(
-            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error.what()) + R"("}})",
-            "500 Internal Server Error");
-    }
-
-    sqlite3_close(db);
-    return response;
+    const std::string new_status = is_approve ? "approved" : "rejected";
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"id":")" << json_escape(perm_id)
+         << R"(","status":")" << new_status << R"("}})";
+    return http_response(body.str());
 }
 
 } // namespace codepilot

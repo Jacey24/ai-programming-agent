@@ -32,6 +32,17 @@ void TaskQueue::markComplete() {
     }
 }
 
+void TaskQueue::markFailed() {
+    // 标记所有剩余步骤为已处理，终止主循环
+    for (auto& s : steps_) {
+        s.completed = true;
+    }
+    currentIndex_ = steps_.size();
+    if (state_.canTransition(TaskStatus::Failed)) {
+        state_.transition(TaskStatus::Failed);
+    }
+}
+
 void TaskQueue::insertAfterCurrent(const PlanStep& step) {
     size_t idx = findFirstIncomplete();
     if (idx < steps_.size()) {
@@ -59,6 +70,9 @@ size_t TaskQueue::findFirstIncomplete() const {
 }
 
 TaskStatus TaskQueue::deriveStatus() const {
+    if (state_.current() == TaskStatus::Failed) {
+        return TaskStatus::Failed;
+    }
     if (hasNext()) {
         return TaskStatus::Running;
     }
