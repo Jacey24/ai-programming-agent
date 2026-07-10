@@ -326,7 +326,31 @@ std::string HttpServer::handleRequest(const std::string& request) {
         WorkspaceController controller(config_.databasePath);
         return controller.createWorkspace(request);
     }
+    if (request.rfind("POST /api/v1/workspaces/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/validate ") != std::string::npos ||
+            request_line.find("/validate?") != std::string::npos) {
+            WorkspaceController controller(config_.databasePath);
+            return controller.validateWorkspace(request);
+        }
+        return http_response(
+            R"({"success":false,"error":{"code":"NOT_FOUND","message":"Endpoint not found"}})",
+            "404 Not Found");
+    }
     if (request.rfind("GET /api/v1/workspaces/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/files/content ") != std::string::npos ||
+            request_line.find("/files/content?") != std::string::npos) {
+            WorkspaceController controller(config_.databasePath);
+            return controller.getFileContent(request);
+        }
+        if (request_line.find("/files ") != std::string::npos ||
+            request_line.find("/files?") != std::string::npos) {
+            WorkspaceController controller(config_.databasePath);
+            return controller.listFiles(request);
+        }
         WorkspaceController controller(config_.databasePath);
         return controller.getWorkspace(request);
     }
