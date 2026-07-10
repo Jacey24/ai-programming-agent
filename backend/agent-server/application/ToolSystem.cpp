@@ -90,7 +90,10 @@ void ToolSystem::init(const std::string &workspacePath,
   registry_ = std::make_unique<ToolRegistry>();
   eventBus_ = std::make_shared<EventBus>();
   permissionManager_ = std::make_shared<PermissionManager>(eventBus_);
+<<<<<<< HEAD
   debugger_ = std::make_unique<Debugger>(eventBus_); // 懒初始化，默认关闭
+=======
+>>>>>>> 558a83c1bd439ca924de528a44e29c70944911f0
 
   registerFileTools(*registry_, shell_);
 
@@ -184,6 +187,7 @@ ToolResult ToolSystem::callTool(const std::string &name,
   // ---- 重复指令检测（写锁范围尽可能小） ----
   std::string key = name + ":" + hashArguments(arguments);
   bool isDuplicate = false;
+<<<<<<< HEAD
 
   {
     std::unique_lock lock(mutex_);
@@ -241,6 +245,31 @@ ToolResult ToolSystem::callTool(const std::string &name,
         debugger_->pauseAfterTool(context.taskId, name, effectiveArgs, result);
   }
 
+=======
+
+  {
+    std::unique_lock lock(mutex_);
+    auto it = callHistory_.find(key);
+    if (it != callHistory_.end()) {
+      it->second.count++;
+      if (it->second.count >= 3 && !it->second.lastSuccess) {
+        isDuplicate = true;
+      }
+    } else {
+      CallHistoryEntry entry;
+      entry.toolName = name;
+      entry.argsHash = hashArguments(arguments);
+      entry.count = 1;
+      entry.lastSuccess = true;
+      callHistory_[key] = entry;
+      callOrder_.push_back(key);
+    }
+  }
+
+  // 调用工具（Registry 调用本身不持有锁，避免死锁）
+  ToolResult result = registry_->call(name, context, arguments);
+
+>>>>>>> 558a83c1bd439ca924de528a44e29c70944911f0
   // ---- 更新调用历史 & 统计（写锁） ----
   {
     std::unique_lock lock(mutex_);
@@ -352,11 +381,16 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     }
   }
 
+<<<<<<< HEAD
   // 4. 执行工具（带断点检查）
+=======
+  // 4. 执行工具
+>>>>>>> 558a83c1bd439ca924de528a44e29c70944911f0
   return callTool(name, context, arguments);
 }
 
 // ============================================================
+<<<<<<< HEAD
 // ★ debugger() — 调试器访问（自动创建）
 // ============================================================
 Debugger &ToolSystem::debugger() {
@@ -383,6 +417,8 @@ bool ToolSystem::isDebuggerEnabled() const {
 }
 
 // ============================================================
+=======
+>>>>>>> 558a83c1bd439ca924de528a44e29c70944911f0
 // ★ 新增：getToolSchemas() — 获取所有工具 schemas
 // ============================================================
 json ToolSystem::getToolSchemas() const {

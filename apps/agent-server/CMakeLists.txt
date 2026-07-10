@@ -72,7 +72,10 @@ add_executable(tool-tests EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/ShellTool.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/GitTool.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/RiskDetector.cpp
+<<<<<<< HEAD
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/debug/Debugger.cpp
+=======
+>>>>>>> 558a83c1bd439ca924de528a44e29c70944911f0
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
