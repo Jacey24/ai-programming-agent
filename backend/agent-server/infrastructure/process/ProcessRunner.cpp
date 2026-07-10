@@ -26,7 +26,11 @@ ProcessResult ProcessRunner::execute(const std::string &command, int timeout) {
   // 构建带 cd 的命令
   std::string fullCmd = command;
   if (!workingDirectory_.empty()) {
+#ifdef _WIN32
     fullCmd = "cd /d \"" + workingDirectory_ + "\" && " + command;
+#else
+    fullCmd = "cd \"" + workingDirectory_ + "\" && " + command;
+#endif
   }
 
   // 重定向 stderr 到 stdout
