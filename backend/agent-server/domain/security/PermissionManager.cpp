@@ -90,6 +90,7 @@ PermissionRequest PermissionManager::createRequest(const std::string &taskId,
   meta["tool_name"] = toolName;
   meta["risk_level"] = riskLevelToString(riskLevel);
   meta["arguments"] = arguments;
+  meta["permission_id"] = req.id;
   meta["request_id"] = req.id;
 
   if (eventBus_) {

@@ -34,7 +34,7 @@ export function createTask(
   sessionId: string,
   workspaceId: string,
   input: string,
-  options: Pick<CreateTaskInput, "autoRunSafeCommands" | "requireFileWritePermission" | "maxSteps">,
+  options: Pick<CreateTaskInput, "autoRunSafeCommands" | "requireFileWritePermission" | "maxSteps" | "executionMode">,
 ) {
   return requestJson<TaskRecord>(endpoints.tasks, {
     method: "POST",
@@ -46,6 +46,7 @@ export function createTask(
         auto_run_safe_commands: options.autoRunSafeCommands,
         require_permission_for_file_write: options.requireFileWritePermission,
         max_steps: options.maxSteps,
+        execution_mode: options.executionMode,
       },
     }),
   });

@@ -35,6 +35,8 @@ export interface AgentState {
   streamStatus: "idle" | "connecting" | "connected" | "error" | "closed" | "unsupported";
   streamError: string;
   submitting: boolean;
+  pendingPrompt: string;
+  pendingStartedAt: string;
   cancelling: boolean;
   polling: boolean;
   error: string;
@@ -47,7 +49,7 @@ export type AgentAction =
   | { type: "historyLoading" }
   | { type: "historySuccess"; items: Array<TaskRecord | ChatMessageRecord> }
   | { type: "historyError"; error: string }
-  | { type: "submitStart" }
+  | { type: "submitStart"; prompt: string; startedAt: string }
   | { type: "submitError"; error: string }
   | { type: "submitSuccess"; session: SessionRecord | null; workspace: WorkspaceRecord | null; task: TaskRecord }
   | { type: "chatFallbackSuccess"; session: SessionRecord | null; workspace: WorkspaceRecord | null; chat: ChatMessageRecord }
@@ -97,6 +99,8 @@ export const initialAgentState: AgentState = {
   streamStatus: "idle",
   streamError: "",
   submitting: false,
+  pendingPrompt: "",
+  pendingStartedAt: "",
   cancelling: false,
   polling: false,
   error: "",
@@ -131,6 +135,8 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return {
         ...state,
         submitting: true,
+        pendingPrompt: action.prompt,
+        pendingStartedAt: action.startedAt,
         chatFallback: null,
         error: "",
         logs: { status: "loading", items: [], error: "" },
@@ -149,6 +155,8 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return {
         ...state,
         submitting: false,
+        pendingPrompt: "",
+        pendingStartedAt: "",
         session: action.session,
         workspace: action.workspace,
         activeTask: action.task,
@@ -159,6 +167,8 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return {
         ...state,
         submitting: false,
+        pendingPrompt: "",
+        pendingStartedAt: "",
         session: action.session,
         workspace: action.workspace,
         activeTask: null,

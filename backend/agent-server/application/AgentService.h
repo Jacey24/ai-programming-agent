@@ -7,6 +7,16 @@
 
 namespace codepilot {
 
+enum class ExecutionMode { Auto, DirectAnswer, WorkspaceAgent };
+
+struct TaskRunOptions {
+    ExecutionMode mode{ExecutionMode::Auto};
+    bool autoRunSafeCommands{true};
+    bool requireFileWritePermission{true};
+    int maxSteps{6};
+    int maxRoundsPerStep{3};
+};
+
 class AgentService {
 public:
     AgentResult runTask(
@@ -14,7 +24,10 @@ public:
         const std::string& sessionId,
         const std::string& workspaceId,
         const std::string& goal,
-        sqlite3* db = nullptr);
+        sqlite3* db = nullptr,
+        const TaskRunOptions& options = {});
+
+    static ExecutionMode resolveExecutionMode(const std::string& goal, ExecutionMode requestedMode);
 
     // Sprint 2：获取 Agent 实例，供外部使用 buildExecutorPrompt 等
     Agent* getAgent() { return agent_.get(); }

@@ -27,6 +27,14 @@
 
 namespace codepilot {
 
+namespace {
+bool shouldSkipPlanner(const std::string& goal) {
+    const std::vector<std::string> complexSignals = {"重构", "架构", "多模块", "依赖", "测试失败", "refactor", "architecture", "dependency"};
+    for (const auto& signal : complexSignals) if (goal.find(signal) != std::string::npos) return false;
+    return true;
+}
+} // namespace
+
 Agent::Agent(RoleRegistry& registry, Planner& planner)
     : registry_(registry), planner_(planner) {}
 
@@ -46,10 +54,11 @@ AgentResult Agent::executeTask(
     // ============================================================
     // 构建规划 prompt → LLM 调用方处理 → parsePlanFromResponse 解析
     // 这里直接走 fallbackPlan 作为降级，同时把 prompt 暴露为 buildPlanningPrompt
-    publishTaskEvent(taskId, EventType::TaskPlanning, "Agent is planning the task");
+    publishTaskEvent(taskId, EventType::TaskPlanning,
+        "正在分析任务并选择执行方式…", R"({"stage":"planning","status":"running"})");
 
     std::vector<PlanStep> steps;
-    if (llmClient_) {
+    if (llmClient_ && !shouldSkipPlanner(goal)) {
         const std::string planningPrompt =
             planner_.buildPlanningPrompt(goal, toolsDesc_);
         LlmResponse planningResponse =
@@ -62,9 +71,15 @@ AgentResult Agent::executeTask(
         }
     }
     if (steps.empty()) {
-        steps = planner_.generatePlan(goal);
+        steps = shouldSkipPlanner(goal)
+            ? std::vector<PlanStep>{{"executor", "完成用户要求并进行最小验证", false}}
+            : planner_.generatePlan(goal);
     }
     queue_.loadFromPlan(steps);
+    json planMetadata{{"stage", "planning"}, {"status", "completed"}, {"steps", json::array()}};
+    for (const auto& step : steps) planMetadata["steps"].push_back(step.action);
+    publishTaskEvent(taskId, EventType::AgentMessage,
+        "已生成 " + std::to_string(steps.size()) + " 个执行步骤", planMetadata.dump());
 
     context_.push_back("[plan] 已生成计划: " + planToJson(steps));
 
@@ -78,15 +93,17 @@ AgentResult Agent::executeTask(
     // ============================================================
     // 用独立的迭代计数器控制上限，避免用 context_ 条数误判导致中途退出
     int loopIterations = 0;
-    const int maxIterations = config_.maxSteps > 0 ? config_.maxSteps : 20;
+    const int maxIterations = config_.maxSteps > 0 ? config_.maxSteps : 6;
     // 单步工具轮次上限：防止模型在同一步内无限探索（反复 ls/read）而不推进。
-    const int maxRoundsPerStep = 6;
+    const int maxRoundsPerStep = config_.maxRoundsPerStep > 0 ? config_.maxRoundsPerStep : 3;
     std::string currentStepAction;
     int stepRounds = 0;
     std::string lastResponse;
     while (queue_.hasNext() && loopIterations < maxIterations) {
         ++loopIterations;
         const PlanStep step = queue_.current();
+        publishTaskEvent(taskId, EventType::AgentMessage, "正在执行：" + step.action,
+            json{{"stage", "executing"}, {"step_index", loopIterations}, {"step_total", steps.size()}}.dump());
         // 跟踪当前步骤的连续轮次；步骤切换时重置计数。
         if (step.action != currentStepAction) {
             currentStepAction = step.action;
@@ -174,11 +191,15 @@ AgentResult Agent::executeTask(
                 }
 
                 json toolArgs = buildToolArguments(toolName, cmd.toolArgs);
+                const std::string toolCallId = generateToolCallId();
+                toolCtx.options["tool_call_id"] = toolCallId;
+                toolCtx.options["require_file_write_permission"] = config_.requireFileWritePermission ? "true" : "false";
+                toolCtx.options["auto_run_safe_commands"] = config_.autoRunSafeCommands ? "true" : "false";
+                publishTaskEvent(taskId, EventType::AgentMessage,
+                    "准备调用 " + toolName,
+                    json{{"stage", "tool"}, {"tool_name", toolName}, {"tool_call_id", toolCallId}}.dump());
 
                 // Sprint 2：工具开始事件落库到 task_events（周子涵持久化落库）
-                publishTaskEvent(taskId, EventType::ToolStarted,
-                    "Calling tool: " + toolName,
-                    json{{"tool_name", toolName}, {"arguments", toolArgs}}.dump());
 
                 ToolResult toolResult;
                 try {
@@ -222,12 +243,6 @@ AgentResult Agent::executeTask(
                 }
 
                 // Sprint 2：工具完成事件落库到 task_events（周子涵持久化落库）
-                publishTaskEvent(taskId, EventType::ToolFinished,
-                    toolResult.success ? ("Tool finished: " + toolName)
-                                       : ("Tool failed: " + toolName),
-                    json{{"tool_name", toolName},
-                         {"success", toolResult.success},
-                         {"exit_code", toolResult.exitCode}}.dump());
             }
 
             // 工具调用后，继续本步骤的下一轮循环（不 markComplete）
@@ -295,9 +310,14 @@ AgentResult Agent::executeTask(
         result.status == "completed"
             ? (lastResponse.empty() ? std::string("Agent task completed") : lastResponse)
             : std::string("Agent task failed");
+    if (result.status == "completed") {
+        const ParsedResponse finalResponse = ResponseParser::parseAll(finalContent);
+        publishTaskEvent(taskId, EventType::AgentMessage,
+            finalResponse.content.empty() ? "代码已经生成并完成验证。" : finalResponse.content);
+    }
     publishTaskEvent(taskId,
         result.status == "completed" ? EventType::TaskCompleted : EventType::TaskFailed,
-        finalContent,
+        result.status == "completed" ? "任务完成" : finalContent,
         "{\"status\":\"" + escapeJson(result.status) + "\"}");
     return result;
 }
@@ -470,27 +490,49 @@ void Agent::publishTaskEvent(const std::string& taskId, EventType eventType,
     }
 
     // Sprint 2：任务生命周期事件落库到 task_events（周子涵持久化落库）
-    persistTaskEvent(taskId, eventType, content, metadata);
+    EventData event = EventData::Create(taskId, eventType, content, metadata);
+    persistTaskEvent(event);
 
     // 推送到 EventBus，供 SSE 实时展示
     if (!ToolSystem::getInstance().isInitialized()) {
         return;
     }
-    ToolSystem::getInstance().eventBus().publish(
-        EventData::Create(taskId, eventType, content, metadata));
+    ToolSystem::getInstance().eventBus().publish(event);
 }
 
-void Agent::persistTaskEvent(const std::string& taskId, EventType type,
-    const std::string& content, const json& metadata) const {
+AgentResult Agent::executeDirectAnswer(
+    const std::string& taskId, const std::string& sessionId,
+    const std::string& workspaceId, const std::string& goal) {
+    const std::string now = iso8601Now();
+    publishTaskEvent(taskId, EventType::TaskPlanning, "已识别为直接回答任务。",
+        R"({"stage":"planning","status":"completed","mode":"answer"})");
+    const std::string prompt = "你是编程助手。\n请直接回答用户问题。\n代码必须使用 Markdown 代码块。\n不要创建文件，不要调用工具，不要输出计划标签或命令标签。\n\n用户请求：\n" + goal;
+    std::string answer;
+    if (llmClient_) {
+        const LlmResponse response = llmClient_->chat({prompt, "", config_.toolTimeoutSeconds});
+        answer = response.success ? response.content : "无法生成回答：" + response.error;
+    } else {
+        answer = "当前未配置 LLM，无法生成直接回答。";
+    }
+    publishTaskEvent(taskId, EventType::AgentMessage, answer,
+        R"({"stage":"answer","status":"completed"})");
+    publishTaskEvent(taskId, EventType::TaskCompleted, "任务完成",
+        R"({"status":"completed"})");
+    AgentResult result;
+    result.taskId = taskId; result.sessionId = sessionId; result.workspaceId = workspaceId;
+    result.goal = goal; result.status = "completed"; result.planJson = "[]";
+    result.currentStep = "answered"; result.createdAt = now; result.updatedAt = iso8601Now();
+    return result;
+}
+
+void Agent::persistTaskEvent(const EventData& event) const {
     if (!db_) {
         return;
     }
     try {
-        EventData typeHolder;
-        typeHolder.type = type;
         EventRepository(db_).create(
-            generateEventId(), taskId, typeHolder.typeToString(),
-            content, metadata.dump());
+            event.id, event.taskId, event.typeToString(),
+            event.content, event.metadata.dump());
     } catch (const std::exception&) {
         // 落库失败不阻断任务执行
     }

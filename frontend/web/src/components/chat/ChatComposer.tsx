@@ -10,24 +10,26 @@ const defaultForm: CreateTaskInput = {
   taskInput: "",
   autoRunSafeCommands: true,
   requireFileWritePermission: true,
-  maxSteps: 10,
+  maxSteps: 6,
+  executionMode: "auto",
 };
 
 interface ChatComposerProps {
   submitting: boolean;
+  taskRunning: boolean;
   canCancel: boolean;
   cancelling: boolean;
   onSubmit: (input: CreateTaskInput) => void;
   onCancel: () => void;
 }
 
-export function ChatComposer({ submitting, canCancel, cancelling, onSubmit, onCancel }: ChatComposerProps) {
+export function ChatComposer({ submitting, taskRunning, canCancel, cancelling, onSubmit, onCancel }: ChatComposerProps) {
   const [form, setForm] = useState<CreateTaskInput>(defaultForm);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (!form.taskInput.trim() || submitting) {
+    if (!form.taskInput.trim() || submitting || taskRunning) {
       return;
     }
     onSubmit(form);
@@ -46,7 +48,7 @@ export function ChatComposer({ submitting, canCancel, cancelling, onSubmit, onCa
       <div className="mt-2 flex items-center gap-2">
         <button
           type="submit"
-          disabled={!form.taskInput.trim() || submitting}
+          disabled={!form.taskInput.trim() || submitting || taskRunning}
           className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded border border-cyan-400/30 bg-cyan-400/10 px-3 text-xs font-bold text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -62,6 +64,7 @@ export function ChatComposer({ submitting, canCancel, cancelling, onSubmit, onCa
           {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
         </button>
       </div>
+      {taskRunning ? <p className="mt-2 text-xs text-amber-300">当前任务正在执行，请先停止或等待完成。</p> : null}
 
       <button
         type="button"
@@ -83,7 +86,13 @@ export function ChatComposer({ submitting, canCancel, cancelling, onSubmit, onCa
             <span>Require file write permission</span>
             <input type="checkbox" checked={form.requireFileWritePermission} onChange={(event) => setForm((current) => ({ ...current, requireFileWritePermission: event.target.checked }))} className="h-4 w-4 accent-cyan-400" />
           </label>
-          <SmallInput label="Max steps" type="number" value={String(form.maxSteps)} onChange={(value) => setForm((current) => ({ ...current, maxSteps: Number(value || 10) }))} />
+          <SmallInput label="Max steps" type="number" value={String(form.maxSteps)} onChange={(value) => setForm((current) => ({ ...current, maxSteps: Number(value || 6) }))} />
+          <label className="flex items-center justify-between gap-3 text-[11px] text-slate-400">
+            <span>Execution mode</span>
+            <select value={form.executionMode} onChange={(event) => setForm((current) => ({ ...current, executionMode: event.target.value as CreateTaskInput["executionMode"] }))} className="h-7 rounded border border-slate-800 bg-black/40 px-2 text-xs text-slate-200">
+              <option value="auto">自动判断</option><option value="answer">仅回答</option><option value="workspace">修改工作区</option>
+            </select>
+          </label>
         </div>
       ) : null}
     </form>

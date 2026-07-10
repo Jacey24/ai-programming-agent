@@ -146,11 +146,13 @@ export function useAgentRuntime(options: {
         return { session: sessionRef.current, workspace: workspaceRef.current };
       }
 
-      const session = await createSession(input.sessionTitle.trim() || "CodePilot Session");
-      const workspace = await createWorkspace(
-        input.workspaceName.trim() || "codepilot-workspace",
-        input.workspacePath.trim() || "/workspace",
-      );
+      const [session, workspace] = await Promise.all([
+        createSession(input.sessionTitle.trim() || "CodePilot Session"),
+        createWorkspace(
+          input.workspaceName.trim() || "codepilot-workspace",
+          input.workspacePath.trim() || "/workspace",
+        ),
+      ]);
       sessionRef.current = session;
       workspaceRef.current = workspace;
       return { session, workspace };
@@ -311,7 +313,11 @@ export function useAgentRuntime(options: {
     async (input: CreateTaskInput) => {
       closeEventStream("idle");
       stopPolling();
-      dispatch({ type: "submitStart" });
+      dispatch({
+        type: "submitStart",
+        prompt: input.taskInput.trim(),
+        startedAt: new Date().toISOString(),
+      });
 
       try {
         const { session, workspace } = await ensureRuntimeContext(input);
@@ -321,15 +327,16 @@ export function useAgentRuntime(options: {
             autoRunSafeCommands: input.autoRunSafeCommands,
             requireFileWritePermission: input.requireFileWritePermission,
             maxSteps: input.maxSteps,
+            executionMode: input.executionMode,
           });
           dispatch({ type: "submitSuccess", session, workspace, task });
+          if (!isTerminalTask(task)) {
+            startEventStream(task.id);
+          }
           void refreshHistory();
           void refreshArtifacts(task.id);
           void refreshEventHistory(task.id);
           startPermissionPolling(task.id);
-          if (!isTerminalTask(task)) {
-            startEventStream(task.id);
-          }
         } catch (taskError) {
           if (!isEndpointUnavailable(taskError)) {
             throw taskError;
