@@ -2,6 +2,7 @@
 
 #include "application/AgentService.h"
 #include "application/TaskService.h"
+#include "application/ToolSystem.h"
 #include "event/EventDispatcher.h"
 
 #include <exception>
@@ -391,6 +392,165 @@ void TaskController::handleEvents(int client_fd,
     // 5. 清理
     dispatcher.unregisterClient(client_id);
     close(client_fd);
+}
+
+std::string TaskController::getToolCalls(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string suffix = "/tool-calls";
+    if (full_segment.size() <= suffix.size() ||
+        full_segment.compare(full_segment.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /tool-calls"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - suffix.size());
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::vector<ToolCallRecord> tool_calls;
+    try {
+        TaskService service(db);
+        tool_calls = service.getToolCalls(task_id);
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        const std::string msg = error.what();
+        const bool not_found = msg.find("not found") != std::string::npos;
+        return http_response(
+            R"({"success":false,"error":{"code":")" +
+            std::string(not_found ? "TASK_NOT_FOUND" : "DATABASE_ERROR") +
+            R"(","message":")" + json_escape(msg) + R"("}})",
+            not_found ? "404 Not Found" : "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"items":[)";
+    for (std::size_t i = 0; i < tool_calls.size(); ++i) {
+        const auto& tc = tool_calls[i];
+        if (i > 0) body << ",";
+        body << R"({"id":")" << json_escape(tc.id)
+             << R"(","task_id":")" << json_escape(tc.task_id)
+             << R"(","tool_name":")" << json_escape(tc.tool_name)
+             << R"(","arguments":")" << json_escape(tc.arguments)
+             << R"(","success":)" << (tc.success ? "true" : "false")
+             << R"(,"exit_code":)" << tc.exit_code
+             << R"(,"result":")" << json_escape(tc.result)
+             << R"(","created_at":")" << json_escape(tc.created_at)
+             << R"("})";
+    }
+    body << "]}}";
+    return http_response(body.str());
+}
+
+std::string TaskController::getEventHistory(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string suffix = "/events/history";
+    if (full_segment.size() <= suffix.size() ||
+        full_segment.compare(full_segment.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /events/history"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - suffix.size());
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    std::vector<EventData> events;
+    try {
+        TaskService service(db);
+        auto& bus = ToolSystem::getInstance().eventBus();
+        events = service.getEventHistory(task_id, bus);
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        const std::string msg = error.what();
+        const bool not_found = msg.find("not found") != std::string::npos;
+        return http_response(
+            R"({"success":false,"error":{"code":")" +
+            std::string(not_found ? "TASK_NOT_FOUND" : "DATABASE_ERROR") +
+            R"(","message":")" + json_escape(msg) + R"("}})",
+            not_found ? "404 Not Found" : "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"items":[)";
+    for (std::size_t i = 0; i < events.size(); ++i) {
+        const auto& ev = events[i];
+        if (i > 0) body << ",";
+        body << R"({"id":")" << json_escape(ev.id)
+             << R"(","task_id":")" << json_escape(ev.taskId)
+             << R"(","type":")" << json_escape(ev.typeToString())
+             << R"(","content":")" << json_escape(ev.content)
+             << R"(","created_at":")" << json_escape(ev.createdAt)
+             << R"("})";
+    }
+    body << "]}}";
+    return http_response(body.str());
+}
+
+std::string TaskController::retryTask(const std::string& request) {
+    const std::string full_segment = extract_path_segment(request, "/api/v1/tasks/");
+    const std::string suffix = "/retry";
+    if (full_segment.size() <= suffix.size() ||
+        full_segment.compare(full_segment.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"path must end with /retry"}})",
+            "400 Bad Request");
+    }
+    const std::string task_id = full_segment.substr(0, full_segment.size() - suffix.size());
+
+    sqlite3* db = nullptr;
+    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+        const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+        if (db) { sqlite3_close(db); }
+        return http_response(
+            R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" + json_escape(error) + R"("}})",
+            "500 Internal Server Error");
+    }
+
+    TaskRecord task;
+    try {
+        TaskService service(db);
+        task = service.retryTask(task_id);
+    } catch (const std::exception& error) {
+        sqlite3_close(db);
+        const std::string msg = error.what();
+        const bool not_found = msg.find("not found") != std::string::npos;
+        return http_response(
+            R"({"success":false,"error":{"code":")" +
+            std::string(not_found ? "TASK_NOT_FOUND" : "DATABASE_ERROR") +
+            R"(","message":")" + json_escape(msg) + R"("}})",
+            not_found ? "404 Not Found" : "500 Internal Server Error");
+    }
+
+    sqlite3_close(db);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
+         << R"(","session_id":")" << json_escape(task.session_id)
+         << R"(","workspace_id":")" << json_escape(task.workspace_id)
+         << R"(","goal":")" << json_escape(task.goal)
+         << R"(","status":")" << json_escape(task.status)
+         << R"(","created_at":")" << json_escape(task.created_at)
+         << R"(","updated_at":")" << json_escape(task.updated_at)
+         << R"("}})";
+    return http_response(body.str());
 }
 
 } // namespace codepilot

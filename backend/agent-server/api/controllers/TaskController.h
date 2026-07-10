@@ -23,6 +23,15 @@ public:
                       EventDispatcher& dispatcher,
                       const std::atomic_bool& running);
 
+    // 工具调用记录
+    std::string getToolCalls(const std::string& request);
+
+    // 事件历史
+    std::string getEventHistory(const std::string& request);
+
+    // 重试任务
+    std::string retryTask(const std::string& request);
+
 private:
     std::string databasePath_;
 };
