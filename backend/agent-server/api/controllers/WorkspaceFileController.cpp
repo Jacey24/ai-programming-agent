@@ -1,4 +1,5 @@
 #include "WorkspaceFileController.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "application/WorkspaceService.h"
 #include "infrastructure/filesystem/Workspace.h"
@@ -165,7 +166,7 @@ std::string WorkspaceFileController::getTree(const std::string& request) {
     const int depth = std::max(1, std::min(extract_query_int(request, "depth", 4), 16));
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return error_response("DATABASE_ERROR", error, "500 Internal Server Error");
@@ -218,7 +219,7 @@ std::string WorkspaceFileController::getFileContent(const std::string& request) 
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return error_response("DATABASE_ERROR", error, "500 Internal Server Error");

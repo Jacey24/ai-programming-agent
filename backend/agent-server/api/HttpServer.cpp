@@ -1,4 +1,5 @@
 #include "api/HttpServer.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "api/controllers/LogController.h"
 #include "api/controllers/FileChangeController.h"
@@ -458,7 +459,7 @@ void HttpServer::streamTaskEvents(int client_fd, const std::string& task_id) {
     // 3) 回放已落库的历史事件（覆盖 SSE 连接建立前已经发生的事件）
     {
         sqlite3* db = nullptr;
-        if (sqlite3_open(config_.databasePath.c_str(), &db) == SQLITE_OK) {
+        if (openSqliteConnection(config_.databasePath.c_str(), &db) == SQLITE_OK) {
             try {
                 EventRepository repo(db);
                 for (const auto& ev : repo.findByTaskId(task_id)) {
@@ -500,7 +501,7 @@ void HttpServer::streamTaskEvents(int client_fd, const std::string& task_id) {
         // 兜底：定期查询任务状态，防止漏收终态事件导致连接长期挂起
         if (++ticks % 3 == 0) {
             sqlite3* db = nullptr;
-            if (sqlite3_open(config_.databasePath.c_str(), &db) == SQLITE_OK) {
+            if (openSqliteConnection(config_.databasePath.c_str(), &db) == SQLITE_OK) {
                 try {
                     TaskService service(db);
                     auto record = service.getTask(task_id);
@@ -549,7 +550,7 @@ std::string HttpServer::createChatResponse(const std::string& request) const {
 
     constexpr const char* ai_response = "pending development";
     sqlite3* db = nullptr;
-    if (sqlite3_open(config_.databasePath.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(config_.databasePath.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) {
             sqlite3_close(db);
@@ -588,7 +589,7 @@ std::string HttpServer::createChatResponse(const std::string& request) const {
 
 std::string HttpServer::chatHistoryResponse() const {
     sqlite3* db = nullptr;
-    if (sqlite3_open(config_.databasePath.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(config_.databasePath.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) {
             sqlite3_close(db);

@@ -6,6 +6,7 @@
 #include "application/TaskService.h"
 #include "infrastructure/storage/repositories/EventRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include <exception>
 #include <algorithm>
@@ -171,7 +172,7 @@ std::string TaskController::createTask(const std::string& request) {
     runOptions.maxRoundsPerStep = std::clamp(options.value("max_rounds_per_step", 3), 1, 6);
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -210,7 +211,7 @@ std::string TaskController::createTask(const std::string& request) {
     const std::string task_id = task.id;
     std::thread([db_path, task_id, session_id, workspace_id, input, runOptions]() {
         sqlite3* worker_db = nullptr;
-        if (sqlite3_open(db_path.c_str(), &worker_db) != SQLITE_OK) {
+        if (openSqliteConnection(db_path.c_str(), &worker_db) != SQLITE_OK) {
             if (worker_db) { sqlite3_close(worker_db); }
             return;
         }
@@ -257,7 +258,7 @@ std::string TaskController::createTask(const std::string& request) {
 
 std::string TaskController::listTasks(const std::string& request) {
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -307,7 +308,7 @@ std::string TaskController::getTask(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -371,7 +372,7 @@ std::string TaskController::cancelTask(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -433,7 +434,7 @@ std::string TaskController::listToolCalls(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(
@@ -493,7 +494,7 @@ std::string TaskController::listEventHistory(const std::string& request) {
     }
 
     sqlite3* db = nullptr;
-    if (sqlite3_open(databasePath_.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) { sqlite3_close(db); }
         return http_response(

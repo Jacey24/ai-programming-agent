@@ -1,6 +1,7 @@
 #include "infrastructure/storage/repositories/LogRepository.h"
 #include "infrastructure/storage/repositories/SessionRepository.h"
 #include "infrastructure/storage/repositories/TaskRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include <sqlite3.h>
 
@@ -30,13 +31,14 @@ public:
 
     void initialize() {
         sqlite3* db = nullptr;
-        if (sqlite3_open(path_.c_str(), &db) != SQLITE_OK) {
+        if (openSqliteConnection(path_.c_str(), &db) != SQLITE_OK) {
             const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
             if (db) {
                 sqlite3_close(db);
             }
             throw std::runtime_error(error);
         }
+        configureSqliteDatabase(db);
 
         try {
             execSql(db, R"SQL(
