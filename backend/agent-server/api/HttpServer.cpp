@@ -370,15 +370,28 @@ std::string HttpServer::handleRequest(const std::string& request) {
     if (request.rfind("GET /api/v1/tasks/", 0) == 0) {
         const std::size_t line_end = request.find("\r\n");
         const std::string request_line = request.substr(0, line_end);
-        if (request_line.find("/logs ") != std::string::npos) {
+        if (request_line.find("/logs ") != std::string::npos ||
+            request_line.find("/logs?") != std::string::npos) {
             LogController controller(config_.databasePath);
             return controller.listLogs(request);
         }
-        if (request_line.find("/file-changes ") != std::string::npos) {
+        if (request_line.find("/tool-calls ") != std::string::npos ||
+            request_line.find("/tool-calls?") != std::string::npos) {
+            TaskController controller(config_.databasePath);
+            return controller.getToolCalls(request);
+        }
+        if (request_line.find("/events/history ") != std::string::npos ||
+            request_line.find("/events/history?") != std::string::npos) {
+            TaskController controller(config_.databasePath);
+            return controller.getEventHistory(request);
+        }
+        if (request_line.find("/file-changes ") != std::string::npos ||
+            request_line.find("/file-changes?") != std::string::npos) {
             FileChangeController controller(config_.databasePath);
             return controller.listFileChanges(request);
         }
-        if (request_line.find("/replay ") != std::string::npos) {
+        if (request_line.find("/replay ") != std::string::npos ||
+            request_line.find("/replay?") != std::string::npos) {
             ReplayController controller(config_.databasePath);
             return controller.getReplay(request);
         }
@@ -386,6 +399,13 @@ std::string HttpServer::handleRequest(const std::string& request) {
         return controller.getTask(request);
     }
     if (request.rfind("POST /api/v1/tasks/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/retry ") != std::string::npos ||
+            request_line.find("/retry?") != std::string::npos) {
+            TaskController controller(config_.databasePath);
+            return controller.retryTask(request);
+        }
         TaskController controller(config_.databasePath);
         return controller.cancelTask(request);
     }
