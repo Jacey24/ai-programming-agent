@@ -6,15 +6,34 @@
 #include "Planner.h"
 
 #include "infrastructure/storage/repositories/LogRepository.h"
+#include "infrastructure/storage/repositories/EventRepository.h"
+#include "infrastructure/storage/repositories/FileChangeRepository.h"
+#include "infrastructure/storage/repositories/ToolCallRepository.h"
 
 #include "application/ToolSystem.h"
 #include "domain/tools/Tool.h"
+#include "event/EventBus.h"
+#include "infrastructure/llm/LlmClient.h"
 
+#include <atomic>
 #include <chrono>
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <ctime>
+#include <exception>
+#include <nlohmann/json.hpp>
 #include <sstream>
 
 namespace codepilot {
+
+namespace {
+bool shouldSkipPlanner(const std::string& goal) {
+    const std::vector<std::string> complexSignals = {"重构", "架构", "多模块", "依赖", "测试失败", "refactor", "architecture", "dependency"};
+    for (const auto& signal : complexSignals) if (goal.find(signal) != std::string::npos) return false;
+    return true;
+}
+} // namespace
 
 Agent::Agent(RoleRegistry& registry, Planner& planner)
     : registry_(registry), planner_(planner) {}
@@ -35,8 +54,32 @@ AgentResult Agent::executeTask(
     // ============================================================
     // 构建规划 prompt → LLM 调用方处理 → parsePlanFromResponse 解析
     // 这里直接走 fallbackPlan 作为降级，同时把 prompt 暴露为 buildPlanningPrompt
-    auto steps = planner_.generatePlan(goal);
+    publishTaskEvent(taskId, EventType::TaskPlanning,
+        "正在分析任务并选择执行方式…", R"({"stage":"planning","status":"running"})");
+
+    std::vector<PlanStep> steps;
+    if (llmClient_ && !shouldSkipPlanner(goal)) {
+        const std::string planningPrompt =
+            planner_.buildPlanningPrompt(goal, toolsDesc_);
+        LlmResponse planningResponse =
+            llmClient_->chat({planningPrompt, "", config_.toolTimeoutSeconds});
+        if (planningResponse.success) {
+            steps = Planner::parsePlanFromResponse(planningResponse.content);
+            context_.push_back("[planning_response] " + planningResponse.content);
+        } else {
+            context_.push_back("[planning_fallback] " + planningResponse.error);
+        }
+    }
+    if (steps.empty()) {
+        steps = shouldSkipPlanner(goal)
+            ? std::vector<PlanStep>{{"executor", "完成用户要求并进行最小验证", false}}
+            : planner_.generatePlan(goal);
+    }
     queue_.loadFromPlan(steps);
+    json planMetadata{{"stage", "planning"}, {"status", "completed"}, {"steps", json::array()}};
+    for (const auto& step : steps) planMetadata["steps"].push_back(step.action);
+    publishTaskEvent(taskId, EventType::AgentMessage,
+        "已生成 " + std::to_string(steps.size()) + " 个执行步骤", planMetadata.dump());
 
     context_.push_back("[plan] 已生成计划: " + planToJson(steps));
 
@@ -48,8 +91,25 @@ AgentResult Agent::executeTask(
     // ============================================================
     // 阶段 2：步骤执行 (Executor)
     // ============================================================
-    while (queue_.hasNext() && static_cast<int>(context_.size()) < config_.maxSteps) {
+    // 用独立的迭代计数器控制上限，避免用 context_ 条数误判导致中途退出
+    int loopIterations = 0;
+    const int maxIterations = config_.maxSteps > 0 ? config_.maxSteps : 6;
+    // 单步工具轮次上限：防止模型在同一步内无限探索（反复 ls/read）而不推进。
+    const int maxRoundsPerStep = config_.maxRoundsPerStep > 0 ? config_.maxRoundsPerStep : 3;
+    std::string currentStepAction;
+    int stepRounds = 0;
+    std::string lastResponse;
+    while (queue_.hasNext() && loopIterations < maxIterations) {
+        ++loopIterations;
         const PlanStep step = queue_.current();
+        publishTaskEvent(taskId, EventType::AgentMessage, "正在执行：" + step.action,
+            json{{"stage", "executing"}, {"step_index", loopIterations}, {"step_total", steps.size()}}.dump());
+        // 跟踪当前步骤的连续轮次；步骤切换时重置计数。
+        if (step.action != currentStepAction) {
+            currentStepAction = step.action;
+            stepRounds = 0;
+        }
+        ++stepRounds;
         const RoleConfig* role = registry_.findByName(step.role);
         if (!role) {
             context_.push_back("[error] role not registered: " + step.role);
@@ -63,7 +123,7 @@ AgentResult Agent::executeTask(
         context_.push_back("[round] " + roundCtx);
 
         // 2b. 构建执行期 Prompt（留接口，刘子恒后续填 LLM 调用）
-        std::string prompt = buildExecutorPrompt(step, *role);
+        std::string prompt = buildExecutorPrompt(step, *role, goal);
         context_.push_back("[prompt] " + prompt);
 
         // 2c. Sprint 2 占位: LLM 调用
@@ -72,6 +132,13 @@ AgentResult Agent::executeTask(
         ParsedResponse parsed = executeSingleStep(
             step, *role, goal, taskId, sessionId, workspaceId, rawLlmOutput);
         context_.push_back("[response] " + rawLlmOutput);
+
+        // 记录最有意义的一段 LLM 输出，作为最终答案候选
+        if (!rawLlmOutput.empty() &&
+            rawLlmOutput.rfind("DONE:", 0) != 0 &&
+            rawLlmOutput.size() > lastResponse.size()) {
+            lastResponse = rawLlmOutput;
+        }
 
         // 2d. 死锁检测
         if (config_.enableDeadlockCheck && !parsed.commands.empty()) {
@@ -108,35 +175,41 @@ AgentResult Agent::executeTask(
             bool anyToolFailed = false;
 
             for (const auto& cmd : parsed.commands) {
-                context_.push_back("[tool] calling: " + cmd.toolName +
+                const std::string toolName = normalizeToolName(cmd.toolName);
+                context_.push_back("[tool] calling: " + toolName +
                     (cmd.toolArgs.empty() ? "" : " with args: " + cmd.toolArgs));
 
                 ToolContext toolCtx;
                 toolCtx.taskId = taskId;
                 toolCtx.sessionId = sessionId;
                 toolCtx.workspaceId = workspaceId;
+                // 让 shell.run / git.* 等工具在工作区根目录下执行，
+                // 与 file.* 工具的相对路径视图保持一致（否则会落到进程 cwd /app）。
+                if (ToolSystem::getInstance().isInitialized()) {
+                    toolCtx.workspacePath =
+                        ToolSystem::getInstance().workspace().rootPath();
+                }
+
+                json toolArgs = buildToolArguments(toolName, cmd.toolArgs);
+                const std::string toolCallId = generateToolCallId();
+                toolCtx.options["tool_call_id"] = toolCallId;
+                toolCtx.options["require_file_write_permission"] = config_.requireFileWritePermission ? "true" : "false";
+                toolCtx.options["auto_run_safe_commands"] = config_.autoRunSafeCommands ? "true" : "false";
+                publishTaskEvent(taskId, EventType::AgentMessage,
+                    "准备调用 " + toolName,
+                    json{{"stage", "tool"}, {"tool_name", toolName}, {"tool_call_id", toolCallId}}.dump());
+
+                // Sprint 2：工具开始事件落库到 task_events（周子涵持久化落库）
 
                 ToolResult toolResult;
                 try {
                     // 调用 ToolSystem 执行工具
                     if (ToolSystem::getInstance().isInitialized()) {
-                        // 将文本参数转为 JSON（简化版）
-                        json args;
-                        if (!cmd.toolArgs.empty()) {
-                            // 尝试解析 JSON 参数
-                            args = json::parse(cmd.toolArgs, nullptr, false);
-                            if (args.is_discarded()) {
-                                // 非 JSON，作为 path 或 command 参数
-                                args["input"] = cmd.toolArgs;
-                            }
-                        }
-
-                        // Sprint 2：带权限检查的工具调用（周子涵 ToolSystem）
                         toolResult = ToolSystem::getInstance().callToolWithPermission(
-                            cmd.toolName, toolCtx, args);
+                            toolName, toolCtx, toolArgs);
                     } else {
                         toolResult.success = true;
-                        toolResult.output = "[mock] tool not initialized, " + cmd.toolName;
+                        toolResult.output = "[mock] tool not initialized, " + toolName;
                     }
                 } catch (const std::exception& e) {
                     toolResult.success = false;
@@ -145,7 +218,7 @@ AgentResult Agent::executeTask(
 
                 // 结果追加到上下文
                 std::ostringstream resultCtx;
-                resultCtx << "[tool_result] " << cmd.toolName << ": ";
+                resultCtx << "[tool_result] " << toolName << ": ";
                 if (toolResult.success) {
                     resultCtx << "success\n" << toolResult.output;
                 } else {
@@ -161,10 +234,30 @@ AgentResult Agent::executeTask(
                         toolResult.success ? "tool_result" : "tool_error",
                         resultCtx.str());
                 }
+
+                // Sprint 2：工具调用落库到 tool_calls（周子涵持久化落库）
+                persistToolCall(taskId, toolName, toolArgs, toolResult);
+
+                if (toolResult.success && isFileMutatingTool(toolName)) {
+                    persistAndPublishFileChange(taskId, toolName, toolArgs);
+                }
+
+                // Sprint 2：工具完成事件落库到 task_events（周子涵持久化落库）
             }
 
             // 工具调用后，继续本步骤的下一轮循环（不 markComplete）
             // 如果工具失败了，也继续让 LLM 看到失败信息后决策
+            // 但若同一步内工具轮次过多（模型在无限探索），强制完成本步以推进任务。
+            if (stepRounds >= maxRoundsPerStep) {
+                context_.push_back(
+                    "[step_forced_done] 步骤 '" + step.action +
+                    "' 已达单步工具轮次上限，自动完成并进入下一步");
+                if (db_) {
+                    LogRepository(db_).createLog(taskId, "step_done",
+                        "步骤达到轮次上限自动完成: " + step.action);
+                }
+                queue_.markComplete();
+            }
             continue;
         }
 
@@ -184,7 +277,8 @@ AgentResult Agent::executeTask(
             if (db_) {
                 LogRepository(db_).createLog(taskId, "step_failed", parsed.failReason);
             }
-            queue_.markComplete();
+            // 步骤失败（含 LLM 调用失败）→ 任务整体失败，避免误报 completed
+            queue_.markFailed();
             continue;
         }
 
@@ -210,6 +304,21 @@ AgentResult Agent::executeTask(
     result.currentStep = steps.empty() ? "none" : steps.back().action;
     result.createdAt = now;
     result.updatedAt = doneTime;
+    result.logs = context_;
+    // 把最终答案带进完成事件，供前端实时展示（而不仅仅是状态）
+    const std::string finalContent =
+        result.status == "completed"
+            ? (lastResponse.empty() ? std::string("Agent task completed") : lastResponse)
+            : std::string("Agent task failed");
+    if (result.status == "completed") {
+        const ParsedResponse finalResponse = ResponseParser::parseAll(finalContent);
+        publishTaskEvent(taskId, EventType::AgentMessage,
+            finalResponse.content.empty() ? "代码已经生成并完成验证。" : finalResponse.content);
+    }
+    publishTaskEvent(taskId,
+        result.status == "completed" ? EventType::TaskCompleted : EventType::TaskFailed,
+        result.status == "completed" ? "任务完成" : finalContent,
+        "{\"status\":\"" + escapeJson(result.status) + "\"}");
     return result;
 }
 
@@ -222,22 +331,62 @@ ParsedResponse Agent::executeSingleStep(
     const std::string& workspaceId,
     std::string& rawLlmOutput)
 {
-    // Sprint 2: 构建 prompt 并模拟 LLM 响应
-    // 真正的 LLM 调用由刘子恒在外部完成
-    std::string prompt = PromptAdapter::buildPrompt(
-        LlmProviderType::Generic, role, goal, step.action,
-        ContextBuilder::formatHistory(context_),
-        toolsDesc_.empty() ? toolsToString(role.visibleTools) : toolsDesc_);
+    // 使用带输出格式约束（<cmd>/DONE/FAIL）的执行期 Prompt，
+    // 与记录到上下文的 [prompt] 保持一致，避免模型照抄历史里的 <plan> 结构。
+    std::string prompt = buildExecutorPrompt(step, role, goal);
 
-    // Mock LLM 响应（占位，刘子恒替换此处）
-    rawLlmOutput = "<cmd>LIST</cmd>\nDONE: 步骤 '" + step.action + "' 已完成（mock）";
+    // Prefer the configured LLM client; fall back to a deterministic local result.
+    if (llmClient_) {
+        LlmResponse response =
+            llmClient_->chat({prompt, "", config_.toolTimeoutSeconds});
+        if (response.success && !response.content.empty()) {
+            rawLlmOutput = response.content;
+            return ResponseParser::parseAll(rawLlmOutput);
+        }
+        // LLM 调用失败（如额度耗尽 SetLimitExceeded、网络错误等）：如实标记步骤失败，
+        // 不再伪造 DONE 让任务假装成功完成。
+        const std::string reason =
+            response.error.empty() ? "LLM 未返回内容" : response.error;
+        context_.push_back("[llm_fallback] " + reason);
+        rawLlmOutput = "FAIL: LLM 调用失败: " + reason;
+        return ResponseParser::parseAll(rawLlmOutput);
+    }
+
+    // 未配置 LLM 客户端（纯 mock/测试模式）：返回确定性完成结果。
+    rawLlmOutput = "DONE: step '" + step.action + "' completed by mock fallback";
 
     return ResponseParser::parseAll(rawLlmOutput);
 }
 
+namespace {
+
+// 为可见工具提供简明的参数用法提示，帮助模型正确构造 <cmd> 调用。
+std::string describeToolUsage(const std::string& tool) {
+    if (tool == "file.list")
+        return " —— 列出目录。参数: {\"path\":\".\",\"depth\":2}";
+    if (tool == "file.read")
+        return " —— 读取文件。参数: {\"path\":\"a.py\"}";
+    if (tool == "file.write")
+        return " —— 覆盖写入文件（创建/写入代码首选）。参数: "
+               "{\"path\":\"a.py\",\"content\":\"...\"}";
+    if (tool == "file.apply_patch")
+        return " —— 对已有文件应用 diff 补丁。参数: "
+               "{\"file_path\":\"a.py\",\"patch\":\"<unified diff>\"}";
+    if (tool == "shell.run")
+        return " —— 执行 shell 命令。参数: {\"command\":\"ls -la\"}";
+    if (tool == "git.status")
+        return " —— 查看 git 状态（无参数）";
+    if (tool == "git.diff")
+        return " —— 查看 git diff（无参数）";
+    return "";
+}
+
+} // namespace
+
 std::string Agent::buildExecutorPrompt(
     const PlanStep& step,
-    const RoleConfig& role) const {
+    const RoleConfig& role,
+    const std::string& goal) const {
     std::string prompt;
 
     // System Prompt — 来自角色配置
@@ -245,31 +394,59 @@ std::string Agent::buildExecutorPrompt(
 
     // 上下文信息
     prompt += "## 系统信息\n";
-    prompt += "当前工作区: workspace\n\n";
+    prompt += "当前工作区: workspace（所有相对路径基于工作区根目录）\n\n";
 
-    // 已完成步骤摘要
-    prompt += "## 已完成步骤\n";
-    if (context_.empty()) {
-        prompt += "（无）\n";
-    } else {
-        for (size_t i = 0; i < context_.size() && i < 10; ++i) {
-            prompt += context_[i] + "\n";
+    // 已完成步骤摘要：过滤掉规划噪声，仅保留工具结果/最终答案/错误，取最近若干条，
+    // 避免历史里的 <plan> 结构污染上下文导致模型照抄或重复调用。
+    prompt += "## 已完成的操作与结果\n";
+    {
+        std::vector<std::string> relevant;
+        for (const auto& entry : context_) {
+            if (entry.rfind("[tool_result]", 0) == 0 ||
+                entry.rfind("[tool]", 0) == 0 ||
+                entry.rfind("[final]", 0) == 0 ||
+                entry.rfind("[error]", 0) == 0) {
+                relevant.push_back(entry);
+            }
         }
-        if (context_.size() > 10) {
-            prompt += "... (共 " + std::to_string(context_.size()) + " 条上下文记录)\n";
+        if (relevant.empty()) {
+            prompt += "（尚无已完成操作）\n";
+        } else {
+            const size_t maxShow = 8;
+            const size_t start =
+                relevant.size() > maxShow ? relevant.size() - maxShow : 0;
+            for (size_t i = start; i < relevant.size(); ++i) {
+                std::string line = relevant[i];
+                if (line.size() > 500) {
+                    line = line.substr(0, 500) + " …(截断)";
+                }
+                prompt += line + "\n";
+            }
         }
     }
     prompt += "\n";
 
     // 当前任务
+    prompt += "## 用户原始需求\n";
+    prompt += goal + "\n\n";
+
+    prompt += "## 编程任务成果交付规则\n";
+    prompt += "1. 用户要求编写、生成或实现代码时，必须将代码写入 workspace 中的真实文件。\n";
+    prompt += "2. 用户未指定文件名时，根据语言和任务生成合理文件名。\n";
+    prompt += "3. 不允许只在 DONE 中输出代码而不创建或修改文件。\n";
+    prompt += "4. 写入文件后，使用 file.read 检查文件内容。\n";
+    prompt += "5. 可以运行时，使用 shell.run 执行最小验证。\n";
+    prompt += "6. 文件成功创建并验证后，立即返回 DONE，不要重复 file.list 或 file.read。\n";
+    prompt += "7. 同一目录最多探索一次；确认目标文件不存在后应直接创建。\n\n";
+
     prompt += "## 当前步骤\n";
     prompt += step.action + "\n\n";
 
-    // 可用工具（按角色可见性过滤）
-    prompt += "## 可用工具\n";
+    // 可用工具（按角色可见性过滤，附带参数用法）
+    prompt += "## 可用工具（只能使用以下工具）\n";
     if (!role.visibleTools.empty()) {
         for (const auto& t : role.visibleTools) {
-            prompt += "  - " + t + "\n";
+            prompt += "  - " + t + describeToolUsage(t) + "\n";
         }
     } else {
         prompt += "（无特殊工具限制）\n";
@@ -277,16 +454,19 @@ std::string Agent::buildExecutorPrompt(
     prompt += "\n";
 
     // 输出格式约束
-    prompt += "## 输出格式\n";
-    prompt += "请使用以下 XML 标签输出你的操作：\n\n";
-    prompt += "<cmd>TOOL_NAME arguments...</cmd>\n";
-    prompt += "  - 调用工具执行操作\n";
-    prompt += "  - 可以一次输出多个 <cmd>\n\n";
+    prompt += "## 输出格式（严格遵守）\n";
+    prompt += "调用工具时用 <cmd> 标签，参数使用 JSON 对象，例如创建代码文件：\n";
+    prompt += "<cmd>file.write {\"path\":\"bubble_sort.py\",\"content\":\""
+              "def bubble_sort(a):\\n    ...\"}</cmd>\n";
+    prompt += "  - content 内的换行写作 \\n，双引号写作 \\\"\n";
+    prompt += "  - 一次可输出多个 <cmd>\n";
+    prompt += "  - 已成功完成的操作不要重复调用\n";
+    prompt += "  - 禁止输出 <plan> 标签（规划阶段已结束）\n\n";
     prompt += "DONE: 完成总结\n";
-    prompt += "  - 当步骤完成时使用\n\n";
+    prompt += "  - 当前步骤已完成时使用\n\n";
     prompt += "FAIL: 失败原因\n";
-    prompt += "  - 当步骤无法继续时使用\n\n";
-    prompt += "请输出你的操作：";
+    prompt += "  - 步骤无法继续时使用\n\n";
+    prompt += "请仅输出你的操作：";
 
     return prompt;
 }
@@ -300,6 +480,330 @@ bool Agent::isDeadlock(const std::vector<ParsedCommand>& commands) const {
         if (commands[i].toolArgs != prevCommands_[i].toolArgs) return false;
     }
     return true;
+}
+
+void Agent::publishTaskEvent(const std::string& taskId, EventType eventType,
+    const std::string& content, const std::string& metadataJson) const {
+    json metadata = json::parse(metadataJson, nullptr, false);
+    if (metadata.is_discarded()) {
+        metadata = json::object();
+    }
+
+    // Sprint 2：任务生命周期事件落库到 task_events（周子涵持久化落库）
+    EventData event = EventData::Create(taskId, eventType, content, metadata);
+    persistTaskEvent(event);
+
+    // 推送到 EventBus，供 SSE 实时展示
+    if (!ToolSystem::getInstance().isInitialized()) {
+        return;
+    }
+    ToolSystem::getInstance().eventBus().publish(event);
+}
+
+AgentResult Agent::executeDirectAnswer(
+    const std::string& taskId, const std::string& sessionId,
+    const std::string& workspaceId, const std::string& goal) {
+    const std::string now = iso8601Now();
+    publishTaskEvent(taskId, EventType::TaskPlanning, "已识别为直接回答任务。",
+        R"({"stage":"planning","status":"completed","mode":"answer"})");
+    const std::string prompt = "你是编程助手。\n请直接回答用户问题。\n代码必须使用 Markdown 代码块。\n不要创建文件，不要调用工具，不要输出计划标签或命令标签。\n\n用户请求：\n" + goal;
+    std::string answer;
+    if (llmClient_) {
+        const LlmResponse response = llmClient_->chat({prompt, "", config_.toolTimeoutSeconds});
+        answer = response.success ? response.content : "无法生成回答：" + response.error;
+    } else {
+        answer = "当前未配置 LLM，无法生成直接回答。";
+    }
+    publishTaskEvent(taskId, EventType::AgentMessage, answer,
+        R"({"stage":"answer","status":"completed"})");
+    publishTaskEvent(taskId, EventType::TaskCompleted, "任务完成",
+        R"({"status":"completed"})");
+    AgentResult result;
+    result.taskId = taskId; result.sessionId = sessionId; result.workspaceId = workspaceId;
+    result.goal = goal; result.status = "completed"; result.planJson = "[]";
+    result.currentStep = "answered"; result.createdAt = now; result.updatedAt = iso8601Now();
+    return result;
+}
+
+void Agent::persistTaskEvent(const EventData& event) const {
+    if (!db_) {
+        return;
+    }
+    try {
+        EventRepository(db_).create(
+            event.id, event.taskId, event.typeToString(),
+            event.content, event.metadata.dump());
+    } catch (const std::exception&) {
+        // 落库失败不阻断任务执行
+    }
+}
+
+void Agent::persistToolCall(const std::string& taskId, const std::string& toolName,
+    const json& arguments, const ToolResult& result) const {
+    if (!db_) {
+        return;
+    }
+    try {
+        ToolCallRepository(db_).create(
+            generateToolCallId(), taskId, toolName, arguments.dump(),
+            result.success,
+            result.success ? result.output : result.error,
+            result.exitCode);
+    } catch (const std::exception&) {
+        // 落库失败不阻断任务执行
+    }
+}
+
+void Agent::persistAndPublishFileChange(const std::string& taskId,
+    const std::string& toolName, const json& arguments) const {
+    const std::string path = extractChangedPath(toolName, arguments);
+    if (path.empty()) {
+        return;
+    }
+
+    const std::string changeType = inferChangeType(toolName);
+    if (db_) {
+        try {
+            FileChangeRepository(db_).create(
+                generateFileChangeId(), taskId, path, changeType, "");
+        } catch (const std::exception&) {
+            // File change persistence should not block the tool result.
+        }
+    }
+
+    publishTaskEvent(taskId, EventType::FileChanged,
+        "File changed: " + path,
+        json{{"path", path},
+             {"change_type", changeType},
+             {"tool_name", toolName}}.dump());
+}
+
+std::string Agent::generateEventId() {
+    static std::atomic<std::uint64_t> counter{0};
+    const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
+    return "event_" + std::to_string(ts) + "_" + std::to_string(++counter);
+}
+
+std::string Agent::generateToolCallId() {
+    static std::atomic<std::uint64_t> counter{0};
+    const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
+    return "toolcall_" + std::to_string(ts) + "_" + std::to_string(++counter);
+}
+
+std::string Agent::generateFileChangeId() {
+    static std::atomic<std::uint64_t> counter{0};
+    const auto ts = std::chrono::steady_clock::now().time_since_epoch().count();
+    return "filechange_" + std::to_string(ts) + "_" + std::to_string(++counter);
+}
+
+bool Agent::isFileMutatingTool(const std::string& toolName) {
+    return toolName == "file.write" ||
+           toolName == "file.apply_patch" ||
+           toolName == "file.mkdir" ||
+           toolName == "file.remove" ||
+           toolName == "file.rmdir" ||
+           toolName == "file.move" ||
+           toolName == "file.copy";
+}
+
+std::string Agent::extractChangedPath(const std::string& toolName, const json& arguments) {
+    const auto readString = [&](const char* key) -> std::string {
+        if (arguments.contains(key) && arguments.at(key).is_string()) {
+            return arguments.at(key).get<std::string>();
+        }
+        return "";
+    };
+
+    if (toolName == "file.apply_patch") {
+        const std::string filePath = readString("file_path");
+        if (!filePath.empty()) {
+            return filePath;
+        }
+    }
+    if (toolName == "file.move" || toolName == "file.copy") {
+        const std::string destination = readString("destination");
+        if (!destination.empty()) {
+            return destination;
+        }
+        const std::string to = readString("to");
+        if (!to.empty()) {
+            return to;
+        }
+    }
+
+    const std::string path = readString("path");
+    if (!path.empty()) {
+        return path;
+    }
+    return readString("file_path");
+}
+
+std::string Agent::inferChangeType(const std::string& toolName) {
+    if (toolName == "file.remove" || toolName == "file.rmdir") {
+        return "deleted";
+    }
+    if (toolName == "file.move") {
+        return "moved";
+    }
+    if (toolName == "file.copy" || toolName == "file.write" || toolName == "file.mkdir") {
+        return "created";
+    }
+    return "modified";
+}
+
+std::string Agent::normalizeToolName(const std::string& name) {
+    std::string normalized = name;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+    if (normalized == "list") return "file.list";
+    if (normalized == "read") return "file.read";
+    if (normalized == "write") return "file.write";
+    if (normalized == "patch") return "file.apply_patch";
+    if (normalized == "shell") return "shell.run";
+    if (normalized == "git_status") return "git.status";
+    if (normalized == "git_diff") return "git.diff";
+    return name;
+}
+
+json Agent::buildToolArguments(const std::string& toolName, const std::string& rawArgs) {
+    // 1. 空参数
+    if (rawArgs.empty()) {
+        return json::object();
+    }
+
+    // 2. 直接是合法 JSON 对象（<cmd>shell.run {"command":"ls"}</cmd>）
+    {
+        json parsed = json::parse(rawArgs, nullptr, false);
+        if (!parsed.is_discarded() && parsed.is_object()) {
+            return parsed;
+        }
+    }
+
+    // 3. key=value 形式（LLM 常用：<cmd>shell.run command="ls -la /"</cmd>、
+    //    <cmd>file.list depth=2</cmd>）。解析为 JSON 对象并做标量类型推断。
+    json kv = parseKeyValueArgs(rawArgs);
+    if (!kv.empty()) {
+        return kv;
+    }
+
+    // 4. 裸参数按工具类型包装（<cmd>shell.run ls -la /</cmd>、<cmd>cd workspace</cmd>）
+    json args = json::object();
+    if (toolName == "shell.run") {
+        args["command"] = rawArgs;
+    } else if (toolName == "file.read" || toolName == "file.list" ||
+               toolName == "cd") {
+        args["path"] = rawArgs;
+    } else if (toolName == "file.apply_patch") {
+        args["patch"] = rawArgs;
+    } else {
+        args["input"] = rawArgs;
+    }
+    return args;
+}
+
+// 解析 "key=value key2=\"value with spaces\"" 形式的参数为 JSON 对象。
+// 若首个 token 不是 key= 形式，返回空对象表示"非 key=value 格式"。
+json Agent::parseKeyValueArgs(const std::string& raw) {
+    json obj = json::object();
+    const std::size_t n = raw.size();
+    std::size_t i = 0;
+    const auto isKeyChar = [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' ||
+               c == '.';
+    };
+
+    while (i < n) {
+        while (i < n && std::isspace(static_cast<unsigned char>(raw[i]))) {
+            i++;
+        }
+        if (i >= n) {
+            break;
+        }
+
+        // 读取 key
+        const std::size_t keyStart = i;
+        while (i < n && isKeyChar(raw[i])) {
+            i++;
+        }
+        if (i == keyStart || i >= n || raw[i] != '=') {
+            // 不是 key=value 结构，判定为非该格式
+            return json::object();
+        }
+        const std::string key = raw.substr(keyStart, i - keyStart);
+        i++; // 跳过 '='
+
+        std::string value;
+        if (i < n && (raw[i] == '"' || raw[i] == '\'')) {
+            // 引号包裹的值
+            const char quote = raw[i++];
+            const std::size_t valStart = i;
+            while (i < n && raw[i] != quote) {
+                i++;
+            }
+            value = raw.substr(valStart, i - valStart);
+            if (i < n) {
+                i++; // 跳过收尾引号
+            }
+        } else {
+            // 未加引号：值延伸到下一个 " key=" token 或字符串结尾
+            const std::size_t valStart = i;
+            std::size_t valEnd = n;
+            std::size_t scan = i;
+            while (scan < n) {
+                if (std::isspace(static_cast<unsigned char>(raw[scan]))) {
+                    std::size_t j = scan;
+                    while (j < n &&
+                           std::isspace(static_cast<unsigned char>(raw[j]))) {
+                        j++;
+                    }
+                    const std::size_t kStart = j;
+                    while (j < n && isKeyChar(raw[j])) {
+                        j++;
+                    }
+                    if (j > kStart && j < n && raw[j] == '=') {
+                        valEnd = scan;
+                        break;
+                    }
+                }
+                scan++;
+            }
+            i = valEnd;
+            value = raw.substr(valStart, valEnd - valStart);
+        }
+
+        obj[key] = coerceScalar(value);
+    }
+
+    return obj;
+}
+
+// 标量类型推断：纯整数 → 整数，true/false → 布尔，其余 → 字符串。
+json Agent::coerceScalar(const std::string& value) {
+    if (value == "true") {
+        return true;
+    }
+    if (value == "false") {
+        return false;
+    }
+    if (!value.empty()) {
+        const std::size_t start = (value[0] == '-') ? 1 : 0;
+        bool numeric = start < value.size();
+        for (std::size_t k = start; k < value.size(); ++k) {
+            if (std::isdigit(static_cast<unsigned char>(value[k])) == 0) {
+                numeric = false;
+                break;
+            }
+        }
+        if (numeric) {
+            try {
+                return json(static_cast<std::int64_t>(std::stoll(value)));
+            } catch (const std::exception&) {
+                // 溢出等异常时退回字符串
+            }
+        }
+    }
+    return json(value);
 }
 
 std::string Agent::toolsToString(const std::vector<std::string>& tools) {

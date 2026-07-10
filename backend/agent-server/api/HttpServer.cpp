@@ -1,4 +1,5 @@
 #include "api/HttpServer.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include "api/controllers/LogController.h"
 #include "api/controllers/FileChangeController.h"
@@ -8,20 +9,34 @@
 #include "api/controllers/TaskController.h"
 #include "api/controllers/ToolController.h"
 #include "api/controllers/WorkspaceController.h"
+#include "api/controllers/WorkspaceFileController.h"
+
+#include "application/TaskService.h"
+#include "application/ToolSystem.h"
+#include "event/EventBus.h"
+#include "infrastructure/storage/repositories/EventRepository.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstring>
 #include <cerrno>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <thread>
 #include <utility>
 
+#include <nlohmann/json.hpp>
 #include <sqlite3.h>
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 namespace {
 
@@ -64,6 +79,35 @@ std::string options_response() {
 
 std::string not_found_response() {
     return http_response(R"({"success":false,"error":{"code":"NOT_FOUND","message":"Endpoint not found"}})", "404 Not Found");
+}
+
+// 识别实时 SSE 请求：GET /api/v1/tasks/{id}/events（不包括 /events/history）
+bool is_sse_events_request(const std::string& request, std::string& task_id) {
+    if (request.rfind("GET /api/v1/tasks/", 0) != 0) {
+        return false;
+    }
+    const std::size_t line_end = request.find("\r\n");
+    const std::string line = request.substr(0, line_end);
+    const std::size_t path_start = 4;  // 跳过 "GET "
+    const std::size_t sp = line.find(' ', path_start);
+    if (sp == std::string::npos) {
+        return false;
+    }
+    std::string path = line.substr(path_start, sp - path_start);
+    const std::size_t q = path.find('?');
+    if (q != std::string::npos) {
+        path = path.substr(0, q);
+    }
+    const std::string prefix = "/api/v1/tasks/";
+    const std::string suffix = "/events";
+    if (path.size() <= prefix.size() + suffix.size()) {
+        return false;
+    }
+    if (path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    task_id = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
+    return !task_id.empty();
 }
 
 std::string extract_json_string(const std::string& body, const std::string& key) {
@@ -213,7 +257,19 @@ int HttpServer::run(const std::atomic_bool& running) {
             if (client_fd >= 0) {
                 std::thread([this, client_fd]() {
                     const std::string request = read_http_request(client_fd);
-                    const std::string response = request.empty() ? not_found_response() : handleRequest(request);
+                    if (request.empty()) {
+                        const std::string response = not_found_response();
+                        send(client_fd, response.data(), response.size(), 0);
+                        close(client_fd);
+                        return;
+                    }
+                    std::string sse_task_id;
+                    if (is_sse_events_request(request, sse_task_id)) {
+                        // SSE 长连接：streamTaskEvents 自行管理 socket 生命周期并关闭
+                        streamTaskEvents(client_fd, sse_task_id);
+                        return;
+                    }
+                    const std::string response = handleRequest(request);
                     send(client_fd, response.data(), response.size(), 0);
                     close(client_fd);
                 }).detach();
@@ -256,6 +312,16 @@ std::string HttpServer::handleRequest(const std::string& request) {
         return controller.createWorkspace(request);
     }
     if (request.rfind("GET /api/v1/workspaces/", 0) == 0) {
+        const std::size_t line_end = request.find("\r\n");
+        const std::string request_line = request.substr(0, line_end);
+        if (request_line.find("/files/tree") != std::string::npos) {
+            WorkspaceFileController controller(config_.databasePath);
+            return controller.getTree(request);
+        }
+        if (request_line.find("/files/content") != std::string::npos) {
+            WorkspaceFileController controller(config_.databasePath);
+            return controller.getFileContent(request);
+        }
         WorkspaceController controller(config_.databasePath);
         return controller.getWorkspace(request);
     }
@@ -286,6 +352,14 @@ std::string HttpServer::handleRequest(const std::string& request) {
         if (request_line.find("/replay ") != std::string::npos) {
             ReplayController controller(config_.databasePath);
             return controller.getReplay(request);
+        }
+        if (request_line.find("/tool-calls ") != std::string::npos) {
+            TaskController controller(config_.databasePath);
+            return controller.listToolCalls(request);
+        }
+        if (request_line.find("/events/history ") != std::string::npos) {
+            TaskController controller(config_.databasePath);
+            return controller.listEventHistory(request);
         }
         TaskController controller(config_.databasePath);
         return controller.getTask(request);
@@ -323,6 +397,139 @@ std::string HttpServer::handleRequest(const std::string& request) {
     return not_found_response();
 }
 
+void HttpServer::streamTaskEvents(int client_fd, const std::string& task_id) {
+    using nlohmann::json;
+
+    // 1) 发送 SSE 响应头
+    const std::string headers =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/event-stream; charset=utf-8\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+        "Access-Control-Allow-Headers: Content-Type\r\n"
+        "Connection: keep-alive\r\n\r\n";
+    if (send(client_fd, headers.data(), headers.size(), MSG_NOSIGNAL) < 0) {
+        close(client_fd);
+        return;
+    }
+
+    std::mutex write_mutex;
+    std::atomic_bool alive{true};
+    std::atomic_bool done{false};
+
+    auto is_terminal = [](const std::string& type) {
+        return type == "task_completed" || type == "task_failed" ||
+               type == "task_cancelled";
+    };
+
+    auto write_frame = [&](const std::string& event_name, const std::string& data) {
+        std::lock_guard<std::mutex> lock(write_mutex);
+        if (!alive.load()) {
+            return;
+        }
+        std::string frame = "event: " + event_name + "\ndata: " + data + "\n\n";
+        if (send(client_fd, frame.data(), frame.size(), MSG_NOSIGNAL) < 0) {
+            alive.store(false);
+        }
+    };
+
+    // 2) 先订阅 EventBus 实时事件，再回放历史，避免二者之间的竞态窗口漏掉事件
+    ListenerId listener_id = 0;
+    bool subscribed = false;
+    if (ToolSystem::getInstance().isInitialized()) {
+        EventBus& bus = ToolSystem::getInstance().eventBus();
+        listener_id = bus.subscribeByTaskId(task_id, [&](const EventData& ev) {
+            const std::string type = ev.typeToString();
+            json data;
+            data["id"] = ev.id;
+            data["task_id"] = ev.taskId;
+            data["type"] = type;
+            data["content"] = ev.content;
+            data["metadata"] = ev.metadata;
+            data["created_at"] = ev.createdAt;
+            write_frame(type, data.dump());
+            if (is_terminal(type)) {
+                done.store(true);
+            }
+        });
+        subscribed = true;
+    }
+
+    // 3) 回放已落库的历史事件（覆盖 SSE 连接建立前已经发生的事件）
+    {
+        sqlite3* db = nullptr;
+        if (openSqliteConnection(config_.databasePath.c_str(), &db) == SQLITE_OK) {
+            try {
+                EventRepository repo(db);
+                for (const auto& ev : repo.findByTaskId(task_id)) {
+                    json data;
+                    data["id"] = ev.id;
+                    data["task_id"] = ev.task_id;
+                    data["type"] = ev.type;
+                    data["content"] = ev.content;
+                    json metadata = json::parse(ev.metadata, nullptr, false);
+                    if (metadata.is_discarded()) {
+                        metadata = json::object();
+                    }
+                    data["metadata"] = metadata;
+                    data["created_at"] = ev.created_at;
+                    write_frame(ev.type, data.dump());
+                    if (is_terminal(ev.type)) {
+                        done.store(true);
+                    }
+                }
+            } catch (...) {
+                // 历史回放失败不影响实时订阅
+            }
+            sqlite3_close(db);
+        }
+    }
+
+    // 4) 心跳保活 + 结束检测
+    int ticks = 0;
+    while (alive.load() && !done.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        {
+            std::lock_guard<std::mutex> lock(write_mutex);
+            const std::string ping = ": ping\n\n";
+            if (send(client_fd, ping.data(), ping.size(), MSG_NOSIGNAL) < 0) {
+                alive.store(false);
+                break;
+            }
+        }
+        // 兜底：定期查询任务状态，防止漏收终态事件导致连接长期挂起
+        if (++ticks % 3 == 0) {
+            sqlite3* db = nullptr;
+            if (openSqliteConnection(config_.databasePath.c_str(), &db) == SQLITE_OK) {
+                try {
+                    TaskService service(db);
+                    auto record = service.getTask(task_id);
+                    if (record && (record->status == "completed" ||
+                                   record->status == "failed" ||
+                                   record->status == "cancelled")) {
+                        done.store(true);
+                    }
+                } catch (...) {
+                }
+                sqlite3_close(db);
+            }
+        }
+    }
+
+    // 5) 取消订阅并关闭连接
+    if (subscribed) {
+        ToolSystem::getInstance().eventBus().unsubscribe(listener_id);
+    }
+    {
+        std::lock_guard<std::mutex> lock(write_mutex);
+        const std::string end_frame =
+            "event: stream_end\ndata: {\"type\":\"stream_end\"}\n\n";
+        send(client_fd, end_frame.data(), end_frame.size(), MSG_NOSIGNAL);
+    }
+    close(client_fd);
+}
+
 std::string HttpServer::healthResponse() const {
     std::ostringstream body;
     body << R"({"success":true,"data":{"status":"ok","service":"codepilot-agent-server","version":"0.1.0","database":{"type":"sqlite","connected":)"
@@ -343,7 +550,7 @@ std::string HttpServer::createChatResponse(const std::string& request) const {
 
     constexpr const char* ai_response = "pending development";
     sqlite3* db = nullptr;
-    if (sqlite3_open(config_.databasePath.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(config_.databasePath.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) {
             sqlite3_close(db);
@@ -382,7 +589,7 @@ std::string HttpServer::createChatResponse(const std::string& request) const {
 
 std::string HttpServer::chatHistoryResponse() const {
     sqlite3* db = nullptr;
-    if (sqlite3_open(config_.databasePath.c_str(), &db) != SQLITE_OK) {
+    if (openSqliteConnection(config_.databasePath.c_str(), &db) != SQLITE_OK) {
         const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
         if (db) {
             sqlite3_close(db);
