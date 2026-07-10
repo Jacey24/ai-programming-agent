@@ -81,8 +81,17 @@ std::string EventData::serialize() const {
 EventData EventData::Create(const std::string &taskId, EventType type,
                             const std::string &content, const json &metadata) {
   static std::atomic<std::uint64_t> counter{0};
+
+  // Event IDs are persisted in SQLite. A process-local sequence alone starts
+  // over after a restart and can therefore collide with IDs already stored in
+  // a mounted database.
+  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+
   EventData data;
-  data.id = "event_" + std::to_string(++counter);
+  data.id = "event_" + std::to_string(timestamp) + "_" +
+            std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
   data.taskId = taskId;
   data.type = type;
   data.content = content;
@@ -124,7 +133,7 @@ ListenerId EventBus::subscribeByTaskId(const std::string &taskId,
                                        EventListener listener) {
   std::lock_guard<std::mutex> lock(mutex_);
   ListenerId id = nextId_++;
-  subscriptions_.push_back({id, EventType::TaskCreated, false, false, taskId,
+  subscriptions_.push_back({id, EventType::TaskCreated, true, false, taskId,
                             false, std::move(listener)});
   return id;
 }

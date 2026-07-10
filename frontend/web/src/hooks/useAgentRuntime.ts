@@ -196,7 +196,8 @@ export function useAgentRuntime(options: {
           }
         } catch (error) {
           dispatch({ type: "submitError", error: messageFromError(error) });
-          stopPolling();
+          // Keep the interval alive after a transient request error. The task
+          // may still complete on the backend while the next poll succeeds.
         } finally {
           pollInFlight.current = false;
         }
@@ -240,9 +241,16 @@ export function useAgentRuntime(options: {
 
         dispatch({ type: "eventReceived", event: { ...event, id: event.id || eventId } });
 
-        if (event.type === "permission_required" || event.type === "tool_finished" || event.type === "file_changed") {
-            void refreshArtifacts(taskId);
+        if (event.type === "permission_required" || event.type === "permission_resolved") {
           void refreshPermissions(taskId);
+        }
+
+        if (event.type === "tool_finished" || event.type === "file_changed") {
+          void refreshArtifacts(taskId);
+        }
+
+        if (event.type === "permission_resolved") {
+          void getTask(taskId).then((task) => dispatch({ type: "taskUpdated", task })).catch(() => undefined);
         }
 
         if (event.type === "file_changed") {
