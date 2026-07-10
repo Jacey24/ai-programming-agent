@@ -60,4 +60,31 @@ TaskRecord TaskService::cancelTask(const std::string& task_id) {
     return getTask(task_id).value();
 }
 
+std::vector<ToolCallRecord> TaskService::getToolCalls(const std::string& task_id) {
+    // 先确认 task 存在
+    auto task = getTask(task_id);
+    if (!task) {
+        throw std::runtime_error("task not found");
+    }
+    ToolCallRepository repo(db_);
+    return repo.findByTaskId(task_id);
+}
+
+std::vector<EventData> TaskService::getEventHistory(const std::string& task_id,
+                                                    EventBus& eventBus) {
+    auto task = getTask(task_id);
+    if (!task) {
+        throw std::runtime_error("task not found");
+    }
+    return eventBus.getHistory(task_id);
+}
+
+TaskRecord TaskService::retryTask(const std::string& task_id) {
+    const auto old = getTask(task_id);
+    if (!old) {
+        throw std::runtime_error("task not found");
+    }
+    return createTask(old->session_id, old->workspace_id, old->goal);
+}
+
 } // namespace codepilot
