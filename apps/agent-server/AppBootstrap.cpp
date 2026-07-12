@@ -1,9 +1,8 @@
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
-#include "infrastructure/storage/repositories/EventRepository.h"
-#include "infrastructure/storage/repositories/FileChangeRepository.h"
-#include "infrastructure/storage/repositories/PermissionRepository.h"
-#include "infrastructure/storage/repositories/ToolCallRepository.h"
+#include "facade/DataAccessFacade.h"
+#include "facade/LlmClientFacade.h"
+#include "facade/SSEGateway.h"
 #include "infrastructure/storage/SqliteConnection.h"
 
 #include "common/logging/Logger.h"
@@ -164,17 +163,7 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     return false;
   }
 
-  try {
-    PermissionRepository(db).initTable();
-    ToolCallRepository(db).initTable();
-    EventRepository(db).initTable();
-    FileChangeRepository(db).initTable();
-  } catch (const std::exception &init_error) {
-    error = init_error.what();
-    sqlite3_close(db);
-    return false;
-  }
-
+  // 表结构由 DataAccessFacade 统一管理，此处仅做健康检查
   sqlite3_stmt *stmt = nullptr;
   const int prepare_result = sqlite3_prepare_v2(
       db, "SELECT COUNT(*) FROM system_health;", -1, &stmt, nullptr);
@@ -210,6 +199,17 @@ int run_agent_server(const std::string &config_path) {
   const bool database_connected =
       initialize_database(database_path, database_error);
   codepilot::ToolSystem::getInstance().init(workspace_root, config_path);
+
+  // 初始化存储门面
+  codepilot::DataAccessFacade::getInstance().init(database_path);
+
+  // 初始化通信门面（绑定 EventBus + DataAccessFacade）
+  codepilot::SSEGateway::getInstance().init(
+      &codepilot::ToolSystem::getInstance().eventBus(),
+      &codepilot::DataAccessFacade::getInstance());
+
+  // 初始化 LLM 门面（加载 llm.json + llm.local.json）
+  codepilot::LlmClientFacade::getInstance().init("config/llm.json");
 
   LOG_INFO("CodePilot Agent Server starting");
   LOG_INFO("Config: {}", config_path);

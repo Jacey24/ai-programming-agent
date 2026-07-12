@@ -20,6 +20,9 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/TaskService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/WorkspaceService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/DataAccessFacade.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/LlmClientFacade.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/SSEGateway.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Agent.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ContextBuilder.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Planner.cpp
@@ -60,6 +63,7 @@ target_include_directories(codepilot-agent-server PRIVATE
     ${CMAKE_SOURCE_DIR}/backend/agent-server
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
     ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
+    ${CMAKE_SOURCE_DIR}/third_party/sqlite3
     ${CMAKE_SOURCE_DIR}/modules
 )
 
