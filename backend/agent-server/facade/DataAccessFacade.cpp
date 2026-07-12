@@ -29,6 +29,18 @@ DataAccessFacade::~DataAccessFacade() {
 }
 
 // ============================================================
+// ISO 8601 时间戳（集中实现，消除重复）
+// ============================================================
+std::string DataAccessFacade::iso8601Now() {
+  auto t =
+      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm *tm = std::gmtime(&t);
+  char buf[32];
+  std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
+  return std::string(buf);
+}
+
+// ============================================================
 // ID 生成
 // ============================================================
 std::string DataAccessFacade::generateId(const std::string &prefix) const {
@@ -93,6 +105,15 @@ void DataAccessFacade::createAllTables() {
   PermissionRepository(db_).initTable();
   FileChangeRepository(db_).initTable();
   LogRepository(db_).initTable();
+
+  // task_contexts 表（用于主循环中断恢复）
+  sqlite3_exec(db_,
+               "CREATE TABLE IF NOT EXISTS task_contexts ("
+               "  task_id TEXT PRIMARY KEY,"
+               "  context_json TEXT NOT NULL,"
+               "  updated_at TEXT NOT NULL"
+               ");",
+               nullptr, nullptr, nullptr);
 }
 
 // ============================================================
@@ -108,14 +129,7 @@ bool DataAccessFacade::isDatabaseConnected() {
 // ============================================================
 SessionRecord DataAccessFacade::createSession(const std::string &title) {
   std::lock_guard<std::mutex> lock(mutex_);
-  const auto now = [&]() {
-    auto t =
-        std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm *tm = std::gmtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-    return std::string(buf);
-  }();
+  const std::string now = iso8601Now();
   return SessionRepository(db_).createSession(generateId("session"), title, now,
                                               now);
 }
@@ -157,14 +171,7 @@ TaskRecord DataAccessFacade::createTask(const std::string &sessionId,
                                         const std::string &workspaceId,
                                         const std::string &goal) {
   std::lock_guard<std::mutex> lock(mutex_);
-  const auto now = [&]() {
-    auto t =
-        std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm *tm = std::gmtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-    return std::string(buf);
-  }();
+  const std::string now = iso8601Now();
   return TaskRepository(db_).createTask(generateId("task"), sessionId,
                                         workspaceId, goal, now, now);
 }
@@ -182,14 +189,7 @@ bool DataAccessFacade::updateTaskStatus(const std::string &id,
   return safeCall<bool>(
       "updateTaskStatus",
       [&]() {
-        const auto now = [&]() {
-          auto t = std::chrono::system_clock::to_time_t(
-              std::chrono::system_clock::now());
-          std::tm *tm = std::gmtime(&t);
-          char buf[32];
-          std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-          return std::string(buf);
-        }();
+        const std::string now = iso8601Now();
         TaskRepository(db_).updateExecution(id, status, plan, currentStep, now);
         return true;
       },
@@ -277,15 +277,7 @@ WorkspaceRecord DataAccessFacade::createWorkspace(const std::string &name,
         record.id = generateId("ws");
         record.name = name;
         record.path = path;
-        const auto now = [&]() {
-          auto t = std::chrono::system_clock::to_time_t(
-              std::chrono::system_clock::now());
-          std::tm *tm = std::gmtime(&t);
-          char buf[32];
-          std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-          return std::string(buf);
-        }();
-        record.created_at = now;
+        record.created_at = iso8601Now();
 
         sqlite3_stmt *stmt = nullptr;
         const char *sql =
@@ -400,15 +392,7 @@ PermissionRequest DataAccessFacade::createPermissionRequest(
         req.action = action;
         req.reason = reason;
         req.status = "pending";
-        const auto now = [&]() {
-          auto t = std::chrono::system_clock::to_time_t(
-              std::chrono::system_clock::now());
-          std::tm *tm = std::gmtime(&t);
-          char buf[32];
-          std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", tm);
-          return std::string(buf);
-        }();
-        req.created_at = now;
+        req.created_at = iso8601Now();
 
         sqlite3_stmt *stmt = nullptr;
         const char *sql =
@@ -521,10 +505,64 @@ bool DataAccessFacade::deleteTaskCascade(const std::string &taskId) {
         exec("DELETE FROM permission_requests WHERE task_id = ?;");
         exec("DELETE FROM tool_calls WHERE task_id = ?;");
         exec("DELETE FROM task_events WHERE task_id = ?;");
+        exec("DELETE FROM task_contexts WHERE task_id = ?;");
         exec("DELETE FROM tasks WHERE id = ?;");
         return true;
       },
       false);
+}
+
+// ============================================================
+// 任务上下文持久化（支持主循环中断恢复，第 3 点）
+// ============================================================
+bool DataAccessFacade::saveTaskContext(const std::string &taskId,
+                                       const std::string &contextJson) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<bool>(
+      "saveTaskContext",
+      [&]() {
+        const std::string now = iso8601Now();
+        sqlite3_stmt *stmt = nullptr;
+        const char *sql = "INSERT OR REPLACE INTO task_contexts (task_id, "
+                          "context_json, updated_at) "
+                          "VALUES (?, ?, ?);";
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+          throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+        sqlite3_bind_text(stmt, 1, taskId.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, contextJson.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, now.c_str(), -1, SQLITE_TRANSIENT);
+        const int rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        return rc == SQLITE_DONE;
+      },
+      false);
+}
+
+std::string DataAccessFacade::getTaskContext(const std::string &taskId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<std::string>(
+      "getTaskContext",
+      [&]() {
+        sqlite3_stmt *stmt = nullptr;
+        const char *sql =
+            "SELECT context_json FROM task_contexts WHERE task_id = ?;";
+        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+          throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+        sqlite3_bind_text(stmt, 1, taskId.c_str(), -1, SQLITE_TRANSIENT);
+        std::string result;
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+          const char *text =
+              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+          if (text) {
+            result = text;
+          }
+        }
+        sqlite3_finalize(stmt);
+        return result;
+      },
+      std::string());
 }
 
 } // namespace codepilot

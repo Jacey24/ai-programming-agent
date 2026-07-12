@@ -101,12 +101,13 @@ void SSEGateway::broadcastFrame(const std::string &taskId,
   std::lock_guard<std::mutex> lock(clientsMutex_);
   for (auto &client : liveClients_) {
     if (client.taskId == taskId && client.alive) {
-      if (send(client.clientFd, frame.data(), frame.size(), MSG_NOSIGNAL) < 0) {
+      try {
+        client.sendFn(frame);
+      } catch (...) {
         client.alive = false;
       }
     }
   }
-  // 清理已断开的连接
   liveClients_.erase(
       std::remove_if(liveClients_.begin(), liveClients_.end(),
                      [](const SseClient &c) { return !c.alive; }),
@@ -124,7 +125,6 @@ void SSEGateway::pushEvent(const std::string &taskId, EventType eventType,
     return;
   }
 
-  // 1. 构造 metadata（注入 channel）
   json meta = json::parse(metadata, nullptr, false);
   if (meta.is_discarded()) {
     meta = json::object();
@@ -134,28 +134,23 @@ void SSEGateway::pushEvent(const std::string &taskId, EventType eventType,
   const std::string eventId = generateEventId();
   const std::string now = iso8601Now();
 
-  // 2. 发布到 EventBus（模块内部订阅用）
   if (eventBus_) {
     EventData event = EventData::Create(taskId, eventType, content, meta);
-    // 覆盖自动生成的 id 和 createdAt，保持一致
     event.id = eventId;
     event.createdAt = now;
     eventBus_->publish(event);
   }
 
-  // 3. 广播到 SSE 客户端
   json sseData;
   sseData["id"] = eventId;
   sseData["task_id"] = taskId;
-  sseData["type"] = EventData::Create("", eventType, "", {})
-                        .typeToString(); // 使用已有的类型转换
+  sseData["type"] = EventData::Create("", eventType, "", {}).typeToString();
   sseData["content"] = content;
   sseData["metadata"] = meta;
   sseData["created_at"] = now;
 
   broadcastFrame(taskId, sseData["type"].get<std::string>(), sseData.dump());
 
-  // 4. 持久化到 SQLite
   if (dataFacade_ && dataFacade_->isInitialized()) {
     dataFacade_->saveEvent(eventId, taskId, sseData["type"].get<std::string>(),
                            content, meta.dump());
@@ -169,6 +164,53 @@ void SSEGateway::pushDialog(const std::string &taskId,
                             const std::string &content,
                             const std::string &metadata) {
   pushEvent(taskId, EventType::AgentMessage, content, metadata, "dialog");
+}
+
+// ============================================================
+// pushDialogStream — 流式对话（第 9 点优化）
+// ============================================================
+void SSEGateway::pushDialogStream(const std::string &taskId,
+                                  const std::string &chunk, bool isLast,
+                                  const std::string &fullContent) {
+  if (!initialized_) {
+    return;
+  }
+
+  const std::string eventId = generateEventId();
+  const std::string now = iso8601Now();
+
+  // 发送 agent_message_chunk 片段
+  json chunkData;
+  chunkData["id"] = eventId;
+  chunkData["task_id"] = taskId;
+  chunkData["type"] = "agent_message_chunk";
+  chunkData["content"] = chunk;
+  chunkData["metadata"] = json{{"channel", "dialog"}, {"streaming", true}};
+  chunkData["created_at"] = now;
+
+  broadcastFrame(taskId, "agent_message_chunk", chunkData.dump());
+
+  if (isLast) {
+    // 发送完整的 agent_message（用于前端替换增量内容）
+    json fullData;
+    fullData["id"] = eventId;
+    fullData["task_id"] = taskId;
+    fullData["type"] = "agent_message";
+    fullData["content"] = fullContent.empty() ? chunk : fullContent;
+    fullData["metadata"] =
+        json{{"channel", "dialog"}, {"streaming", false}, {"stream_end", true}};
+    fullData["created_at"] = now;
+
+    broadcastFrame(taskId, "agent_message", fullData.dump());
+
+    // 持久化完整内容
+    if (dataFacade_ && dataFacade_->isInitialized()) {
+      dataFacade_->saveEvent(
+          eventId, taskId, "agent_message",
+          fullContent.empty() ? chunk : fullContent,
+          json{{"channel", "dialog"}, {"stream_end", true}}.dump());
+    }
+  }
 }
 
 // ============================================================
@@ -187,6 +229,42 @@ void SSEGateway::pushDebug(const std::string &taskId,
                            const std::string &content, EventType eventType,
                            const std::string &metadata) {
   pushEvent(taskId, eventType, content, metadata, "debug");
+}
+
+// ============================================================
+// pushProgress — 标准化进度推送（第 8 点优化）
+// ============================================================
+void SSEGateway::pushProgress(const std::string &taskId, int current, int total,
+                              const std::string &action,
+                              const std::string &metadata) {
+  if (!initialized_) {
+    return;
+  }
+
+  json meta = json::parse(metadata, nullptr, false);
+  if (meta.is_discarded()) {
+    meta = json::object();
+  }
+  meta["channel"] = "status";
+  meta["progress"] = {{"current", current}, {"total", total}};
+  if (!action.empty()) {
+    meta["progress"]["action"] = action;
+  }
+
+  const std::string eventId = generateEventId();
+  const std::string now = iso8601Now();
+
+  json sseData;
+  sseData["id"] = eventId;
+  sseData["task_id"] = taskId;
+  sseData["type"] = "progress";
+  sseData["content"] =
+      action.empty() ? std::to_string(current) + "/" + std::to_string(total)
+                     : action;
+  sseData["metadata"] = meta;
+  sseData["created_at"] = now;
+
+  broadcastFrame(taskId, "progress", sseData.dump());
 }
 
 // ============================================================
@@ -223,19 +301,30 @@ void SSEGateway::pushToolFinished(const std::string &taskId,
 }
 
 // ============================================================
-// SSE 长连接入口 —— HttpServer 唯一调用
+// 旧接口：通过 clientFd（第 2 点优化包装）
 // ============================================================
 void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
+  // 将 clientFd 包装为回调，转发到新实现
+  auto sendFn = [clientFd](const std::string &frame) {
+    send(clientFd, frame.data(), frame.size(), MSG_NOSIGNAL);
+  };
+  streamTaskEvents(sendFn, taskId);
+}
+
+// ============================================================
+// 新接口：通过回调（第 2 点优化）
+// ============================================================
+void SSEGateway::streamTaskEvents(SendCallback sendFn,
+                                  const std::string &taskId) {
   if (!initialized_) {
     const std::string errFrame =
         "event: error\ndata: "
         "{\"type\":\"error\",\"content\":\"SSEGateway not initialized\"}\n\n";
-    send(clientFd, errFrame.data(), errFrame.size(), MSG_NOSIGNAL);
-    close(clientFd);
+    sendFn(errFrame);
     return;
   }
 
-  // 1) 发送 SSE 响应头
+  // 1) 发送 SSE 响应头（仅保留 HTTP 协议兼容性）
   const std::string headers =
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: text/event-stream; charset=utf-8\r\n"
@@ -244,18 +333,28 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
       "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
       "Access-Control-Allow-Headers: Content-Type\r\n"
       "Connection: keep-alive\r\n\r\n";
-  if (send(clientFd, headers.data(), headers.size(), MSG_NOSIGNAL) < 0) {
-    close(clientFd);
+  sendFn(headers);
+
+  // 2) 委托给内部实现
+  streamTaskEventsImpl(taskId, sendFn);
+}
+
+// ============================================================
+// streamTaskEvents 内部实现（第 2 点优化：共享逻辑）
+// ============================================================
+void SSEGateway::streamTaskEventsImpl(const std::string &taskId,
+                                      const SendCallback &sendFn) {
+  if (!initialized_) {
     return;
   }
 
-  // 2) 注册客户端
+  // 注册客户端
   {
     std::lock_guard<std::mutex> lock(clientsMutex_);
-    liveClients_.push_back({clientFd, taskId, true});
+    liveClients_.push_back({taskId, true, sendFn});
   }
 
-  // 3) 订阅 EventBus 实时事件
+  // 订阅 EventBus 实时事件
   std::mutex writeMutex;
   std::atomic_bool alive{true};
   std::atomic_bool done{false};
@@ -266,7 +365,9 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
       return;
     }
     std::string frame = "event: " + eventName + "\ndata: " + data + "\n\n";
-    if (send(clientFd, frame.data(), frame.size(), MSG_NOSIGNAL) < 0) {
+    try {
+      sendFn(frame);
+    } catch (...) {
       alive.store(false);
     }
   };
@@ -290,7 +391,7 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
     subscribed = true;
   }
 
-  // 4) 回放历史事件（从 DataAccessFacade）
+  // 回放历史事件
   if (dataFacade_ && dataFacade_->isInitialized()) {
     for (const auto &ev : dataFacade_->getEventsByTaskId(taskId)) {
       json data;
@@ -307,7 +408,6 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
       data["created_at"] = ev.created_at;
 
       writeFrame(ev.type, data.dump());
-      // 用 type 字符串判断终态
       if (ev.type == "task_completed" || ev.type == "task_failed" ||
           ev.type == "task_cancelled") {
         done.store(true);
@@ -315,19 +415,20 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
     }
   }
 
-  // 5) 心跳保活 + 结束检测
+  // 心跳保活 + 结束检测
   int ticks = 0;
   while (alive.load() && !done.load()) {
     std::this_thread::sleep_for(std::chrono::seconds(3));
     {
       std::lock_guard<std::mutex> lock(writeMutex);
       const std::string ping = ": ping\n\n";
-      if (send(clientFd, ping.data(), ping.size(), MSG_NOSIGNAL) < 0) {
+      try {
+        sendFn(ping);
+      } catch (...) {
         alive.store(false);
         break;
       }
     }
-    // 每 3 个 tick（9 秒）兜底检查任务状态
     if (++ticks % 3 == 0 && dataFacade_ && dataFacade_->isInitialized()) {
       auto task = dataFacade_->getTask(taskId);
       if (task && (task->status == "completed" || task->status == "failed" ||
@@ -337,29 +438,33 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
     }
   }
 
-  // 6) 发送 stream_end 并清理
+  // 发送 stream_end 并清理
   {
     std::lock_guard<std::mutex> lock(writeMutex);
     const std::string endFrame =
         "event: stream_end\ndata: {\"type\":\"stream_end\"}\n\n";
-    send(clientFd, endFrame.data(), endFrame.size(), MSG_NOSIGNAL);
+    try {
+      sendFn(endFrame);
+    } catch (...) {
+    }
   }
 
   if (subscribed && eventBus_) {
     eventBus_->unsubscribe(listenerId);
   }
 
-  // 注销客户端
+  // 注销客户端（通过 sendFn 指针匹配）
   {
     std::lock_guard<std::mutex> lock(clientsMutex_);
+    auto target = &sendFn;
+    (void)target;
     liveClients_.erase(std::remove_if(liveClients_.begin(), liveClients_.end(),
-                                      [clientFd](const SseClient &c) {
-                                        return c.clientFd == clientFd;
+                                      [&sendFn](const SseClient &c) {
+                                        return c.sendFn.target_type() ==
+                                               sendFn.target_type();
                                       }),
                        liveClients_.end());
   }
-
-  close(clientFd);
 }
 
 } // namespace codepilot

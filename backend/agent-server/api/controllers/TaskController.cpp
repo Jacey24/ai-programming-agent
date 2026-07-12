@@ -2,7 +2,6 @@
 
 #include "application/AgentService.h"
 #include "application/LogService.h"
-#include "application/TaskService.h"
 #include "application/ToolSystem.h"
 #include "infrastructure/storage/SqliteConnection.h"
 
@@ -61,67 +60,6 @@ std::string http_response(const std::string &body,
            << "Content-Length: " << body.size() << "\r\n\r\n"
            << body;
   return response.str();
-}
-
-std::string extract_json_string(const std::string &body,
-                                const std::string &key) {
-  const std::string marker = "\"" + key + "\"";
-  const std::size_t marker_pos = body.find(marker);
-  if (marker_pos == std::string::npos)
-    return "";
-
-  const std::size_t colon_pos = body.find(':', marker_pos + marker.size());
-  const std::size_t first_quote = body.find('"', colon_pos);
-  if (colon_pos == std::string::npos || first_quote == std::string::npos)
-    return "";
-
-  std::string value;
-  bool escaped = false;
-  for (std::size_t i = first_quote + 1; i < body.size(); ++i) {
-    const char ch = body[i];
-    if (escaped) {
-      switch (ch) {
-      case 'n':
-        value.push_back('\n');
-        break;
-      case 'r':
-        value.push_back('\r');
-        break;
-      case 't':
-        value.push_back('\t');
-        break;
-      default:
-        value.push_back(ch);
-      }
-      escaped = false;
-      continue;
-    }
-    if (ch == '\\') {
-      escaped = true;
-      continue;
-    }
-    if (ch == '"')
-      break;
-    value.push_back(ch);
-  }
-  return value;
-}
-
-std::string json_string_value(const json &body, const std::string &key) {
-  if (!body.contains(key) || !body.at(key).is_string()) {
-    return "";
-  }
-  return body.at(key).get<std::string>();
-}
-
-std::string log_type_from_content(const std::string &content) {
-  if (content.size() > 2 && content.front() == '[') {
-    const auto end = content.find(']');
-    if (end != std::string::npos && end > 1) {
-      return content.substr(1, end - 1);
-    }
-  }
-  return "agent";
 }
 
 std::string request_body(const std::string &request) {
@@ -185,9 +123,21 @@ std::string TaskController::createTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  const std::string session_id = json_string_value(body, "session_id");
-  const std::string workspace_id = json_string_value(body, "workspace_id");
-  const std::string input = json_string_value(body, "input");
+  const std::string session_id = [&]() {
+    if (!body.contains("session_id") || !body["session_id"].is_string())
+      return std::string();
+    return body["session_id"].get<std::string>();
+  }();
+  const std::string workspace_id = [&]() {
+    if (!body.contains("workspace_id") || !body["workspace_id"].is_string())
+      return std::string();
+    return body["workspace_id"].get<std::string>();
+  }();
+  const std::string input = [&]() {
+    if (!body.contains("input") || !body["input"].is_string())
+      return std::string();
+    return body["input"].get<std::string>();
+  }();
   if (session_id.empty() || workspace_id.empty() || input.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
@@ -210,89 +160,67 @@ std::string TaskController::createTask(const std::string &request) {
   runOptions.maxRoundsPerStep =
       std::clamp(options.value("max_rounds_per_step", 3), 1, 6);
 
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
+  // 第 7 点优化：通过 DataAccessFacade 创建任务，不再手动管理 sqlite3 连接
   TaskRecord task;
   try {
-    TaskService task_service(db);
-    task = task_service.createTask(session_id, workspace_id, input);
-    // 先置为 running，真正的执行在后台线程里异步完成
-    task_service.updateExecution(task.id, "running", task.plan,
-                                 task.current_step);
-    const auto refreshed = task_service.getTask(task.id);
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    auto &facade = DataAccessFacade::getInstance();
+    task = facade.createTask(session_id, workspace_id, input);
+    facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
+    const auto refreshed = facade.getTask(task.id);
     if (refreshed) {
       task = *refreshed;
     }
     EventData created = EventData::Create(task.id, EventType::TaskCreated,
                                           "任务已创建，正在启动 Agent",
                                           json{{"status", "running"}});
-    // 通过门面落库 + 发布事件
     if (SSEGateway::getInstance().isInitialized()) {
       SSEGateway::getInstance().pushStatus(task.id, created.content,
                                            EventType::TaskCreated,
                                            created.metadata.dump());
-    } else if (DataAccessFacade::getInstance().isInitialized()) {
-      DataAccessFacade::getInstance().saveEvent(
-          created.id, created.taskId, created.typeToString(), created.content,
-          created.metadata.dump());
-      if (ToolSystem::getInstance().isInitialized()) {
-        ToolSystem::getInstance().eventBus().publish(created);
-      }
+    } else {
+      facade.saveEvent(created.id, created.taskId, created.typeToString(),
+                       created.content, created.metadata.dump());
     }
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
 
-  sqlite3_close(db);
-
-  // 后台异步执行 Agent：自开一个独立的 SQLite 连接，
-  // 执行过程中产生的事件通过 EventBus 实时推送给 SSE 连接。
-  const std::string db_path = databasePath_;
+  // 后台异步执行 Agent（第 7 点优化：后台线程也通过 DataAccessFacade 操作，
+  // 不再需要独立的 worker_db 连接）
   const std::string task_id = task.id;
-  std::thread([db_path, task_id, session_id, workspace_id, input,
-               runOptions]() {
-    sqlite3 *worker_db = nullptr;
-    if (openSqliteConnection(db_path.c_str(), &worker_db) != SQLITE_OK) {
-      if (worker_db) {
-        sqlite3_close(worker_db);
-      }
-      return;
-    }
+  std::thread([task_id, session_id, workspace_id, input, runOptions]() {
     try {
       AgentService agent_service;
       const AgentResult agent_result = agent_service.runTask(
           task_id, session_id, workspace_id, input, runOptions);
-      TaskService task_service(worker_db);
-      task_service.updateExecution(
-          task_id,
-          agent_result.status.empty() ? "completed" : agent_result.status,
-          agent_result.planJson, agent_result.currentStep);
-      LogService log_service(worker_db);
-      for (const auto &entry : agent_result.logs) {
-        log_service.createLog(task_id, log_type_from_content(entry), entry);
+      if (DataAccessFacade::getInstance().isInitialized()) {
+        auto &facade = DataAccessFacade::getInstance();
+        facade.updateTaskStatus(
+            task_id,
+            agent_result.status.empty() ? "completed" : agent_result.status,
+            agent_result.planJson, agent_result.currentStep);
+        for (const auto &entry : agent_result.logs) {
+          facade.appendLog(task_id,
+                           entry.size() > 2 && entry.front() == '['
+                               ? entry.substr(1, entry.find(']') - 1)
+                               : "agent",
+                           entry);
+        }
       }
     } catch (const std::exception &) {
-      try {
-        TaskService task_service(worker_db);
-        task_service.updateExecution(task_id, "failed", "", "");
-      } catch (...) {
+      if (DataAccessFacade::getInstance().isInitialized()) {
+        DataAccessFacade::getInstance().updateTaskStatus(task_id, "failed", "",
+                                                         "");
       }
     }
-    sqlite3_close(worker_db);
   }).detach();
 
   std::ostringstream response_body;
@@ -315,46 +243,32 @@ std::string TaskController::createTask(const std::string &request) {
 }
 
 std::string TaskController::listTasks(const std::string &request) {
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
   std::vector<TaskRecord> tasks;
   try {
-    TaskService service(db);
-    tasks = service.listTasks(extract_query_int(request, "page_size", 20));
+    if (DataAccessFacade::getInstance().isInitialized()) {
+      tasks = DataAccessFacade::getInstance().listRecentTasks(
+          extract_query_int(request, "page_size", 20));
+    }
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
 
-  sqlite3_close(db);
-
   std::ostringstream body;
   body << R"({"success":true,"data":{"items":[)";
   for (std::size_t i = 0; i < tasks.size(); ++i) {
-    const auto &task = tasks[i];
+    const auto &t = tasks[i];
     if (i > 0) {
       body << ",";
     }
-    body << R"({"id":")" << json_escape(task.id) << R"(","session_id":")"
-         << json_escape(task.session_id) << R"(","workspace_id":")"
-         << json_escape(task.workspace_id) << R"(","goal":")"
-         << json_escape(task.goal) << R"(","status":")"
-         << json_escape(task.status) << R"(","created_at":")"
-         << json_escape(task.created_at) << R"(","updated_at":")"
-         << json_escape(task.updated_at) << R"("})";
+    body << R"({"id":")" << json_escape(t.id) << R"(","session_id":")"
+         << json_escape(t.session_id) << R"(","workspace_id":")"
+         << json_escape(t.workspace_id) << R"(","goal":")"
+         << json_escape(t.goal) << R"(","status":")" << json_escape(t.status)
+         << R"(","created_at":")" << json_escape(t.created_at)
+         << R"(","updated_at":")" << json_escape(t.updated_at) << R"("})";
   }
   body << "]}}";
   return http_response(body.str());
@@ -368,28 +282,17 @@ std::string TaskController::getTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
-  std::string response;
   try {
-    TaskService service(db);
-    const auto task = service.getTask(task_id);
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    const auto task = DataAccessFacade::getInstance().getTask(task_id);
     if (!task) {
-      response = http_response(
+      return http_response(
           R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
           "404 Not Found");
-      sqlite3_close(db);
-      return response;
     }
 
     std::ostringstream body;
@@ -407,17 +310,13 @@ std::string TaskController::getTask(const std::string &request) {
     }
     body << R"(,"created_at":")" << json_escape(task->created_at)
          << R"(","updated_at":")" << json_escape(task->updated_at) << R"("}})";
-    response = http_response(body.str());
+    return http_response(body.str());
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
-
-  sqlite3_close(db);
-  return response;
 }
 
 std::string TaskController::cancelTask(const std::string &request) {
@@ -439,41 +338,38 @@ std::string TaskController::cancelTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
-  std::string response;
   try {
-    TaskService service(db);
-    const TaskRecord task = service.cancelTask(task_id);
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    const auto task = DataAccessFacade::getInstance().getTask(task_id);
+    if (!task) {
+      return http_response(
+          R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
+          "404 Not Found");
+    }
+    DataAccessFacade::getInstance().updateTaskStatus(task_id, "cancelled", "",
+                                                     "");
 
     std::ostringstream body;
-    body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
-         << R"(","session_id":")" << json_escape(task.session_id)
-         << R"(","workspace_id":")" << json_escape(task.workspace_id)
-         << R"(","goal":")" << json_escape(task.goal) << R"(","status":")"
-         << json_escape(task.status) << R"(")";
-    if (!task.plan.empty()) {
-      body << R"(,"plan":)" << task.plan;
+    body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
+         << R"(","session_id":")" << json_escape(task->session_id)
+         << R"(","workspace_id":")" << json_escape(task->workspace_id)
+         << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
+         << json_escape("cancelled") << R"(")";
+    if (!task->plan.empty()) {
+      body << R"(,"plan":)" << task->plan;
     }
-    if (!task.current_step.empty()) {
-      body << R"(,"current_step":")" << json_escape(task.current_step)
+    if (!task->current_step.empty()) {
+      body << R"(,"current_step":")" << json_escape(task->current_step)
            << R"(")";
     }
-    body << R"(,"created_at":")" << json_escape(task.created_at)
-         << R"(","updated_at":")" << json_escape(task.updated_at) << R"("}})";
-    response = http_response(body.str());
+    body << R"(,"created_at":")" << json_escape(task->created_at)
+         << R"(","updated_at":")" << json_escape(task->updated_at) << R"("}})";
+    return http_response(body.str());
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     const std::string msg = error.what();
     if (msg.find("not found") != std::string::npos) {
       return http_response(
@@ -486,9 +382,6 @@ std::string TaskController::cancelTask(const std::string &request) {
             json_escape(msg) + R"("}})",
         "500 Internal Server Error");
   }
-
-  sqlite3_close(db);
-  return response;
 }
 
 std::string TaskController::listToolCalls(const std::string &request) {
@@ -510,22 +403,15 @@ std::string TaskController::listToolCalls(const std::string &request) {
         "400 Bad Request");
   }
 
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
-  std::string response;
+  // 第 7 点优化：改为 DataAccessFacade 查询
   try {
-    ToolCallRepository repo(db);
-    const std::vector<ToolCallRecord> calls = repo.findByTaskId(task_id);
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    const std::vector<ToolCallRecord> calls =
+        DataAccessFacade::getInstance().getToolCallsByTaskId(task_id);
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"task_id":")" << json_escape(task_id)
@@ -544,17 +430,13 @@ std::string TaskController::listToolCalls(const std::string &request) {
            << R"(,"created_at":")" << json_escape(call.created_at) << R"("})";
     }
     body << "]}}";
-    response = http_response(body.str());
+    return http_response(body.str());
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
-
-  sqlite3_close(db);
-  return response;
 }
 
 std::string TaskController::listEventHistory(const std::string &request) {
@@ -576,22 +458,15 @@ std::string TaskController::listEventHistory(const std::string &request) {
         "400 Bad Request");
   }
 
-  sqlite3 *db = nullptr;
-  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
-    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return http_response(
-        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(error) + R"("}})",
-        "500 Internal Server Error");
-  }
-
-  std::string response;
+  // 第 7 点优化：改为 DataAccessFacade 查询
   try {
-    EventRepository repo(db);
-    const std::vector<EventRecord> events = repo.findByTaskId(task_id);
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    const std::vector<EventRecord> events =
+        DataAccessFacade::getInstance().getEventsByTaskId(task_id);
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"task_id":")" << json_escape(task_id)
@@ -613,17 +488,13 @@ std::string TaskController::listEventHistory(const std::string &request) {
            << json_escape(event.created_at) << R"("})";
     }
     body << "]}}";
-    response = http_response(body.str());
+    return http_response(body.str());
   } catch (const std::exception &error) {
-    sqlite3_close(db);
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
-
-  sqlite3_close(db);
-  return response;
 }
 
 } // namespace codepilot
