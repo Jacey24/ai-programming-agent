@@ -1,16 +1,14 @@
 #pragma once
 
+#include "ResponseParser.h"
 #include "RoleRegistry.h"
 #include "TaskQueue.h"
 #include "TaskState.h"
-#include "ResponseParser.h"
 #include "event/EventTypes.h"
 
 #include <memory>
 #include <nlohmann/json.hpp>
-#include <sqlite3.h>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace codepilot {
@@ -23,116 +21,115 @@ struct ToolResult;
 struct EventData;
 
 struct AgentConfig {
-    int maxSteps = 6;
-    int maxRoundsPerStep = 3;
-    int toolTimeoutSeconds = 60;
-    bool autoRunSafeCommands = true;
-    bool requireFileWritePermission = true;
-    int maxRetries = 1;          // Sprint 2：失败最大重试次数
-    bool enableDeadlockCheck = true;  // Sprint 2：死锁检测
+  int maxSteps = 6;
+  int maxRoundsPerStep = 3;
+  int toolTimeoutSeconds = 60;
+  bool autoRunSafeCommands = true;
+  bool requireFileWritePermission = true;
+  int maxRetries = 1;
+  bool enableDeadlockCheck = true;
 };
 
 struct AgentResult {
-    std::string taskId;
-    std::string sessionId;
-    std::string workspaceId;
-    std::string goal;
-    std::string status;
-    std::string planJson;
-    std::string currentStep;
-    std::string createdAt;
-    std::string updatedAt;
-    std::vector<std::string> logs;
+  std::string taskId;
+  std::string sessionId;
+  std::string workspaceId;
+  std::string goal;
+  std::string status;
+  std::string planJson;
+  std::string currentStep;
+  std::string createdAt;
+  std::string updatedAt;
+  std::vector<std::string> logs;
 };
 
 class Agent {
 public:
-    Agent(RoleRegistry& registry, Planner& planner);
+  Agent(RoleRegistry &registry, Planner &planner);
 
-    // 设置可用工具描述（由外部 ToolSystem 提供）
-    void setToolsDescription(const std::string& desc) { toolsDesc_ = desc; }
-    void setLlmClient(std::shared_ptr<LlmClient> client) { llmClient_ = std::move(client); }
+  void setToolsDescription(const std::string &desc) { toolsDesc_ = desc; }
 
-    // Sprint 2：注入数据库句柄，用于日志持久化（db 来自郑嘉娴 TaskController）
-    void setDb(sqlite3* db) { db_ = db; }
-    void setConfig(const AgentConfig& config) { config_ = config; }
+  // [已弃用] 保留仅为外部编译兼容；Agent 内部已改用 LlmClientFacade
+  [[deprecated(
+      "Agent uses LlmClientFacade internally; retained for API compatibility")]]
+  void setLlmClient(std::shared_ptr<LlmClient> client) {
+    (void)client;
+  }
 
-    AgentResult executeTask(
-        const std::string& taskId,
-        const std::string& sessionId,
-        const std::string& workspaceId,
-        const std::string& goal);
-    AgentResult executeDirectAnswer(
-        const std::string& taskId, const std::string& sessionId,
-        const std::string& workspaceId, const std::string& goal);
+  void setConfig(const AgentConfig &config) { config_ = config; }
 
-    // Sprint 2：构建执行期 Prompt（给 LLM 调用方使用）
-    // step: 当前步骤描述
-    // role: 执行角色
-    // 返回: 完整的 prompt 文本
-    std::string buildExecutorPrompt(
-        const PlanStep& step,
-        const RoleConfig& role,
-        const std::string& goal) const;
+  AgentResult executeTask(const std::string &taskId,
+                          const std::string &sessionId,
+                          const std::string &workspaceId,
+                          const std::string &goal);
+
+  AgentResult executeDirectAnswer(const std::string &taskId,
+                                  const std::string &sessionId,
+                                  const std::string &workspaceId,
+                                  const std::string &goal);
+
+  std::string buildExecutorPrompt(const PlanStep &step, const RoleConfig &role,
+                                  const std::string &goal) const;
 
 private:
-    // 工具辅助
-    std::string toolsToString(const std::vector<std::string>& tools);
-    std::string planToJson(const std::vector<PlanStep>& steps);
-    std::string escapeJson(const std::string& s);
-    std::string iso8601Now();
+  // 工具辅助
+  std::string toolsToString(const std::vector<std::string> &tools);
+  std::string planToJson(const std::vector<PlanStep> &steps);
+  std::string escapeJson(const std::string &s);
+  static std::string iso8601Now();
 
-    // Sprint 2：持久化落库（周子涵）
-    //   将任务事件写入 task_events 表，将工具调用写入 tool_calls 表
-    //   落库失败不影响 Agent 主流程
-    void persistTaskEvent(const EventData& event) const;
-    void persistToolCall(const std::string& taskId, const std::string& toolName,
-        const json& arguments, const ToolResult& result) const;
-    void persistAndPublishFileChange(const std::string& taskId,
-        const std::string& toolName, const json& arguments) const;
-    static std::string generateEventId();
-    static std::string generateToolCallId();
-    static std::string generateFileChangeId();
-    static bool isFileMutatingTool(const std::string& toolName);
-    static std::string extractChangedPath(const std::string& toolName, const json& arguments);
-    static std::string inferChangeType(const std::string& toolName);
+  // 分级 SSE 推送辅助（通过 SSEGateway 门面）
+  void publishDebugLog(const std::string &taskId, const std::string &content,
+                       const std::string &source,
+                       const std::string &stage = "") const;
 
-    // Sprint 2：单步执行（构建 prompt → 模拟 LLM 响应 → 解析 → 工具调用/完成）
-    // rawLlmOutput: [out] LLM 输出的原始文本（由外部 LLM 调用方填充）
-    // 返回: 解析后的响应
-    ParsedResponse executeSingleStep(
-        const PlanStep& step,
-        const RoleConfig& role,
-        const std::string& goal,
-        const std::string& taskId,
-        const std::string& sessionId,
-        const std::string& workspaceId,
-        std::string& rawLlmOutput);
+  // 持久化（通过 DataAccessFacade 门面）
+  void persistTaskEvent(const EventData &event) const;
+  void persistToolCall(const std::string &taskId, const std::string &toolName,
+                       const json &arguments, const ToolResult &result) const;
+  void persistAndPublishFileChange(const std::string &taskId,
+                                   const std::string &toolName,
+                                   const json &arguments) const;
 
-    // Sprint 2：死锁检测
-    bool isDeadlock(const std::vector<ParsedCommand>& commands) const;
-    void publishTaskEvent(const std::string& taskId, EventType eventType,
-        const std::string& content, const std::string& metadataJson = "{}") const;
-    static std::string normalizeToolName(const std::string& name);
-    static json buildToolArguments(const std::string& toolName, const std::string& rawArgs);
-    // 将 "key=value" 形式参数解析为 JSON 对象（带标量类型推断）
-    static json parseKeyValueArgs(const std::string& rawArgs);
-    static json coerceScalar(const std::string& value);
+  static std::string generateEventId();
+  static std::string generateToolCallId();
+  static std::string generateFileChangeId();
+  static bool isFileMutatingTool(const std::string &toolName);
+  static std::string extractChangedPath(const std::string &toolName,
+                                        const json &arguments);
+  static std::string inferChangeType(const std::string &toolName);
 
-    RoleRegistry& registry_;
-    Planner& planner_;
-    TaskQueue queue_;
-    AgentConfig config_;
-    std::vector<std::string> context_;
-    std::string toolsDesc_;  // 可用工具文本描述
-    std::shared_ptr<LlmClient> llmClient_;
+  // 单步执行（构建 prompt → LLM 调用 → 解析 → 工具调用/完成）
+  ParsedResponse executeSingleStep(const PlanStep &step, const RoleConfig &role,
+                                   const std::string &goal,
+                                   const std::string &taskId,
+                                   const std::string &sessionId,
+                                   const std::string &workspaceId,
+                                   std::string &rawLlmOutput);
 
-    // 死锁检测状态
-    std::vector<ParsedCommand> prevCommands_;
-    int deadlockCount_ = 0;
+  bool isDeadlock(const std::vector<ParsedCommand> &commands) const;
 
-    // Sprint 2：数据库句柄（日志持久化，db 来自郑嘉娴 TaskController）
-    sqlite3* db_ = nullptr;
+  // 发布事件（通过 SSEGateway → EventBus → DataAccessFacade 三合一）
+  void publishTaskEvent(const std::string &taskId, EventType eventType,
+                        const std::string &content,
+                        const std::string &metadataJson = "{}") const;
+
+  static std::string normalizeToolName(const std::string &name);
+  static json buildToolArguments(const std::string &toolName,
+                                 const std::string &rawArgs);
+  static json parseKeyValueArgs(const std::string &rawArgs);
+  static json coerceScalar(const std::string &value);
+
+  RoleRegistry &registry_;
+  Planner &planner_;
+  TaskQueue queue_;
+  AgentConfig config_;
+  std::vector<std::string> context_;
+  std::string toolsDesc_;
+
+  // 死锁检测状态
+  std::vector<ParsedCommand> prevCommands_;
+  int deadlockCount_ = 0;
 };
 
 } // namespace codepilot
