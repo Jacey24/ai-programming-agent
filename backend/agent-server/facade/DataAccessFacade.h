@@ -38,10 +38,6 @@ public:
 
   // ============================================================
   // 初始化（幂等，重复调用不生效）
-  //   dbPath: SQLite 数据库文件路径（如 "/data/agent.db"）
-  //   自动创建所有表：sessions, workspaces, tasks, task_events,
-  //                   tool_calls, permission_requests, file_changes,
-  //                   execution_logs
   // ============================================================
   void init(const std::string &dbPath);
   bool isInitialized() const { return initialized_; }
@@ -136,18 +132,25 @@ public:
   bool isDatabaseConnected();
   bool deleteTaskCascade(const std::string &taskId);
 
+  // ============================================================
+  // 新增：任务上下文持久化（支持主循环中断恢复）
+  // ============================================================
+  bool saveTaskContext(const std::string &taskId,
+                       const std::string &contextJson);
+  std::string getTaskContext(const std::string &taskId);
+
 private:
   DataAccessFacade() = default;
   ~DataAccessFacade();
   DataAccessFacade(const DataAccessFacade &) = delete;
   DataAccessFacade &operator=(const DataAccessFacade &) = delete;
 
-  // 包装调用，自动处理异常并返回 fallback
+  static std::string iso8601Now();
+
   template <typename T>
   T safeCall(const std::string &operation, std::function<T()> fn,
              T fallback) const;
 
-  // 内部建表
   void createAllTables();
 
   std::string generateId(const std::string &prefix) const;

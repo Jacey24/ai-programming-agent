@@ -267,6 +267,47 @@ LlmResponse LlmClientFacade::chat(const std::string &prompt,
 }
 
 // ============================================================
+// 流式 chat（第 1 点优化）
+// ============================================================
+void LlmClientFacade::chatStream(const std::string &prompt,
+                                 OnTokenCallback onToken,
+                                 const std::string &provider,
+                                 const std::string &model, int timeout) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!initialized_) {
+    onToken("LlmClientFacade not initialized");
+    return;
+  }
+
+  const std::string resolved = resolveProvider(provider);
+  auto it = clients_.find(resolved);
+  if (it == clients_.end()) {
+    MockLlmClient mock;
+    LlmRequest req;
+    req.prompt = prompt;
+    auto resp = mock.chat(req);
+    if (resp.success && !resp.content.empty()) {
+      onToken(resp.content);
+    }
+    return;
+  }
+
+  LlmRequest req;
+  req.prompt = prompt;
+  if (!model.empty()) {
+    req.model = model;
+  } else {
+    const auto *pc = findProvider(resolved);
+    if (pc) {
+      req.model = pc->model;
+    }
+  }
+  req.timeoutSeconds = timeout > 0 ? timeout : 0;
+
+  it->second->chatStream(req, onToken);
+}
+
+// ============================================================
 // 健康检查
 // ============================================================
 bool LlmClientFacade::isAvailable() const {

@@ -7,13 +7,15 @@
 
 #include "common/logging/Logger.h"
 
-#include <sqlite3.h>
+#include <nlohmann/json.hpp>
 
 #include <atomic>
 #include <csignal>
 #include <cstdio>
 #include <exception>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -22,74 +24,60 @@ std::atomic_bool running{true};
 
 void handle_signal(int) { running.store(false); }
 
+// ============================================================
+// 统一 JSON 配置提取（替代原 80 行手写字符串扫描，第 5 点优化）
+// ============================================================
+std::string readFile(const std::string &path) {
+  std::ifstream in(path);
+  if (!in.is_open()) {
+    return "";
+  }
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+std::string extractConfigValue(const std::string &configPath,
+                               const std::string &key) {
+  const std::string raw = readFile(configPath);
+  if (raw.empty()) {
+    return "";
+  }
+  try {
+    nlohmann::json config = nlohmann::json::parse(raw);
+    // 支持嵌套路径，如 "storage.path" 或 "workspace.root"
+    const auto dot = key.find('.');
+    if (dot != std::string::npos) {
+      const std::string top = key.substr(0, dot);
+      const std::string sub = key.substr(dot + 1);
+      if (config.contains(top) && config[top].is_object() &&
+          config[top].contains(sub)) {
+        return config[top][sub].get<std::string>();
+      }
+    } else {
+      if (config.contains(key)) {
+        return config[key].get<std::string>();
+      }
+    }
+  } catch (const std::exception &) {
+    // 解析失败返回空，调用方使用默认值
+  }
+  return "";
+}
+
 std::string extract_storage_path(const std::string &config_path) {
-  FILE *file = std::fopen(config_path.c_str(), "rb");
-  if (!file) {
-    return "/data/agent.db";
-  }
-
-  std::string content;
-  char buffer[4096] = {};
-  while (const std::size_t read = std::fread(buffer, 1, sizeof(buffer), file)) {
-    content.append(buffer, read);
-  }
-  std::fclose(file);
-
-  const std::string marker = R"("path")";
-  const std::size_t marker_pos = content.find(marker);
-  if (marker_pos == std::string::npos) {
-    return "/data/agent.db";
-  }
-
-  const std::size_t colon_pos = content.find(':', marker_pos + marker.size());
-  const std::size_t first_quote = content.find('"', colon_pos);
-  const std::size_t second_quote = content.find('"', first_quote + 1);
-  if (colon_pos == std::string::npos || first_quote == std::string::npos ||
-      second_quote == std::string::npos) {
-    return "/data/agent.db";
-  }
-
-  return content.substr(first_quote + 1, second_quote - first_quote - 1);
+  const std::string path = extractConfigValue(config_path, "storage.path");
+  return path.empty() ? "/data/agent.db" : path;
 }
 
 std::string extract_workspace_root(const std::string &config_path) {
-  FILE *file = std::fopen(config_path.c_str(), "rb");
-  if (!file) {
-    return "/workspace";
-  }
-
-  std::string content;
-  char buffer[4096] = {};
-  while (const std::size_t read = std::fread(buffer, 1, sizeof(buffer), file)) {
-    content.append(buffer, read);
-  }
-  std::fclose(file);
-
-  const std::string workspace_marker = R"("workspace")";
-  const std::size_t workspace_pos = content.find(workspace_marker);
-  if (workspace_pos == std::string::npos) {
-    return "/workspace";
-  }
-
-  const std::string root_marker = R"("root")";
-  const std::size_t root_pos =
-      content.find(root_marker, workspace_pos + workspace_marker.size());
-  if (root_pos == std::string::npos) {
-    return "/workspace";
-  }
-
-  const std::size_t colon_pos =
-      content.find(':', root_pos + root_marker.size());
-  const std::size_t first_quote = content.find('"', colon_pos);
-  const std::size_t second_quote = content.find('"', first_quote + 1);
-  if (colon_pos == std::string::npos || first_quote == std::string::npos ||
-      second_quote == std::string::npos) {
-    return "/workspace";
-  }
-
-  return content.substr(first_quote + 1, second_quote - first_quote - 1);
+  const std::string root = extractConfigValue(config_path, "workspace.root");
+  return root.empty() ? "/workspace" : root;
 }
 
+// ============================================================
+// 数据库初始化（第 4 点优化：schema 由 DataAccessFacade 统一管理）
+// ============================================================
 bool initialize_database(const std::string &path, std::string &error) {
   sqlite3 *db = nullptr;
   if (codepilot::openSqliteConnection(path.c_str(), &db) != SQLITE_OK) {
@@ -101,6 +89,7 @@ bool initialize_database(const std::string &path, std::string &error) {
   }
   codepilot::configureSqliteDatabase(db);
 
+  // 仅建健康检查表（8 张业务表由 DataAccessFacade::createAllTables 统管）
   const char *schema = R"SQL(
 CREATE TABLE IF NOT EXISTS system_health (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -110,47 +99,6 @@ CREATE TABLE IF NOT EXISTS system_health (
 INSERT INTO system_health (id, service, checked_at)
 VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP)
 ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    goal TEXT NOT NULL,
-    status TEXT NOT NULL,
-    plan TEXT,
-    current_step TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt TEXT NOT NULL,
-    response TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS execution_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 )SQL";
 
   char *error_message = nullptr;
@@ -163,7 +111,6 @@ CREATE TABLE IF NOT EXISTS execution_logs (
     return false;
   }
 
-  // 表结构由 DataAccessFacade 统一管理，此处仅做健康检查
   sqlite3_stmt *stmt = nullptr;
   const int prepare_result = sqlite3_prepare_v2(
       db, "SELECT COUNT(*) FROM system_health;", -1, &stmt, nullptr);
@@ -189,7 +136,6 @@ int run_agent_server(const std::string &config_path) {
   std::signal(SIGTERM, handle_signal);
 
   // 初始化统一日志系统
-  // 优先尝试从配置加载，若文件不存在则使用默认配置
   const std::string logConfigPath = "./config/logging.json";
   codepilot::log::initFromFile(logConfigPath);
 

@@ -55,15 +55,20 @@ public:
   bool isInitialized() const { return initialized_; }
 
   // ============================================================
-  // 核心原子操作：发送消息到 LLM
-  //   prompt:   用户提示词
-  //   provider: 指定 provider（"auto"=默认, "doubao", "openai"…）
-  //   model:    覆盖配置文件中的 model（空=使用默认）
-  //   timeout:  超时秒数（0=使用默认）
+  // 核心原子操作：发送消息到 LLM（阻塞）
   // ============================================================
   LlmResponse chat(const std::string &prompt,
                    const std::string &provider = "auto",
                    const std::string &model = "", int timeout = 0);
+
+  // ============================================================
+  // 流式 chat（第 1 点优化）
+  //   默认行为等同于先 chat() 再一次性回调全部内容。
+  //   若底层 LlmClient 支持流式，则逐 token 回调。
+  // ============================================================
+  void chatStream(const std::string &prompt, OnTokenCallback onToken,
+                  const std::string &provider = "auto",
+                  const std::string &model = "", int timeout = 0);
 
   // ============================================================
   // 健康检查
