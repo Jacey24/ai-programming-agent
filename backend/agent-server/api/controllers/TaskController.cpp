@@ -3,7 +3,6 @@
 #include "application/AgentService.h"
 #include "application/LogService.h"
 #include "application/ToolSystem.h"
-#include "infrastructure/storage/SqliteConnection.h"
 
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
@@ -15,8 +14,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <sqlite3.h>
 
 namespace {
 

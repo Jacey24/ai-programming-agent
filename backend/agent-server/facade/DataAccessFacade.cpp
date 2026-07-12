@@ -94,7 +94,7 @@ void DataAccessFacade::init(const std::string &dbPath) {
 }
 
 // ============================================================
-// 建表
+// 建表 — 所有 Repository 表 + system_health + task_contexts
 // ============================================================
 void DataAccessFacade::createAllTables() {
   SessionRepository(db_).initTable();
@@ -113,6 +113,20 @@ void DataAccessFacade::createAllTables() {
                "  context_json TEXT NOT NULL,"
                "  updated_at TEXT NOT NULL"
                ");",
+               nullptr, nullptr, nullptr);
+
+  // system_health 表（由 AppBootstrap 迁移至此，消除双连接）
+  sqlite3_exec(db_,
+               "CREATE TABLE IF NOT EXISTS system_health ("
+               "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+               "    service TEXT NOT NULL,"
+               "    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+               ");",
+               nullptr, nullptr, nullptr);
+  sqlite3_exec(db_,
+               "INSERT INTO system_health (id, service, checked_at) "
+               "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
+               "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;",
                nullptr, nullptr, nullptr);
 }
 
@@ -148,19 +162,7 @@ std::vector<SessionRecord> DataAccessFacade::listSessions() {
 bool DataAccessFacade::deleteSession(const std::string &id) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<bool>(
-      "deleteSession",
-      [&]() {
-        sqlite3_stmt *stmt = nullptr;
-        const char *sql = "DELETE FROM sessions WHERE id = ?;";
-        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-          throw std::runtime_error(sqlite3_errmsg(db_));
-        }
-        sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-        const int step = sqlite3_step(stmt);
-        const bool deleted = (step == SQLITE_DONE);
-        sqlite3_finalize(stmt);
-        return deleted;
-      },
+      "deleteSession", [&]() { return SessionRepository(db_).deleteById(id); },
       false);
 }
 
@@ -201,61 +203,7 @@ DataAccessFacade::listTasksBySession(const std::string &sessionId) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<std::vector<TaskRecord>>(
       "listTasksBySession",
-      [&]() {
-        sqlite3_stmt *stmt = nullptr;
-        const char *sql =
-            "SELECT id, session_id, workspace_id, goal, status, plan, "
-            "current_step, created_at, updated_at FROM tasks WHERE "
-            "session_id = ? ORDER BY created_at DESC;";
-        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-          throw std::runtime_error(sqlite3_errmsg(db_));
-        }
-        sqlite3_bind_text(stmt, 1, sessionId.c_str(), -1, SQLITE_TRANSIENT);
-
-        std::vector<TaskRecord> tasks;
-        while (sqlite3_step(stmt) == SQLITE_ROW) {
-          TaskRecord r;
-          r.id =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0))
-                  : "";
-          r.session_id =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1))
-                  : "";
-          r.workspace_id =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2))
-                  : "";
-          r.goal =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3))
-                  : "";
-          r.status =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4))
-                  : "";
-          r.plan =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5))
-                  : "";
-          r.current_step =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6))
-                  : "";
-          r.created_at =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7))
-                  : "";
-          r.updated_at =
-              reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8))
-                  ? reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8))
-                  : "";
-          tasks.push_back(r);
-        }
-        sqlite3_finalize(stmt);
-        return tasks;
-      },
+      [&]() { return TaskRepository(db_).findBySessionId(sessionId); },
       std::vector<TaskRecord>{});
 }
 
@@ -270,34 +218,12 @@ std::vector<TaskRecord> DataAccessFacade::listRecentTasks(int limit) {
 WorkspaceRecord DataAccessFacade::createWorkspace(const std::string &name,
                                                   const std::string &path) {
   std::lock_guard<std::mutex> lock(mutex_);
+  const std::string now = iso8601Now();
   return safeCall<WorkspaceRecord>(
       "createWorkspace",
       [&]() {
-        WorkspaceRecord record;
-        record.id = generateId("ws");
-        record.name = name;
-        record.path = path;
-        record.created_at = iso8601Now();
-
-        sqlite3_stmt *stmt = nullptr;
-        const char *sql =
-            "INSERT INTO workspaces (id, name, path, created_at) VALUES (?, "
-            "?, ?, ?);";
-        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-          throw std::runtime_error(sqlite3_errmsg(db_));
-        }
-        sqlite3_bind_text(stmt, 1, record.id.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 2, record.name.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 3, record.path.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 4, record.created_at.c_str(), -1,
-                          SQLITE_TRANSIENT);
-        if (sqlite3_step(stmt) != SQLITE_DONE) {
-          const std::string err = sqlite3_errmsg(db_);
-          sqlite3_finalize(stmt);
-          throw std::runtime_error(err);
-        }
-        sqlite3_finalize(stmt);
-        return record;
+        return WorkspaceRepository(db_).create(generateId("ws"), name, path,
+                                               now);
       },
       WorkspaceRecord{});
 }
@@ -381,44 +307,13 @@ PermissionRequest DataAccessFacade::createPermissionRequest(
     const std::string &riskLevel, const std::string &action,
     const std::string &reason) {
   std::lock_guard<std::mutex> lock(mutex_);
+  const std::string now = iso8601Now();
   return safeCall<PermissionRequest>(
       "createPermissionRequest",
       [&]() {
-        PermissionRequest req;
-        req.id = generateId("perm");
-        req.task_id = taskId;
-        req.tool_name = toolName;
-        req.risk_level = riskLevel;
-        req.action = action;
-        req.reason = reason;
-        req.status = "pending";
-        req.created_at = iso8601Now();
-
-        sqlite3_stmt *stmt = nullptr;
-        const char *sql =
-            "INSERT INTO permission_requests (id, task_id, tool_name, "
-            "risk_level, action, reason, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
-        if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-          throw std::runtime_error(sqlite3_errmsg(db_));
-        }
-        sqlite3_bind_text(stmt, 1, req.id.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 2, req.task_id.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 3, req.tool_name.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 4, req.risk_level.c_str(), -1,
-                          SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 5, req.action.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 6, req.reason.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 7, "pending", -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 8, req.created_at.c_str(), -1,
-                          SQLITE_TRANSIENT);
-        if (sqlite3_step(stmt) != SQLITE_DONE) {
-          const std::string err = sqlite3_errmsg(db_);
-          sqlite3_finalize(stmt);
-          throw std::runtime_error(err);
-        }
-        sqlite3_finalize(stmt);
-        return req;
+        return PermissionRepository(db_).create(generateId("perm"), taskId,
+                                                toolName, riskLevel, action,
+                                                reason, now);
       },
       PermissionRequest{});
 }
@@ -513,7 +408,7 @@ bool DataAccessFacade::deleteTaskCascade(const std::string &taskId) {
 }
 
 // ============================================================
-// 任务上下文持久化（支持主循环中断恢复，第 3 点）
+// 任务上下文持久化（支持主循环中断恢复）
 // ============================================================
 bool DataAccessFacade::saveTaskContext(const std::string &taskId,
                                        const std::string &contextJson) {
