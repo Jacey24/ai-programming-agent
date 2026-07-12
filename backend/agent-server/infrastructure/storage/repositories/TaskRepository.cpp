@@ -2,10 +2,10 @@
 
 #include <stdexcept>
 
-TaskRepository::TaskRepository(sqlite3* db) : db_(db) {}
+TaskRepository::TaskRepository(sqlite3 *db) : db_(db) {}
 
 void TaskRepository::initTable() {
-    const char* sql = R"SQL(
+  const char *sql = R"SQL(
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -19,88 +19,146 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 )SQL";
 
-    char* error_message = nullptr;
-    const int exec_result = sqlite3_exec(db_, sql, nullptr, nullptr, &error_message);
-    if (exec_result != SQLITE_OK) {
-        const std::string error = error_message ? error_message : lastError();
-        sqlite3_free(error_message);
-        throw std::runtime_error(error);
-    }
+  char *error_message = nullptr;
+  const int exec_result =
+      sqlite3_exec(db_, sql, nullptr, nullptr, &error_message);
+  if (exec_result != SQLITE_OK) {
+    const std::string error = error_message ? error_message : lastError();
+    sqlite3_free(error_message);
+    throw std::runtime_error(error);
+  }
 }
 
-TaskRecord TaskRepository::createTask(
-    const std::string& id,
-    const std::string& session_id,
-    const std::string& workspace_id,
-    const std::string& goal,
-    const std::string& created_at,
-    const std::string& updated_at) {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT INTO tasks (id, session_id, workspace_id, goal, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+TaskRecord TaskRepository::createTask(const std::string &id,
+                                      const std::string &session_id,
+                                      const std::string &workspace_id,
+                                      const std::string &goal,
+                                      const std::string &created_at,
+                                      const std::string &updated_at) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "INSERT INTO tasks (id, session_id, workspace_id, goal, status, "
+      "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, session_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, goal.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, "created", -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 6, created_at.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 7, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, session_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 4, goal.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, "created", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 6, created_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 7, updated_at.c_str(), -1, SQLITE_TRANSIENT);
 
-    const int step_result = sqlite3_step(stmt);
-    if (step_result != SQLITE_DONE) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
-
+  const int step_result = sqlite3_step(stmt);
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
-    return TaskRecord{
-        id,
-        session_id,
-        workspace_id,
-        goal,
-        "created",
-        "",
-        "",
-        created_at,
-        updated_at,
-    };
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
+  return TaskRecord{
+      id, session_id, workspace_id, goal,       "created",
+      "", "",         created_at,   updated_at,
+  };
 }
 
-std::optional<TaskRecord> TaskRepository::findById(const std::string& task_id) {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, session_id, workspace_id, goal, status, plan, current_step, created_at, updated_at FROM tasks WHERE id = ?;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+std::optional<TaskRecord> TaskRepository::findById(const std::string &task_id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "SELECT id, session_id, workspace_id, goal, status, plan, current_step, "
+      "created_at, updated_at FROM tasks WHERE id = ?;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
 
-    const int step_result = sqlite3_step(stmt);
-    if (step_result == SQLITE_DONE) {
-        sqlite3_finalize(stmt);
-        return std::nullopt;
-    }
-    if (step_result != SQLITE_ROW) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
+  const int step_result = sqlite3_step(stmt);
+  if (step_result == SQLITE_DONE) {
+    sqlite3_finalize(stmt);
+    return std::nullopt;
+  }
+  if (step_result != SQLITE_ROW) {
+    const std::string error = lastError();
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
 
-    const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-    const auto* session_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    const auto* workspace_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    const auto* goal = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-    const auto* status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-    const auto* plan = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-    const auto* current_step = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-    const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-    const auto* updated_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+  const auto *id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+  const auto *session_id =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+  const auto *workspace_id =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+  const auto *goal =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+  const auto *status =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+  const auto *plan =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+  const auto *current_step =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+  const auto *created_at =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+  const auto *updated_at =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
 
-    TaskRecord task{
+  TaskRecord task{
+      id ? id : "",
+      session_id ? session_id : "",
+      workspace_id ? workspace_id : "",
+      goal ? goal : "",
+      status ? status : "",
+      plan ? plan : "",
+      current_step ? current_step : "",
+      created_at ? created_at : "",
+      updated_at ? updated_at : "",
+  };
+
+  sqlite3_finalize(stmt);
+  return task;
+}
+
+std::vector<TaskRecord> TaskRepository::listRecent(int limit) {
+  if (limit <= 0 || limit > 100) {
+    limit = 20;
+  }
+
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "SELECT id, session_id, workspace_id, goal, status, plan, current_step, "
+      "created_at, updated_at FROM tasks ORDER BY created_at DESC LIMIT ?;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
+
+  sqlite3_bind_int(stmt, 1, limit);
+
+  std::vector<TaskRecord> tasks;
+  int step_result = SQLITE_ROW;
+  while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
+    const auto *id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    const auto *session_id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+    const auto *workspace_id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+    const auto *goal =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+    const auto *status =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+    const auto *plan =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+    const auto *current_step =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+    const auto *created_at =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+    const auto *updated_at =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
+
+    tasks.push_back(TaskRecord{
         id ? id : "",
         session_id ? session_id : "",
         workspace_id ? workspace_id : "",
@@ -110,89 +168,106 @@ std::optional<TaskRecord> TaskRepository::findById(const std::string& task_id) {
         current_step ? current_step : "",
         created_at ? created_at : "",
         updated_at ? updated_at : "",
-    };
+    });
+  }
 
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
-    return task;
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
+  return tasks;
 }
 
-std::vector<TaskRecord> TaskRepository::listRecent(int limit) {
-    if (limit <= 0 || limit > 100) {
-        limit = 20;
-    }
+std::vector<TaskRecord>
+TaskRepository::findBySessionId(const std::string &session_id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "SELECT id, session_id, workspace_id, goal, status, plan, current_step, "
+      "created_at, updated_at FROM tasks WHERE session_id = ? ORDER BY "
+      "created_at DESC;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, session_id, workspace_id, goal, status, plan, current_step, created_at, updated_at FROM tasks ORDER BY created_at DESC LIMIT ?;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+  sqlite3_bind_text(stmt, 1, session_id.c_str(), -1, SQLITE_TRANSIENT);
 
-    sqlite3_bind_int(stmt, 1, limit);
+  std::vector<TaskRecord> tasks;
+  int step_result = SQLITE_ROW;
+  while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
+    const auto *id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    const auto *sid =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+    const auto *wid =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+    const auto *goal =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+    const auto *status =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+    const auto *plan =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+    const auto *cs =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+    const auto *ca =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+    const auto *ua =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
 
-    std::vector<TaskRecord> tasks;
-    int step_result = SQLITE_ROW;
-    while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        const auto* session_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* workspace_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* goal = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-        const auto* plan = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-        const auto* current_step = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-        const auto* updated_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+    tasks.push_back(TaskRecord{
+        id ? id : "",
+        sid ? sid : "",
+        wid ? wid : "",
+        goal ? goal : "",
+        status ? status : "",
+        plan ? plan : "",
+        cs ? cs : "",
+        ca ? ca : "",
+        ua ? ua : "",
+    });
+  }
 
-        tasks.push_back(TaskRecord{
-            id ? id : "",
-            session_id ? session_id : "",
-            workspace_id ? workspace_id : "",
-            goal ? goal : "",
-            status ? status : "",
-            plan ? plan : "",
-            current_step ? current_step : "",
-            created_at ? created_at : "",
-            updated_at ? updated_at : "",
-        });
-    }
-
-    if (step_result != SQLITE_DONE) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
-
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
-    return tasks;
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
+  return tasks;
 }
 
-void TaskRepository::updateExecution(
-    const std::string& task_id,
-    const std::string& status,
-    const std::string& plan,
-    const std::string& current_step,
-    const std::string& updated_at) {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "UPDATE tasks SET status = ?, plan = ?, current_step = ?, updated_at = ? WHERE id = ?;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+void TaskRepository::updateExecution(const std::string &task_id,
+                                     const std::string &status,
+                                     const std::string &plan,
+                                     const std::string &current_step,
+                                     const std::string &updated_at) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "UPDATE tasks SET status = ?, plan = ?, current_step = ?, updated_at = ? "
+      "WHERE id = ?;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, plan.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, current_step.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, updated_at.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, task_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, plan.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, current_step.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 4, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, task_id.c_str(), -1, SQLITE_TRANSIENT);
 
-    const int step_result = sqlite3_step(stmt);
-    if (step_result != SQLITE_DONE) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
-
+  const int step_result = sqlite3_step(stmt);
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
 }
 
 std::string TaskRepository::lastError() const {
-    return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
+  return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
 }

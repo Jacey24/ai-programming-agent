@@ -3,7 +3,6 @@
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
-#include "infrastructure/storage/SqliteConnection.h"
 
 #include "common/logging/Logger.h"
 
@@ -25,7 +24,7 @@ std::atomic_bool running{true};
 void handle_signal(int) { running.store(false); }
 
 // ============================================================
-// 统一 JSON 配置提取（替代原 80 行手写字符串扫描，第 5 点优化）
+// 统一 JSON 配置提取
 // ============================================================
 std::string readFile(const std::string &path) {
   std::ifstream in(path);
@@ -45,7 +44,6 @@ std::string extractConfigValue(const std::string &configPath,
   }
   try {
     nlohmann::json config = nlohmann::json::parse(raw);
-    // 支持嵌套路径，如 "storage.path" 或 "workspace.root"
     const auto dot = key.find('.');
     if (dot != std::string::npos) {
       const std::string top = key.substr(0, dot);
@@ -75,60 +73,6 @@ std::string extract_workspace_root(const std::string &config_path) {
   return root.empty() ? "/workspace" : root;
 }
 
-// ============================================================
-// 数据库初始化（第 4 点优化：schema 由 DataAccessFacade 统一管理）
-// ============================================================
-bool initialize_database(const std::string &path, std::string &error) {
-  sqlite3 *db = nullptr;
-  if (codepilot::openSqliteConnection(path.c_str(), &db) != SQLITE_OK) {
-    error = db ? sqlite3_errmsg(db) : "sqlite3_open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return false;
-  }
-  codepilot::configureSqliteDatabase(db);
-
-  // 仅建健康检查表（8 张业务表由 DataAccessFacade::createAllTables 统管）
-  const char *schema = R"SQL(
-CREATE TABLE IF NOT EXISTS system_health (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    service TEXT NOT NULL,
-    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-INSERT INTO system_health (id, service, checked_at)
-VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP)
-ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;
-)SQL";
-
-  char *error_message = nullptr;
-  const int exec_result =
-      sqlite3_exec(db, schema, nullptr, nullptr, &error_message);
-  if (exec_result != SQLITE_OK) {
-    error = error_message ? error_message : "schema initialization failed";
-    sqlite3_free(error_message);
-    sqlite3_close(db);
-    return false;
-  }
-
-  sqlite3_stmt *stmt = nullptr;
-  const int prepare_result = sqlite3_prepare_v2(
-      db, "SELECT COUNT(*) FROM system_health;", -1, &stmt, nullptr);
-  if (prepare_result != SQLITE_OK || sqlite3_step(stmt) != SQLITE_ROW) {
-    error = sqlite3_errmsg(db);
-    if (stmt) {
-      sqlite3_finalize(stmt);
-    }
-    sqlite3_close(db);
-    return false;
-  }
-
-  sqlite3_finalize(stmt);
-  sqlite3_close(db);
-  error.clear();
-  return true;
-}
-
 } // namespace
 
 int run_agent_server(const std::string &config_path) {
@@ -141,13 +85,19 @@ int run_agent_server(const std::string &config_path) {
 
   const std::string database_path = extract_storage_path(config_path);
   const std::string workspace_root = extract_workspace_root(config_path);
-  std::string database_error;
-  const bool database_connected =
-      initialize_database(database_path, database_error);
+
+  // 初始化工具系统
   codepilot::ToolSystem::getInstance().init(workspace_root, config_path);
 
-  // 初始化存储门面
-  codepilot::DataAccessFacade::getInstance().init(database_path);
+  // 初始化存储门面（建表+system_health 统一由此完成，消除 AppBootstrap 双连接）
+  bool database_connected = false;
+  std::string database_error;
+  try {
+    codepilot::DataAccessFacade::getInstance().init(database_path);
+    database_connected = true;
+  } catch (const std::exception &e) {
+    database_error = e.what();
+  }
 
   // 初始化通信门面（绑定 EventBus + DataAccessFacade）
   codepilot::SSEGateway::getInstance().init(

@@ -7,29 +7,34 @@
 #include <vector>
 
 struct PermissionRequest {
-    std::string id;
-    std::string task_id;
-    std::string tool_name;
-    std::string risk_level;
-    std::string action;
-    std::string reason;
-    std::string status;
-    std::string created_at;
-    std::string resolved_at;
+  std::string id;
+  std::string task_id;
+  std::string tool_name;
+  std::string risk_level;
+  std::string action;
+  std::string reason;
+  std::string status;
+  std::string created_at;
+  std::string resolved_at;
 };
 
 class PermissionRepository {
 public:
-    explicit PermissionRepository(sqlite3* db);
+  explicit PermissionRepository(sqlite3 *db);
 
-    void initTable();
+  void initTable();
+  PermissionRequest create(const std::string &id, const std::string &task_id,
+                           const std::string &tool_name,
+                           const std::string &risk_level,
+                           const std::string &action, const std::string &reason,
+                           const std::string &created_at);
 
-    std::optional<PermissionRequest> findById(const std::string& id);
-    std::vector<PermissionRequest> findPending();
-    void updateStatus(const std::string& id, const std::string& status);
+  std::optional<PermissionRequest> findById(const std::string &id);
+  std::vector<PermissionRequest> findPending();
+  void updateStatus(const std::string &id, const std::string &status);
 
 private:
-    sqlite3* db_;
+  sqlite3 *db_;
 
-    std::string lastError() const;
+  std::string lastError() const;
 };

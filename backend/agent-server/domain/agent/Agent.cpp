@@ -111,11 +111,11 @@ AgentResult Agent::executeTask(const std::string &taskId,
   publishDebugLog(taskId, "已生成计划: " + planToJson(steps), "planner",
                   "planning");
 
-  // 记录规划到 execution_logs（通过 DataAccessFacade）
-  if (DataAccessFacade::getInstance().isInitialized()) {
-    DataAccessFacade::getInstance().appendLog(taskId, "planning",
-                                              planToJson(steps));
-  }
+  // 记录规划到 execution_logs（通过 SSEGateway 统一入口）
+  SSEGateway::getInstance().push(
+      taskId, EventType::AgentMessage, "已生成计划: " + planToJson(steps),
+      json{{"source", "planner"}, {"stage", "planning"}},
+      SSEGateway::Channel::Debug, SSEGateway::Persist::Always);
 
   // ============================================================
   // 阶段 2：步骤执行 (Executor)
@@ -197,10 +197,10 @@ AgentResult Agent::executeTask(const std::string &taskId,
     // 2e. 根据解析结果分派
     if (parsed.type == ResponseType::FinalAnswer || parsed.isDone) {
       context_.push_back("[final] " + parsed.content);
-      if (DataAccessFacade::getInstance().isInitialized()) {
-        DataAccessFacade::getInstance().appendLog(taskId, "step_done",
-                                                  "步骤完成: " + step.action);
-      }
+      SSEGateway::getInstance().push(
+          taskId, EventType::AgentMessage, "步骤完成: " + step.action,
+          json{{"source", "executor"}, {"stage", "step_done"}},
+          SSEGateway::Channel::Debug, SSEGateway::Persist::Always);
       queue_.markComplete();
       continue;
     }
@@ -264,12 +264,12 @@ AgentResult Agent::executeTask(const std::string &taskId,
         context_.push_back(resultCtx.str());
         publishDebugLog(taskId, resultCtx.str(), "tool", "result");
 
-        // 写入工具调用日志（通过 DataAccessFacade）
-        if (DataAccessFacade::getInstance().isInitialized()) {
-          DataAccessFacade::getInstance().appendLog(
-              taskId, toolResult.success ? "tool_result" : "tool_error",
-              resultCtx.str());
-        }
+        // 写入工具调用日志（通过 SSEGateway 统一入口）
+        SSEGateway::getInstance().push(
+            taskId, EventType::AgentMessage, resultCtx.str(),
+            json{{"source", "tool"},
+                 {"stage", toolResult.success ? "tool_result" : "tool_error"}},
+            SSEGateway::Channel::Debug, SSEGateway::Persist::Always);
 
         // 工具调用落库（通过 DataAccessFacade）
         persistToolCall(taskId, toolName, toolArgs, toolResult);
@@ -282,10 +282,11 @@ AgentResult Agent::executeTask(const std::string &taskId,
       if (stepRounds >= maxRoundsPerStep) {
         context_.push_back("[step_forced_done] 步骤 '" + step.action +
                            "' 已达单步工具轮次上限，自动完成并进入下一步");
-        if (DataAccessFacade::getInstance().isInitialized()) {
-          DataAccessFacade::getInstance().appendLog(
-              taskId, "step_done", "步骤达到轮次上限自动完成: " + step.action);
-        }
+        SSEGateway::getInstance().push(
+            taskId, EventType::AgentMessage,
+            "步骤达到轮次上限自动完成: " + step.action,
+            json{{"source", "executor"}, {"stage", "step_forced_done"}},
+            SSEGateway::Channel::Debug, SSEGateway::Persist::Always);
         queue_.markComplete();
       }
       continue;
@@ -302,10 +303,10 @@ AgentResult Agent::executeTask(const std::string &taskId,
 
     if (parsed.isFail) {
       context_.push_back("[fail] " + parsed.failReason);
-      if (DataAccessFacade::getInstance().isInitialized()) {
-        DataAccessFacade::getInstance().appendLog(taskId, "step_failed",
-                                                  parsed.failReason);
-      }
+      SSEGateway::getInstance().push(
+          taskId, EventType::AgentMessage, parsed.failReason,
+          json{{"source", "executor"}, {"stage", "step_failed"}},
+          SSEGateway::Channel::Debug, SSEGateway::Persist::Always);
       queue_.markFailed();
       continue;
     }
