@@ -1,5 +1,5 @@
 {
-  "default": "doubao",
+  "default": "DeepSeek",
   "providers": {
     "doubao": {
       "name": "豆包 (Doubao)",

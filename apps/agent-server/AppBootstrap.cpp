@@ -1,5 +1,6 @@
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
+#include "domain/agent/AgentOrchestrator.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
@@ -106,6 +107,12 @@ int run_agent_server(const std::string &config_path) {
 
   // 初始化 LLM 门面（加载 llm.json + llm.local.json）
   codepilot::LlmClientFacade::getInstance().init("config/llm.json");
+
+  // 初始化 Agent 编排器（加载 Expert 配置，启用 Expert Chain 主循环）
+  codepilot::AgentOrchestrator::getInstance().init("config/experts.json");
+  LOG_INFO("AgentOrchestrator ready: {}",
+           codepilot::AgentOrchestrator::getInstance().isReady() ? "true"
+                                                                 : "false");
 
   LOG_INFO("CodePilot Agent Server starting");
   LOG_INFO("Config: {}", config_path);
