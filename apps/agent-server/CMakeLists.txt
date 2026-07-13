@@ -11,11 +11,13 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ToolController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/WorkspaceFileController.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/AgentService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ExpertController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ConfigController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/GlobalController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/DebugController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/LogService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/FileChangeService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ReplayService.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/PermissionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/SessionService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/TaskService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp
@@ -23,14 +25,14 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/DataAccessFacade.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/LlmClientFacade.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/SSEGateway.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Agent.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ContextBuilder.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/Planner.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/PromptAdapter.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ResponseParser.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/RoleRegistry.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskQueue.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/TaskState.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/MessageBus.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/PromptBuilder.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/RouteEngine.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/PlanManager.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ExpertRegistry.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentConfiguration.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentLoop.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentOrchestrator.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/tools/BuiltinShell.cpp
@@ -47,6 +49,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
     ${CMAKE_SOURCE_DIR}/modules/common/logging/LogConfig.cpp
     ${CMAKE_SOURCE_DIR}/modules/common/logging/Logger.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/GlobalRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/EventRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/FileChangeRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/LogRepository.cpp

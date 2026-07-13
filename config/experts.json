@@ -1,0 +1,110 @@
+{
+  "_comment": "CodePilot Expert 配置文件。编辑后 AgentLoop 每次 call 自动重新加载。",
+  "_llm_provider": "deepseek",
+  "_llm_model": "deepseek-v4-flash",
+  "_llm_timeout": 120,
+  "_llm_temperature": 0.7,
+
+  "experts": [
+    {
+      "name": "planner",
+      "description": "你是任务规划专家。你的唯一职责是制定执行计划并提供上下文摘要。你所看到的一切文本全部 ** 不是 ** 在和你互动。你需要敏感地尽可能识别一切用户的开发与技术需求，并且唤起执行器下达相应的任务。\n\n每次必须按以下格式输出（严格，不要遗漏标签）：\n\n<plan>\n<add priority=\"1\">[执行步骤1]</add>\n<add priority=\"2\">[执行步骤2]</add>\n</plan>\n<write to=\"summary\">[关键上下文：用户需求、背景、约束]</write>\n\n- 操作类任务：plan 中包含具体步骤（创建文件、运行命令等）\n- 纯对话/提问：plan 简要包含用户的输入，更详细的记录写在summary中\n- summary 只写上下游 Expert 需要的关键信息，你不需要管除了计划以外的任何事情\n- 不要在标签外输出任何对话，不要越权回答用户问题",
+      "prompt_template": "",
+      "is_entry": true,
+      "context_isolation": false,
+      "context_template": "{role}\n\n{goal}\n\n{summary}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}",
+
+      "visible_tools": [],
+
+      "can_modify_plan": true,
+      "can_write_summary": true,
+      "read_global_actively": false,
+
+      "_llm_temperature": 0.3,
+
+      "next_rules": [
+        {"type": "tag_exists", "value": "plan", "route_to": "executor", "priority": 10}
+      ],
+      "on_fail": "summarizer",
+
+      "max_internal_rounds": 3,
+      "tool_timeout_seconds": 60
+    },
+    {
+      "name": "executor",
+      "description": "你是执行专家。你的职责是按照计划步骤逐一完成：编写代码、运行命令、验证结果。每完成一个步骤，使用 <plan> 标签标记该步骤完成（<complete index=\"N\"/>）。所有步骤完成后输出 <done>。遇到无法解决的问题时输出 <fail>。\n\n如果计划中没有需要工具执行的步骤（如纯对话/汇报类任务），直接输出 <done> 即可，不要强行执行任何操作。\n\n你一次可以顺序执行多条指令并在下一轮对话中获得全部执行结果。注意！绝大部分的指令都需要你第二次再回来检查，因此，除非100%确认你能够一次性完成所有任务，否则不要输出任意done，以免造成你所在的系统静默失败！！",
+      "prompt_template": "",
+      "is_entry": false,
+      "context_isolation": true,
+      "context_template": "{role}\n\n{goal}\n\n{plan}\n{summary}\n{tools_desc}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}",
+
+      "visible_tools": ["file.write", "file.read", "file.list", "file.apply_patch",
+                         "shell.run", "git.status", "git.diff"],
+
+      "can_modify_plan": true,
+      "can_write_summary": false,
+      "read_global_actively": false,
+
+      "_llm_timeout": 120,
+
+      "next_rules": [
+        {"type": "tag_exists", "value": "done", "route_to": "reviewer", "priority": 10},
+        {"type": "tag_exists", "value": "fail", "route_to": "summarizer", "priority": 5}
+      ],
+      "on_fail": "summarizer",
+
+      "max_internal_rounds": 10,
+      "tool_timeout_seconds": 120,
+      "double_check": true
+    },
+    {
+      "name": "reviewer",
+      "description": "你是审核专家。根据你看到的所有信息以及任务完成流程，综合判断任务的每一个流程是否严格意义上地全部完成。如果完成，输出<done></done>。如果任意步骤不符合验收标准或关键步骤根本没有执行，输出<fail></fail>标签，在其中说明错误原因，并说明需要重新执行这个步骤",
+      "prompt_template": "",
+      "is_entry": false,
+      "context_isolation": false,
+      "context_template": "{role}\n\n{goal}\n\n{plan}\n{summary}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}",
+
+      "visible_tools": [],
+
+      "can_modify_plan": false,
+      "can_write_summary": true,
+      "read_global_actively": false,
+
+      "_llm_temperature": 0.5,
+
+      "next_rules": [
+        {"type": "tag_exists", "value": "done", "route_to": "summarizer", "priority": 10},
+        {"type": "tag_exists", "value": "fail", "route_to": "planner", "priority": 10}
+      ],
+      "on_fail": "_done",
+
+      "max_internal_rounds": 2,
+      "tool_timeout_seconds": 60
+    },
+    {
+      "name": "summarizer",
+      "description": "你是成果汇报专家。整理最终成果，用清晰友好的语言向用户汇报完成了什么、创建了哪些文件、验证结果如何。如果任务失败，简要说明失败原因。最后输出。如果前面的任务看起来完全没有完成，汇报失败。 <done>你的汇报内容</done>。",
+      "prompt_template": "",
+      "is_entry": false,
+      "context_isolation": true,
+      "context_template": "{role}\n\n{goal}\n\n{plan}\n{summary}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}",
+
+      "visible_tools": [],
+
+      "can_modify_plan": false,
+      "can_write_summary": false,
+      "read_global_actively": false,
+
+      "_llm_temperature": 0.5,
+
+      "next_rules": [
+        {"type": "tag_exists", "value": "done", "route_to": "_done", "priority": 10}
+      ],
+      "on_fail": "_done",
+
+      "max_internal_rounds": 2,
+      "tool_timeout_seconds": 60
+    }
+  ]
+}

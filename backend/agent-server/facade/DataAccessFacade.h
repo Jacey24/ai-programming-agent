@@ -2,6 +2,7 @@
 
 #include "infrastructure/storage/repositories/EventRepository.h"
 #include "infrastructure/storage/repositories/FileChangeRepository.h"
+#include "infrastructure/storage/repositories/GlobalRepository.h"
 #include "infrastructure/storage/repositories/LogRepository.h"
 #include "infrastructure/storage/repositories/PermissionRepository.h"
 #include "infrastructure/storage/repositories/ReplayRepository.h"
@@ -25,10 +26,10 @@ namespace codepilot {
 // 设计目标（参照 application/ToolSystem.h）：
 //   一行 init() → 所有持久化原子操作 → 调用方无需理解内部 Repository 细节
 //
-// 内部封装 8 个 Repository：
-//   SessionRepository, TaskRepository, LogRepository, EventRepository,
-//   ToolCallRepository, PermissionRepository, FileChangeRepository,
-//   ReplayRepository
+// 内部封装 9 个 Repository：
+//   GlobalRepository (新), SessionRepository (兼容), TaskRepository,
+//   LogRepository, EventRepository, ToolCallRepository, PermissionRepository,
+//   FileChangeRepository, ReplayRepository
 //
 // 线程安全（使用 mutex 保护所有 db 操作）
 // ============================================================
@@ -43,7 +44,7 @@ public:
   bool isInitialized() const { return initialized_; }
 
   // ============================================================
-  // Session 组
+  // Session 组（兼容旧 API，内部委托给 Global）
   // ============================================================
   SessionRecord createSession(const std::string &title);
   std::optional<SessionRecord> getSession(const std::string &id);
@@ -51,9 +52,28 @@ public:
   bool deleteSession(const std::string &id);
 
   // ============================================================
+  // Global 组（新架构 — 项目/主题级上下文容器）
+  // ============================================================
+  GlobalRecord createGlobal(const std::string &name,
+                            const std::string &description = "");
+  std::optional<GlobalRecord> getGlobal(const std::string &id);
+  std::vector<GlobalRecord> listGlobals();
+  bool deleteGlobal(const std::string &id);
+
+  // 默认 Global（启动时自动创建）
+  std::string ensureDefaultGlobal();
+
+  // Global Context（知识库归档与检索）
+  void saveGlobalContext(const std::string &globalId,
+                         const std::string &sourceTaskId,
+                         const std::string &type, const std::string &content);
+  std::vector<GlobalContextRecord>
+  getGlobalContext(const std::string &globalId);
+
+  // ============================================================
   // Task 组
   // ============================================================
-  TaskRecord createTask(const std::string &sessionId,
+  TaskRecord createTask(const std::string &globalId,
                         const std::string &workspaceId,
                         const std::string &goal);
   std::optional<TaskRecord> getTask(const std::string &id);
@@ -61,6 +81,7 @@ public:
                         const std::string &plan,
                         const std::string &currentStep);
   std::vector<TaskRecord> listTasksBySession(const std::string &sessionId);
+  std::vector<TaskRecord> listTasksByGlobal(const std::string &globalId);
   std::vector<TaskRecord> listRecentTasks(int limit = 20);
 
   // ============================================================
@@ -133,7 +154,7 @@ public:
   bool deleteTaskCascade(const std::string &taskId);
 
   // ============================================================
-  // 新增：任务上下文持久化（支持主循环中断恢复）
+  // 任务上下文持久化（支持主循环中断恢复）
   // ============================================================
   bool saveTaskContext(const std::string &taskId,
                        const std::string &contextJson);

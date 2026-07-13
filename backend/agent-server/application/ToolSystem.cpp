@@ -179,9 +179,10 @@ ToolResult ToolSystem::callTool(const std::string &name,
   // 发布 ToolStarted 事件（EventBus 内部有锁）
   json startedMeta{{"tool_name", name}, {"arguments", arguments}};
   const auto callId = context.options.find("tool_call_id");
-  if (callId != context.options.end()) startedMeta["tool_call_id"] = callId->second;
-  eventBus_->publish(EventData::Create(
-      context.taskId, EventType::ToolStarted, "Starting tool: " + name, startedMeta));
+  if (callId != context.options.end())
+    startedMeta["tool_call_id"] = callId->second;
+  eventBus_->publish(EventData::Create(context.taskId, EventType::ToolStarted,
+                                       "Starting tool: " + name, startedMeta));
 
   // ---- 重复指令检测（写锁范围尽可能小） ----
   std::string key = name + ":" + hashArguments(arguments);
@@ -282,14 +283,16 @@ ToolResult ToolSystem::callTool(const std::string &name,
   meta["tool_name"] = name;
   meta["success"] = result.success;
   meta["exit_code"] = result.exitCode;
-  if (callId != context.options.end()) meta["tool_call_id"] = callId->second;
+  if (callId != context.options.end())
+    meta["tool_call_id"] = callId->second;
   if (result.metadata.contains("duplicate_warning")) {
     meta["duplicate_warning"] = result.metadata["duplicate_warning"];
   }
 
-  const std::string output = (result.success ? result.output : result.error).substr(0, 4000);
-  eventBus_->publish(EventData::Create(
-      context.taskId, EventType::ToolOutput, output, meta));
+  const std::string output =
+      (result.success ? result.output : result.error).substr(0, 4000);
+  eventBus_->publish(
+      EventData::Create(context.taskId, EventType::ToolOutput, output, meta));
   eventBus_->publish(EventData::Create(
       context.taskId, EventType::ToolFinished,
       result.success ? "Tool finished" : "Tool failed: " + result.error, meta));
@@ -308,12 +311,20 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
   // 1. 获取工具并检测风险等级
   Tool *tool = registry_->getTool(name);
   if (!tool) {
-    return ToolResult::Err("Tool not found: " + name);
+    json meta;
+    meta["tool_name"] = name;
+    meta["failure_reason"] = "TOOL_NOT_FOUND";
+    ToolResult r = ToolResult::Err(
+        "[TOOL_NOT_FOUND] 工具 \"" + name +
+        "\" 未在工具系统中注册，调用被拒绝。请检查工具名称是否正确，"
+        "或使用可用工具列表中的工具。");
+    r.metadata = meta;
+    return r;
   }
 
   // 检查配置覆盖中的风险等级
   RiskLevel level = tool->riskLevel(arguments);
-  const auto optionEnabled = [&context](const char* name, bool fallback) {
+  const auto optionEnabled = [&context](const char *name, bool fallback) {
     const auto it = context.options.find(name);
     return it == context.options.end() ? fallback : it->second == "true";
   };
@@ -339,10 +350,13 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
   if (level == RiskLevel::Blocked) {
     json meta;
     meta["tool_name"] = name;
-    meta["risk_level"] = riskLevelToString(level);
+    meta["risk_level"] = "blocked";
+    meta["failure_reason"] = "BLOCKED";
     meta["blocked"] = true;
-    ToolResult r =
-        ToolResult::Err("该操作已被系统阻止: " + name + " (风险等级: blocked)");
+    ToolResult r = ToolResult::Err(
+        "[BLOCKED] 工具 \"" + name +
+        "\" 已被系统永久阻止（风险等级: blocked）。该操作不可执行。"
+        "请调整方案，使用安全性更高的替代操作完成目标。");
     r.metadata = meta;
     return r;
   }
@@ -358,13 +372,28 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     bool approved = permissionManager_->waitForResolution(request.id);
 
     if (!approved) {
+      // 重新读取请求以获取 waitForResolution 后更新的状态
+      auto finalReq = permissionManager_->getRequestCopy(request.id);
+      bool isExpired =
+          finalReq && finalReq->status == PermissionStatus::Expired;
+
       json meta;
       meta["tool_name"] = name;
       meta["risk_level"] = riskLevelToString(level);
       meta["request_id"] = request.id;
       meta["permission_denied"] = true;
+      std::string reason = "用户拒绝了该操作。";
+      std::string tag = "PERMISSION_DENIED";
+      if (isExpired) {
+        reason = "权限请求已超时（120秒内未获得用户响应）。";
+        tag = "PERMISSION_EXPIRED";
+      }
+      meta["failure_reason"] = tag;
       ToolResult r =
-          ToolResult::Err("权限被拒绝或超时: " + name + " (用户未批准该操作)");
+          ToolResult::Err("[" + tag + "] 工具 \"" + name + "\" (风险等级: " +
+                          riskLevelToString(level) + ") " + reason +
+                          " 请尝试使用不需要该权限的替代方案，或"
+                          "等待用户在权限面板中批准后重试。");
       r.metadata = meta;
       return r;
     }

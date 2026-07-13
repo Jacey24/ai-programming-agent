@@ -1,9 +1,8 @@
 #include "TaskController.h"
 
-#include "application/AgentService.h"
-#include "application/LogService.h"
 #include "application/ToolSystem.h"
 
+#include "domain/agent/AgentOrchestrator.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
 
@@ -111,6 +110,20 @@ namespace codepilot {
 TaskController::TaskController(std::string database_path)
     : databasePath_(std::move(database_path)) {}
 
+// ★ v2: 兼容层 — 解析 global_id，支持旧字段 session_id
+static std::string resolveGlobalIdFromBody(const json &body) {
+  // 优先新字段 global_id
+  if (body.contains("global_id") && body["global_id"].is_string()) {
+    return body["global_id"].get<std::string>();
+  }
+  // 降级到旧字段 session_id
+  if (body.contains("session_id") && body["session_id"].is_string()) {
+    return body["session_id"].get<std::string>();
+  }
+  // 如果都没有，返回空让 Orchestrator 使用默认 Global
+  return "";
+}
+
 std::string TaskController::createTask(const std::string &request) {
   const std::string body_content = request_body(request);
   json body = json::parse(body_content, nullptr, false);
@@ -120,11 +133,7 @@ std::string TaskController::createTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  const std::string session_id = [&]() {
-    if (!body.contains("session_id") || !body["session_id"].is_string())
-      return std::string();
-    return body["session_id"].get<std::string>();
-  }();
+  const std::string global_id = resolveGlobalIdFromBody(body);
   const std::string workspace_id = [&]() {
     if (!body.contains("workspace_id") || !body["workspace_id"].is_string())
       return std::string();
@@ -135,29 +144,13 @@ std::string TaskController::createTask(const std::string &request) {
       return std::string();
     return body["input"].get<std::string>();
   }();
-  if (session_id.empty() || workspace_id.empty() || input.empty()) {
+  if (workspace_id.empty() || input.empty()) {
     return http_response(
-        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id and input are required"}})",
         "400 Bad Request");
   }
-  const json options = body.contains("options") && body["options"].is_object()
-                           ? body["options"]
-                           : json::object();
-  TaskRunOptions runOptions;
-  const std::string executionMode = options.value("execution_mode", "auto");
-  runOptions.mode = executionMode == "answer" ? ExecutionMode::DirectAnswer
-                    : executionMode == "workspace"
-                        ? ExecutionMode::WorkspaceAgent
-                        : ExecutionMode::Auto;
-  runOptions.autoRunSafeCommands =
-      options.value("auto_run_safe_commands", true);
-  runOptions.requireFileWritePermission =
-      options.value("require_permission_for_file_write", true);
-  runOptions.maxSteps = std::clamp(options.value("max_steps", 6), 1, 20);
-  runOptions.maxRoundsPerStep =
-      std::clamp(options.value("max_rounds_per_step", 3), 1, 6);
 
-  // 第 7 点优化：通过 DataAccessFacade 创建任务，不再手动管理 sqlite3 连接
+  // 创建 DB 任务记录
   TaskRecord task;
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
@@ -166,7 +159,11 @@ std::string TaskController::createTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
-    task = facade.createTask(session_id, workspace_id, input);
+    std::string effectiveGlobalId = global_id;
+    if (effectiveGlobalId.empty()) {
+      effectiveGlobalId = facade.ensureDefaultGlobal();
+    }
+    task = facade.createTask(effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
     const auto refreshed = facade.getTask(task.id);
     if (refreshed) {
@@ -190,39 +187,24 @@ std::string TaskController::createTask(const std::string &request) {
         "500 Internal Server Error");
   }
 
-  // 后台异步执行 Agent（第 7 点优化：后台线程也通过 DataAccessFacade 操作，
-  // 不再需要独立的 worker_db 连接）
-  const std::string task_id = task.id;
-  std::thread([task_id, session_id, workspace_id, input, runOptions]() {
-    try {
-      AgentService agent_service;
-      const AgentResult agent_result = agent_service.runTask(
-          task_id, session_id, workspace_id, input, runOptions);
-      if (DataAccessFacade::getInstance().isInitialized()) {
-        auto &facade = DataAccessFacade::getInstance();
-        facade.updateTaskStatus(
-            task_id,
-            agent_result.status.empty() ? "completed" : agent_result.status,
-            agent_result.planJson, agent_result.currentStep);
-        for (const auto &entry : agent_result.logs) {
-          facade.appendLog(task_id,
-                           entry.size() > 2 && entry.front() == '['
-                               ? entry.substr(1, entry.find(']') - 1)
-                               : "agent",
-                           entry);
-        }
-      }
-    } catch (const std::exception &) {
-      if (DataAccessFacade::getInstance().isInitialized()) {
-        DataAccessFacade::getInstance().updateTaskStatus(task_id, "failed", "",
-                                                         "");
-      }
-    }
-  }).detach();
+  auto &orch = AgentOrchestrator::getInstance();
+  if (!orch.isReady()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"ORCHESTRATOR_ERROR","message":"AgentOrchestrator not ready"}})",
+        "500 Internal Server Error");
+  }
+  try {
+    orch.startTask(task.id, global_id, workspace_id, input);
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
 
   std::ostringstream response_body;
   response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
-                << R"(","session_id":")" << json_escape(task.session_id)
+                << R"(","global_id":")" << json_escape(task.session_id)
                 << R"(","workspace_id":")" << json_escape(task.workspace_id)
                 << R"(","goal":")" << json_escape(task.goal)
                 << R"(","status":")" << json_escape(task.status) << R"(")";
@@ -236,6 +218,109 @@ std::string TaskController::createTask(const std::string &request) {
   response_body << R"(,"created_at":")" << json_escape(task.created_at)
                 << R"(","updated_at":")" << json_escape(task.updated_at)
                 << R"("}})";
+  return http_response(response_body.str());
+}
+
+// ★ v2: continueTask 保留兼容 — 重定向到 createTask
+std::string TaskController::continueTask(const std::string &request) {
+  const std::string body_content = request_body(request);
+  json body = json::parse(body_content, nullptr, false);
+  if (body.is_discarded() || !body.is_object()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"request body must be valid JSON"}})",
+        "400 Bad Request");
+  }
+
+  // 从 parent_task_id 提取 global_id（兼容旧行为）
+  const std::string parent_task_id = [&]() {
+    if (!body.contains("parent_task_id") || !body["parent_task_id"].is_string())
+      return std::string();
+    return body["parent_task_id"].get<std::string>();
+  }();
+
+  // 如果传了 parent_task_id，查其所属 Global
+  std::string global_id = resolveGlobalIdFromBody(body);
+  if (global_id.empty() && !parent_task_id.empty()) {
+    auto parentTask = DataAccessFacade::getInstance().getTask(parent_task_id);
+    if (parentTask) {
+      global_id =
+          parentTask->session_id; // TaskRecord.session_id 现在存的是 global_id
+    }
+  }
+
+  const std::string workspace_id = [&]() {
+    if (!body.contains("workspace_id") || !body["workspace_id"].is_string())
+      return std::string();
+    return body["workspace_id"].get<std::string>();
+  }();
+  const std::string input = [&]() {
+    if (!body.contains("input") || !body["input"].is_string())
+      return std::string();
+    return body["input"].get<std::string>();
+  }();
+
+  if (workspace_id.empty() || input.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id and input are required"}})",
+        "400 Bad Request");
+  }
+
+  // 创建 DB 任务记录
+  TaskRecord task;
+  try {
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    auto &facade = DataAccessFacade::getInstance();
+    std::string effectiveGlobalId = global_id;
+    if (effectiveGlobalId.empty()) {
+      effectiveGlobalId = facade.ensureDefaultGlobal();
+    }
+    task = facade.createTask(effectiveGlobalId, workspace_id, input);
+    facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
+
+    EventData created = EventData::Create(task.id, EventType::TaskCreated,
+                                          "任务已创建，正在启动 Agent",
+                                          json{{"status", "running"}});
+    if (SSEGateway::getInstance().isInitialized()) {
+      SSEGateway::getInstance().pushStatus(task.id, created.content,
+                                           EventType::TaskCreated,
+                                           created.metadata.dump());
+    } else {
+      facade.saveEvent(created.id, created.taskId, created.typeToString(),
+                       created.content, created.metadata.dump());
+    }
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+
+  auto &orch = AgentOrchestrator::getInstance();
+  if (!orch.isReady()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"ORCHESTRATOR_ERROR","message":"AgentOrchestrator not ready"}})",
+        "500 Internal Server Error");
+  }
+
+  try {
+    orch.startTask(task.id, global_id, workspace_id, input);
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+
+  std::ostringstream response_body;
+  response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
+                << R"(","global_id":")" << json_escape(task.session_id)
+                << R"(","workspace_id":")" << json_escape(workspace_id)
+                << R"(","goal":")" << json_escape(input)
+                << R"(","status":"running"}})";
   return http_response(response_body.str());
 }
 
@@ -260,7 +345,7 @@ std::string TaskController::listTasks(const std::string &request) {
     if (i > 0) {
       body << ",";
     }
-    body << R"({"id":")" << json_escape(t.id) << R"(","session_id":")"
+    body << R"({"id":")" << json_escape(t.id) << R"(","global_id":")"
          << json_escape(t.session_id) << R"(","workspace_id":")"
          << json_escape(t.workspace_id) << R"(","goal":")"
          << json_escape(t.goal) << R"(","status":")" << json_escape(t.status)
@@ -294,7 +379,7 @@ std::string TaskController::getTask(const std::string &request) {
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
-         << R"(","session_id":")" << json_escape(task->session_id)
+         << R"(","global_id":")" << json_escape(task->session_id)
          << R"(","workspace_id":")" << json_escape(task->workspace_id)
          << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
          << json_escape(task->status) << R"(")";
@@ -347,12 +432,14 @@ std::string TaskController::cancelTask(const std::string &request) {
           R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
           "404 Not Found");
     }
+
+    AgentOrchestrator::getInstance().cancelTask(task_id);
     DataAccessFacade::getInstance().updateTaskStatus(task_id, "cancelled", "",
                                                      "");
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
-         << R"(","session_id":")" << json_escape(task->session_id)
+         << R"(","global_id":")" << json_escape(task->session_id)
          << R"(","workspace_id":")" << json_escape(task->workspace_id)
          << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
          << json_escape("cancelled") << R"(")";
@@ -367,16 +454,9 @@ std::string TaskController::cancelTask(const std::string &request) {
          << R"(","updated_at":")" << json_escape(task->updated_at) << R"("}})";
     return http_response(body.str());
   } catch (const std::exception &error) {
-    const std::string msg = error.what();
-    if (msg.find("not found") != std::string::npos) {
-      return http_response(
-          R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":")" +
-              json_escape(msg) + R"("}})",
-          "404 Not Found");
-    }
     return http_response(
         R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
-            json_escape(msg) + R"("}})",
+            json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
 }
@@ -400,7 +480,6 @@ std::string TaskController::listToolCalls(const std::string &request) {
         "400 Bad Request");
   }
 
-  // 第 7 点优化：改为 DataAccessFacade 查询
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
       return http_response(
@@ -455,7 +534,6 @@ std::string TaskController::listEventHistory(const std::string &request) {
         "400 Bad Request");
   }
 
-  // 第 7 点优化：改为 DataAccessFacade 查询
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
       return http_response(
@@ -492,6 +570,78 @@ std::string TaskController::listEventHistory(const std::string &request) {
             json_escape(error.what()) + R"("}})",
         "500 Internal Server Error");
   }
+}
+
+std::string TaskController::deleteTask(const std::string &request) {
+  const std::string task_id = extract_path_segment(request, "/api/v1/tasks/");
+  if (task_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"task_id is required"}})",
+        "400 Bad Request");
+  }
+
+  try {
+    if (!DataAccessFacade::getInstance().isInitialized()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+          "500 Internal Server Error");
+    }
+    auto &facade = DataAccessFacade::getInstance();
+    auto task = facade.getTask(task_id);
+    if (!task) {
+      return http_response(
+          R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
+          "404 Not Found");
+    }
+
+    if (task->status == "running") {
+      return http_response(
+          R"({"success":false,"error":{"code":"TASK_RUNNING","message":"cannot delete a running task"}})",
+          "409 Conflict");
+    }
+
+    facade.deleteTaskCascade(task_id);
+
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"id":")" << json_escape(task_id)
+         << R"(","deleted":true}})";
+    return http_response(body.str());
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+}
+
+std::string TaskController::listActiveTasks() {
+  auto &orch = AgentOrchestrator::getInstance();
+  std::vector<ActiveTaskState> active = orch.activeTasks();
+
+  std::ostringstream body;
+  body << R"({"success":true,"data":{"items":[)";
+  for (std::size_t i = 0; i < active.size(); ++i) {
+    const auto &state = active[i];
+    if (i > 0) {
+      body << ",";
+    }
+    body << R"({"task_id":")" << json_escape(state.taskId)
+         << R"(","global_id":")" << json_escape(state.globalId)
+         << R"(","workspace_id":")" << json_escape(state.workspaceId)
+         << R"(","goal":")" << json_escape(state.goal)
+         << R"(","current_expert":")" << json_escape(state.currentExpert)
+         << R"(","current_stage":")" << json_escape(state.currentStage)
+         << R"(","expert_chain":[)";
+    for (std::size_t j = 0; j < state.expertChain.size(); ++j) {
+      if (j > 0) {
+        body << ",";
+      }
+      body << R"(")" << json_escape(state.expertChain[j]) << R"(")";
+    }
+    body << R"(],"status":")" << json_escape(state.status) << R"("})";
+  }
+  body << "]}}";
+  return http_response(body.str());
 }
 
 } // namespace codepilot
