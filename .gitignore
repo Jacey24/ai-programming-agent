@@ -1,42 +1,139 @@
-﻿# Build outputs
+﻿# ============================================================
+# CodePilot .gitignore
+# ============================================================
+
+# ---------- Build outputs ----------
 build/
-frontend/web/dist/
-frontend/web/node_modules/
-frontend/web/*.tsbuildinfo
+build_win/
+cmake-build-*/
+out/
 *.o
 *.obj
 *.exe
 *.out
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.sdf
+*.opensdf
+*.suo
+*.user
+*.ncb
 
-# IDE / Editor
+# ---------- CMake generated ----------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+!**/CMakeLists.txt
+*.cmake
+!**/*.cmake.in
+
+# ---------- IDE / Editor ----------
 .vs/
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.bak
 
-# OS
+# ---------- OS ----------
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# Python
+# ---------- Python ----------
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+*.egg
 
-# Storage (local only)
+# ---------- Node.js ----------
+node_modules/
+*.tsbuildinfo
+
+# ---------- Storage (local runtime data) ----------
 storage/agent.db
+storage/agent.db-shm
+storage/agent.db-wal
 storage/logs/
+storage/*.db-journal
+storage/cache/
 
-# Config overrides (local)
+# ---------- Workspace (test artifacts, not source) ----------
+workspace/
+!workspace/.gitkeep
+
+# ---------- Config (local secrets, never commit) ----------
 config/*.local.json
+config/*.local.*
 config/*.key
+config/*.secret
+*.env
+.env.*
+!.env.example
 
-#docs
-docs/总结.md
-docs/PLAN.md
+# ---------- Logs ----------
+*.log
+!docs/**/*.log
+logs/
 
-# Personal files
-# 个人文件
+# ---------- Debug / Trace dumps ----------
+_t.json
+_s.json
+_w.json
+_trace*.json
+*.trace
+
+# ---------- Temporary files ----------
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ---------- Personal / scratch files ----------
 test_write.txt
 代办清单.md
+docs/总结.md
+docs/PLAN.md
+docs/个人笔记*.md
+notes/
+scratch/
+
+# ---------- Package managers ----------
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# ---------- Docker (keep Dockerfiles, ignore volumes) ----------
+docker-compose.override.yml
+.volumes/
+
+# ---------- Code coverage ----------
+*.gcda
+*.gcno
+*.gcov
+coverage/
+htmlcov/
+
+# ---------- Profiling ----------
+*.prof
+*.perf
+gmon.out
+
+# ---------- Core dumps ----------
+core
+core.*
+
+# ---------- Third-party (none — all vendored) ----------
+# third_party/ is intentionally tracked as vendored source

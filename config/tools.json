@@ -53,7 +53,7 @@
   },
   "file.mkdir": {
     "name": "file.mkdir",
-    "description": "创建目录，会一并创建所需的父目录",
+    "description": "创建单个目录（一次调用只能创建一个），会一并创建所需的父目录。如需批量创建，请使用 shell.run 执行对应的 Shell 命令",
     "risk_level": "safe",
     "params": {
       "path": {"type": "string", "description": "要创建的目录相对路径", "required": true}
@@ -116,7 +116,7 @@
   },
   "shell.run": {
     "name": "shell.run",
-    "description": "在工作区内执行 Shell 命令",
+    "description": "在工作区内执行 Shell 命令（Windows: cmd.exe, Unix: bash）。Shell 命令无法利用 bash 花括号展开（如 {A,B,C}），如需批量操作请多次调用或使用 mkdir。",
     "risk_level": "medium",
     "params": {
       "command": {"type": "string", "description": "要执行的 Shell 命令", "required": true},
@@ -168,16 +168,5 @@
       "name": {"type": "string", "description": "新分支名称（create 时必填）", "required": false}
     },
     "category": "git"
-  },
-  "mcp.call": {
-    "name": "mcp.call",
-    "description": "调用 MCP 外部服务工具",
-    "risk_level": "medium",
-    "params": {
-      "server": {"type": "string", "description": "MCP 服务器名称", "required": true},
-      "tool": {"type": "string", "description": "工具名称", "required": true},
-      "params": {"type": "object", "description": "工具参数", "required": true}
-    },
-    "category": "mcp"
   }
 }

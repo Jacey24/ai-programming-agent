@@ -1,4 +1,5 @@
 #include "GitTool.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 #include <sstream>
 
 namespace codepilot {

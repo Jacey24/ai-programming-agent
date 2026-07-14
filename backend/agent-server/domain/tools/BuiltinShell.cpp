@@ -7,8 +7,22 @@
 
 namespace codepilot {
 
+// Windows MSVC: filesystem::path::string() returns ANSI (GBK) encoding.
+// To ensure valid UTF-8 in JSON output, we must use u8string() instead.
+static std::string path_to_utf8(const std::filesystem::path &p) {
+  auto u8 = p.u8string();
+  return std::string(reinterpret_cast<const char *>(u8.data()), u8.size());
+}
+
 BuiltinShell::BuiltinShell(std::shared_ptr<Workspace> workspace)
     : workspace_(std::move(workspace)), currentDir_("") {}
+
+void BuiltinShell::setWorkspace(std::shared_ptr<Workspace> ws) {
+  if (ws) {
+    workspace_ = std::move(ws);
+    currentDir_ = "";
+  }
+}
 
 // ============================================================
 // file.list - 列出工作区文件
@@ -183,18 +197,18 @@ ToolResult BuiltinShell::searchFiles(const json &args) {
       if (!entry.is_regular_file())
         continue;
 
-      std::string filePath = entry.path().filename().string();
+      std::string filePath = path_to_utf8(entry.path().filename());
 
       // 跳过隐藏文件、二进制和常见忽略目录
       if (filePath[0] == '.')
         continue;
-      std::string ext = entry.path().extension().string();
+      std::string ext = path_to_utf8(entry.path().extension());
       if (ext == ".exe" || ext == ".dll" || ext == ".obj" || ext == ".o" ||
           ext == ".bin")
         continue;
 
       // 检查是否在忽略目录中
-      std::string parent = entry.path().parent_path().string();
+      std::string parent = path_to_utf8(entry.path().parent_path());
       bool ignored = false;
       for (const auto &ignoredDir : {
                "build",
@@ -232,10 +246,8 @@ ToolResult BuiltinShell::searchFiles(const json &args) {
         try {
           if (std::regex_search(line, searchRegex)) {
             if (!fileHasMatch) {
-              output << entry.path()
-                            .lexically_relative(
-                                std::filesystem::path(searchRoot))
-                            .string()
+              output << path_to_utf8(entry.path().lexically_relative(
+                            std::filesystem::path(searchRoot)))
                      << ":\n";
               fileHasMatch = true;
               fileCount++;

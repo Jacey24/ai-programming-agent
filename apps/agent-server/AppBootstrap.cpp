@@ -1,20 +1,22 @@
+#include "InternalConsole.h"
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
-#include "infrastructure/storage/repositories/EventRepository.h"
-#include "infrastructure/storage/repositories/FileChangeRepository.h"
-#include "infrastructure/storage/repositories/PermissionRepository.h"
-#include "infrastructure/storage/repositories/ToolCallRepository.h"
-#include "infrastructure/storage/SqliteConnection.h"
+#include "domain/agent/AgentOrchestrator.h"
+#include "facade/DataAccessFacade.h"
+#include "facade/LlmClientFacade.h"
+#include "facade/SSEGateway.h"
 
 #include "common/logging/Logger.h"
 
-#include <sqlite3.h>
+#include <nlohmann/json.hpp>
 
 #include <atomic>
 #include <csignal>
 #include <cstdio>
 #include <exception>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -23,193 +25,122 @@ std::atomic_bool running{true};
 
 void handle_signal(int) { running.store(false); }
 
+// ============================================================
+// 统一 JSON 配置提取
+// ============================================================
+std::string readFile(const std::string &path) {
+  std::ifstream in(path);
+  if (!in.is_open()) {
+    return "";
+  }
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+std::string extractConfigValue(const std::string &configPath,
+                               const std::string &key) {
+  const std::string raw = readFile(configPath);
+  if (raw.empty()) {
+    return "";
+  }
+  try {
+    nlohmann::json config = nlohmann::json::parse(raw);
+    const auto dot = key.find('.');
+    if (dot != std::string::npos) {
+      const std::string top = key.substr(0, dot);
+      const std::string sub = key.substr(dot + 1);
+      if (config.contains(top) && config[top].is_object() &&
+          config[top].contains(sub)) {
+        return config[top][sub].get<std::string>();
+      }
+    } else {
+      if (config.contains(key)) {
+        return config[key].get<std::string>();
+      }
+    }
+  } catch (const std::exception &) {
+    // 解析失败返回空，调用方使用默认值
+  }
+  return "";
+}
+
 std::string extract_storage_path(const std::string &config_path) {
-  FILE *file = std::fopen(config_path.c_str(), "rb");
-  if (!file) {
-    return "/data/agent.db";
-  }
-
-  std::string content;
-  char buffer[4096] = {};
-  while (const std::size_t read = std::fread(buffer, 1, sizeof(buffer), file)) {
-    content.append(buffer, read);
-  }
-  std::fclose(file);
-
-  const std::string marker = R"("path")";
-  const std::size_t marker_pos = content.find(marker);
-  if (marker_pos == std::string::npos) {
-    return "/data/agent.db";
-  }
-
-  const std::size_t colon_pos = content.find(':', marker_pos + marker.size());
-  const std::size_t first_quote = content.find('"', colon_pos);
-  const std::size_t second_quote = content.find('"', first_quote + 1);
-  if (colon_pos == std::string::npos || first_quote == std::string::npos ||
-      second_quote == std::string::npos) {
-    return "/data/agent.db";
-  }
-
-  return content.substr(first_quote + 1, second_quote - first_quote - 1);
+  const std::string path = extractConfigValue(config_path, "storage.path");
+  // 相对路径直接返回（sqlite3 相对于 CWD 解析）
+  return path.empty() ? "./storage/agent.db" : path;
 }
 
 std::string extract_workspace_root(const std::string &config_path) {
-  FILE *file = std::fopen(config_path.c_str(), "rb");
-  if (!file) {
-    return "/workspace";
-  }
-
-  std::string content;
-  char buffer[4096] = {};
-  while (const std::size_t read = std::fread(buffer, 1, sizeof(buffer), file)) {
-    content.append(buffer, read);
-  }
-  std::fclose(file);
-
-  const std::string workspace_marker = R"("workspace")";
-  const std::size_t workspace_pos = content.find(workspace_marker);
-  if (workspace_pos == std::string::npos) {
-    return "/workspace";
-  }
-
-  const std::string root_marker = R"("root")";
-  const std::size_t root_pos =
-      content.find(root_marker, workspace_pos + workspace_marker.size());
-  if (root_pos == std::string::npos) {
-    return "/workspace";
-  }
-
-  const std::size_t colon_pos =
-      content.find(':', root_pos + root_marker.size());
-  const std::size_t first_quote = content.find('"', colon_pos);
-  const std::size_t second_quote = content.find('"', first_quote + 1);
-  if (colon_pos == std::string::npos || first_quote == std::string::npos ||
-      second_quote == std::string::npos) {
-    return "/workspace";
-  }
-
-  return content.substr(first_quote + 1, second_quote - first_quote - 1);
-}
-
-bool initialize_database(const std::string &path, std::string &error) {
-  sqlite3 *db = nullptr;
-  if (codepilot::openSqliteConnection(path.c_str(), &db) != SQLITE_OK) {
-    error = db ? sqlite3_errmsg(db) : "sqlite3_open failed";
-    if (db) {
-      sqlite3_close(db);
-    }
-    return false;
-  }
-  codepilot::configureSqliteDatabase(db);
-
-  const char *schema = R"SQL(
-CREATE TABLE IF NOT EXISTS system_health (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    service TEXT NOT NULL,
-    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-INSERT INTO system_health (id, service, checked_at)
-VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP)
-ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    goal TEXT NOT NULL,
-    status TEXT NOT NULL,
-    plan TEXT,
-    current_step TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt TEXT NOT NULL,
-    response TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS execution_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-)SQL";
-
-  char *error_message = nullptr;
-  const int exec_result =
-      sqlite3_exec(db, schema, nullptr, nullptr, &error_message);
-  if (exec_result != SQLITE_OK) {
-    error = error_message ? error_message : "schema initialization failed";
-    sqlite3_free(error_message);
-    sqlite3_close(db);
-    return false;
-  }
-
-  try {
-    PermissionRepository(db).initTable();
-    ToolCallRepository(db).initTable();
-    EventRepository(db).initTable();
-    FileChangeRepository(db).initTable();
-  } catch (const std::exception &init_error) {
-    error = init_error.what();
-    sqlite3_close(db);
-    return false;
-  }
-
-  sqlite3_stmt *stmt = nullptr;
-  const int prepare_result = sqlite3_prepare_v2(
-      db, "SELECT COUNT(*) FROM system_health;", -1, &stmt, nullptr);
-  if (prepare_result != SQLITE_OK || sqlite3_step(stmt) != SQLITE_ROW) {
-    error = sqlite3_errmsg(db);
-    if (stmt) {
-      sqlite3_finalize(stmt);
-    }
-    sqlite3_close(db);
-    return false;
-  }
-
-  sqlite3_finalize(stmt);
-  sqlite3_close(db);
-  error.clear();
-  return true;
+  const std::string root = extractConfigValue(config_path, "workspace.root");
+  return root.empty() ? "./workspace" : root;
 }
 
 } // namespace
 
-int run_agent_server(const std::string &config_path) {
+int run_agent_server(const std::string &config_path, bool enableConsole) {
   std::signal(SIGINT, handle_signal);
+#ifndef _WIN32
   std::signal(SIGTERM, handle_signal);
+#endif
 
   // 初始化统一日志系统
-  // 优先尝试从配置加载，若文件不存在则使用默认配置
   const std::string logConfigPath = "./config/logging.json";
   codepilot::log::initFromFile(logConfigPath);
 
   const std::string database_path = extract_storage_path(config_path);
   const std::string workspace_root = extract_workspace_root(config_path);
-  std::string database_error;
-  const bool database_connected =
-      initialize_database(database_path, database_error);
+
+  // 初始化工具系统
   codepilot::ToolSystem::getInstance().init(workspace_root, config_path);
+
+  // 初始化存储门面（建表+system_health 统一由此完成，消除 AppBootstrap 双连接）
+  bool database_connected = false;
+  std::string database_error;
+  try {
+    codepilot::DataAccessFacade::getInstance().init(database_path);
+    database_connected = true;
+  } catch (const std::exception &e) {
+    database_error = e.what();
+  }
+
+  // 初始化通信门面（绑定 EventBus + DataAccessFacade）
+  codepilot::SSEGateway::getInstance().init(
+      &codepilot::ToolSystem::getInstance().eventBus(),
+      &codepilot::DataAccessFacade::getInstance());
+
+  // 初始化 LLM 门面（加载 llm.json + llm.local.json）
+  codepilot::LlmClientFacade::getInstance().init("config/llm.json");
+  LOG_INFO("LlmClientFacade available: {}",
+           codepilot::LlmClientFacade::getInstance().isAvailable() ? "true"
+                                                                   : "false");
+  LOG_INFO("LlmClientFacade default provider: {}",
+           codepilot::LlmClientFacade::getInstance().getDefaultProvider());
+
+  // 初始化 Agent 编排器（加载 Expert 配置，启用 Expert Chain 主循环）
+  codepilot::AgentOrchestrator::getInstance().init("config/experts.json");
+  LOG_INFO("AgentOrchestrator ready: {}",
+           codepilot::AgentOrchestrator::getInstance().isReady() ? "true"
+                                                                 : "false");
+  if (codepilot::AgentOrchestrator::getInstance().isReady()) {
+    auto names = codepilot::AgentConfiguration::getInstance().listExpertNames();
+    LOG_INFO("Loaded {} experts", names.size());
+    for (const auto &name : names) {
+      const auto *e =
+          codepilot::AgentConfiguration::getInstance().getExpert(name);
+      std::string tools;
+      for (size_t i = 0; i < e->visibleTools.size(); ++i) {
+        if (i > 0)
+          tools += ",";
+        tools += e->visibleTools[i];
+      }
+      LOG_INFO("  Expert [{}] entry={} llm={}/{} tools=[{}]", name,
+               e->isEntry ? "yes" : "no",
+               e->llmProvider.empty() ? "(default)" : e->llmProvider,
+               e->llmModel.empty() ? "(default)" : e->llmModel,
+               tools.empty() ? "(none)" : tools);
+    }
+  }
 
   LOG_INFO("CodePilot Agent Server starting");
   LOG_INFO("Config: {}", config_path);
@@ -228,7 +159,20 @@ int run_agent_server(const std::string &config_path) {
   server_config.databaseError = database_error;
 
   codepilot::HttpServer server(server_config);
+  std::unique_ptr<InternalConsole> console;
+  if (enableConsole) {
+    // 内建调试控制台（非阻塞 start）
+    console = std::make_unique<InternalConsole>("localhost", 8080);
+    console->start();
+    LOG_INFO("InternalConsole started — use --console to access");
+  }
+
   const int result = server.run(running);
+
+  if (console) {
+    console->stop();
+  }
+
   LOG_INFO("CodePilot Agent Server stopped");
   codepilot::log::shutdown();
   return result;

@@ -1,32 +1,16 @@
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8080
-  },
   "storage": {
+    "comment": "SQLite 数据库路径。DataAccessFacade 通过此路径初始化。",
     "type": "sqlite",
-    "path": "/data/agent.db"
+    "path": "./storage/agent.db"
   },
   "workspace": {
-    "root": "/workspace",
-    "allow_outside_workspace": false,
-    "ignored_dirs": [".git", "build", "dist", "node_modules"],
-    "max_file_size_bytes": 1048576
+    "comment": "Agent 工作区根路径。ToolSystem 通过此路径初始化。",
+    "root": "./workspace"
   },
-  "llm": {
-    "provider": "openai_compatible",
-    "base_url": "https://api.example.com/v1",
-    "model": "gpt-4.1",
-    "api_key_env": "LLM_API_KEY"
-  },
-  "security": {
-    "require_permission_for_file_write": true,
-    "require_permission_for_file_delete": true,
-    "require_permission_for_dangerous_shell": true,
-    "block_system_paths": true
-  },
-  "agent": {
-    "max_steps": 20,
-    "tool_timeout_seconds": 120
+  "server": {
+    "comment": "服务器绑定地址与端口。",
+    "host": "0.0.0.0",
+    "port": 8080
   }
 }

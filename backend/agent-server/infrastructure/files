@@ -1,0 +1,86 @@
+#pragma once
+
+#include "WorkspaceRuntime.h"
+
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+namespace codepilot {
+
+// ============================================================
+// WorkspaceManager — 多 Workspace 运行时管理器（单例门面）
+//
+// 职责：
+//   - 按需创建/获取 WorkspaceRuntime（惰性加载）
+//   - 缓存已创建的 Runtime，避免重复创建
+//   - 提供失效/清理接口（invalidate）
+//   - 提供遍历接口（getAll / listIds）
+//
+// 使用方式：
+//   auto &mgr = WorkspaceManager::getInstance();
+//   auto rt = mgr.getOrCreate("ws-001", "D:\\projects\\my-app");
+//   auto lock = std::lock_guard(rt->executionMutex);
+//   // 使用 rt->workspace / rt->processRunner / rt->toolRegistry
+//
+// 线程安全：使用 shared_mutex（读多写少）
+// ============================================================
+class WorkspaceManager {
+public:
+  static WorkspaceManager &getInstance();
+
+  // --- 禁止拷贝 ---
+  WorkspaceManager(const WorkspaceManager &) = delete;
+  WorkspaceManager &operator=(const WorkspaceManager &) = delete;
+
+  // ============================================================
+  // 获取或创建工作区运行时
+  // 如果 workspaceId 已存在则直接返回缓存的实例
+  // 如果不存在则创建新的 WorkspaceRuntime
+  // ============================================================
+  std::shared_ptr<WorkspaceRuntime> getOrCreate(const std::string &workspaceId,
+                                                const std::string &path);
+
+  // ============================================================
+  // 获取已存在的工作区运行时（不会自动创建）
+  // 返回 nullptr 表示不存在
+  // ============================================================
+  std::shared_ptr<WorkspaceRuntime> get(const std::string &workspaceId) const;
+
+  // ============================================================
+  // 使指定 workspaceId 的缓存失效
+  // 下一次 getOrCreate 将重新创建
+  // ============================================================
+  void invalidate(const std::string &workspaceId);
+
+  // ============================================================
+  // 检查是否存在
+  // ============================================================
+  bool has(const std::string &workspaceId) const;
+
+  // ============================================================
+  // 获取所有运行时
+  // ============================================================
+  std::vector<std::shared_ptr<WorkspaceRuntime>> getAll() const;
+
+  // ============================================================
+  // 获取所有 workspace ID
+  // ============================================================
+  std::vector<std::string> listIds() const;
+
+  // ============================================================
+  // 清空所有缓存（用于 shutdown）
+  // ============================================================
+  void clear();
+
+private:
+  WorkspaceManager() = default;
+  ~WorkspaceManager() = default;
+
+  mutable std::shared_mutex mutex_;
+  std::unordered_map<std::string, std::shared_ptr<WorkspaceRuntime>> runtimes_;
+};
+
+} // namespace codepilot

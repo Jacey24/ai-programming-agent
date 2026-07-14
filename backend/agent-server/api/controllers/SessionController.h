@@ -6,14 +6,16 @@ namespace codepilot {
 
 class SessionController {
 public:
-    explicit SessionController(std::string database_path = "/data/agent.db");
+  explicit SessionController(std::string database_path = "/data/agent.db");
 
-    std::string createSession(const std::string& request);
-    std::string listSessions(const std::string& request);
-    std::string getSession(const std::string& request);
+  std::string createSession(const std::string &request);
+  std::string updateSession(const std::string &request);
+  std::string listSessions(const std::string &request);
+  std::string getSession(const std::string &request);
+  std::string deleteSession(const std::string &request);
 
 private:
-    std::string databasePath_;
+  std::string databasePath_;
 };
 
 } // namespace codepilot

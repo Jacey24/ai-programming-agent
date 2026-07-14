@@ -1,17 +1,67 @@
 #include "infrastructure/llm/OpenAICompatibleClient.h"
 
 #include <cstdlib>
-#include <cstdio>
 #include <exception>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <string>
 #include <utility>
+
+// CPPHTTPLIB_OPENSSL_SUPPORT is defined via CMake target_compile_definitions
+#include <httplib.h>
+
+#include "common/logging/Logger.h"
 
 using json = nlohmann::json;
 
 namespace codepilot {
 namespace {
+
+// ── UTF-8 清洗：将字符串中所有非法 UTF-8 字节替换为 U+FFFD ──
+std::string sanitizeUtf8(const std::string &input) {
+  std::string result;
+  result.reserve(input.size());
+  for (size_t i = 0; i < input.size();) {
+    unsigned char c = static_cast<unsigned char>(input[i]);
+    size_t bytes = 0;
+    if (c < 0x80) {
+      bytes = 1;
+    } else if ((c & 0xE0) == 0xC0) {
+      bytes = 2;
+    } else if ((c & 0xF0) == 0xE0) {
+      bytes = 3;
+    } else if ((c & 0xF8) == 0xF0) {
+      bytes = 4;
+    } else {
+      // 非法起始字节 → 替换为 U+FFFD (3 bytes)
+      result += "\xEF\xBF\xBD";
+      ++i;
+      continue;
+    }
+    if (i + bytes > input.size()) {
+      result += "\xEF\xBF\xBD";
+      break;
+    }
+    bool valid = true;
+    for (size_t j = 1; j < bytes; ++j) {
+      if ((static_cast<unsigned char>(input[i + j]) & 0xC0) != 0x80) {
+        valid = false;
+        break;
+      }
+    }
+    if (valid) {
+      result.append(input, i, bytes);
+      i += bytes;
+    } else {
+      result += "\xEF\xBF\xBD";
+      ++i;
+    }
+  }
+  return result;
+}
+
+// ── 文件 I/O 工具 (保留，供 loadConfig 使用) ──
 
 std::string readTextFile(const std::string &path) {
   std::ifstream in(path, std::ios::binary);
@@ -21,15 +71,6 @@ std::string readTextFile(const std::string &path) {
   std::ostringstream ss;
   ss << in.rdbuf();
   return ss.str();
-}
-
-bool writeTextFile(const std::string &path, const std::string &text) {
-  std::ofstream out(path, std::ios::binary | std::ios::trunc);
-  if (!out.is_open()) {
-    return false;
-  }
-  out << text;
-  return true;
 }
 
 std::string trimTrailingSlash(std::string value) {
@@ -57,6 +98,8 @@ std::string localOverridePath(const std::string &path) {
   return path + ".local";
 }
 
+// ── 配置解析 (保留) ──
+
 void applyConfigJson(OpenAICompatibleConfig &config, const json &j) {
   config.baseUrl = j.value("base_url", config.baseUrl);
   config.model = j.value("model", config.model);
@@ -80,58 +123,45 @@ void applyConfigFile(OpenAICompatibleConfig &config, const std::string &path) {
   }
 }
 
-std::string shellQuote(const std::string &value) {
-#ifdef _WIN32
-  std::string quoted = "\"";
-  for (char ch : value) {
-    if (ch == '"') {
-      quoted += "\\\"";
-    } else {
-      quoted += ch;
-    }
-  }
-  quoted += "\"";
-  return quoted;
-#else
-  std::string quoted = "'";
-  for (char ch : value) {
-    if (ch == '\'') {
-      quoted += "'\\''";
-    } else {
-      quoted += ch;
-    }
-  }
-  quoted += "'";
-  return quoted;
-#endif
-}
+// ── URL 解析 ──
+// 将 "https://api.deepseek.com/v1" 拆分为 (scheme_host, path_prefix)
+// scheme_host = "https://api.deepseek.com"
+// path_prefix = "/v1"
+struct ParsedUrl {
+  std::string schemeHost; // "https://api.deepseek.com" (含 scheme)
+  std::string pathPrefix; // "/v1" 或 ""
+};
 
-std::string tempPath(const std::string &name) {
-  const char *tmpDir = std::getenv("TMPDIR");
-  if (!tmpDir || !*tmpDir) {
-    tmpDir = std::getenv("TEMP");
-  }
-  if (!tmpDir || !*tmpDir) {
-    tmpDir = ".";
+ParsedUrl parseBaseUrl(const std::string &baseUrl) {
+  ParsedUrl result;
+  result.schemeHost = baseUrl;
+  result.pathPrefix = "";
+
+  // 查找 "://" 之后的第一个 '/'
+  auto schemePos = baseUrl.find("://");
+  if (schemePos == std::string::npos) {
+    return result; // 无法解析，返回原始 baseUrl
   }
 
-  std::string dir = tmpDir;
-  const char sep =
-#ifdef _WIN32
-      '\\';
-#else
-      '/';
-#endif
-  if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') {
-    dir.push_back(sep);
+  auto pathStart = schemePos + 3; // 跳过 "://"
+  auto slashPos = baseUrl.find('/', pathStart);
+
+  if (slashPos != std::string::npos) {
+    result.schemeHost = baseUrl.substr(0, slashPos);
+    result.pathPrefix = baseUrl.substr(slashPos);
   }
-  return dir + "codepilot_" + name + "_" + std::to_string(std::rand()) + ".json";
+
+  return result;
 }
 
 } // namespace
 
+// ── 构造 ──
+
 OpenAICompatibleClient::OpenAICompatibleClient(OpenAICompatibleConfig config)
     : config_(std::move(config)) {}
+
+// ── 静态工厂 / 检测 (保留) ──
 
 OpenAICompatibleConfig
 OpenAICompatibleClient::loadConfig(const std::string &path) {
@@ -156,8 +186,8 @@ bool OpenAICompatibleClient::isConfigured(
   return !resolveApiKey(config).empty();
 }
 
-std::string OpenAICompatibleClient::resolveApiKey(
-    const OpenAICompatibleConfig &config) {
+std::string
+OpenAICompatibleClient::resolveApiKey(const OpenAICompatibleConfig &config) {
   if (!config.apiKeyEnv.empty()) {
     const char *key = std::getenv(config.apiKeyEnv.c_str());
     if (key && *key) {
@@ -176,79 +206,137 @@ std::string OpenAICompatibleClient::resolveApiKey(
   return "";
 }
 
+// ════════════════════════════════════════════════════════════
+// chat() — 使用 httplib::Client（双平台统一，替换 curl）
+// ════════════════════════════════════════════════════════════
+
 LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   LlmResponse result;
 
+  LOG_INFO("[LLM DEBUG] chat() called, model={}, prompt_len={}",
+           request.model.empty() ? config_.model : request.model,
+           request.prompt.size());
+
   if (!isConfigured(config_)) {
     result.error = "LLM is not configured; using mock fallback";
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: isConfigured returned false. "
+              "baseUrl={}, model={}",
+              config_.baseUrl, config_.model);
     return result;
   }
 
   const std::string apiKey = resolveApiKey(config_);
   if (apiKey.empty()) {
     result.error = "LLM API key is empty; using mock fallback";
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: resolveApiKey returned empty. "
+              "apiKeyEnv={}, apiKey_from_local={}",
+              config_.apiKeyEnv, config_.apiKey.empty() ? "(empty)" : "(set)");
     return result;
   }
-  const std::string endpoint = trimTrailingSlash(config_.baseUrl) + "/chat/completions";
+  LOG_INFO("[LLM DEBUG] API key resolved: len={}, apiKeyEnv={}", apiKey.size(),
+           config_.apiKeyEnv);
 
+  // ── 构建请求 JSON ──
+  // ★ 清洗 prompt 中的非法 UTF-8 字节，防止 nlohmann::json 抛异常
+  std::string cleanPrompt = sanitizeUtf8(request.prompt);
   json payload;
   payload["model"] = request.model.empty() ? config_.model : request.model;
-  payload["messages"] = json::array(
-      {{{"role", "user"}, {"content", request.prompt}}});
+  payload["messages"] =
+      json::array({{{"role", "user"}, {"content", cleanPrompt}}});
   payload["temperature"] = 0.2;
+  const std::string body = payload.dump();
 
-  const auto requestPath = tempPath("llm_request");
-  const auto responsePath = tempPath("llm_response");
-  if (!writeTextFile(requestPath, payload.dump())) {
-    result.error = "failed to write temporary LLM request";
+  // ── 解析 baseUrl ──
+  auto parsed = parseBaseUrl(config_.baseUrl);
+  const std::string endpoint = parsed.pathPrefix + "/chat/completions";
+
+  LOG_INFO("[LLM DEBUG] Parsed URL: schemeHost={}, endpoint={}",
+           parsed.schemeHost, endpoint);
+
+  // ── 创建 httplib::Client ──
+  httplib::Client cli(parsed.schemeHost);
+
+  const int timeout = request.timeoutSeconds > 0 ? request.timeoutSeconds
+                                                 : config_.timeoutSeconds;
+  LOG_INFO("[LLM DEBUG] Timeout: {}s (request={}, config={})", timeout,
+           request.timeoutSeconds, config_.timeoutSeconds);
+  cli.set_connection_timeout(timeout, 0);
+  cli.set_read_timeout(timeout, 0);
+  cli.set_write_timeout(timeout, 0);
+
+  // 跟随重定向（最多 3 次）
+  cli.set_follow_location(true);
+
+  // ── 设置请求头 ──
+  httplib::Headers headers{
+      {"Content-Type", "application/json"},
+      {"Authorization", "Bearer " + apiKey},
+  };
+
+  // ── 发送 POST 请求 ──
+  LOG_INFO("[LLM DEBUG] Sending POST to {}...", endpoint);
+  auto res = cli.Post(endpoint, headers, body, "application/json");
+  LOG_INFO("[LLM DEBUG] POST returned, res_ptr={}", res ? "valid" : "null");
+
+  if (!res) {
+    result.error = "HTTP request to LLM failed: ";
+    auto err = res.error();
+    // httplib::Error 支持转换为字符串消息
+    // 使用 httplib::to_string 获取错误描述
+    result.error += httplib::to_string(err);
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: httplib error={}",
+              httplib::to_string(err));
     return result;
   }
 
-  const int timeout =
-      request.timeoutSeconds > 0 ? request.timeoutSeconds : config_.timeoutSeconds;
-  std::ostringstream command;
-  command << "curl -sS --max-time " << timeout
-          << " -X POST " << shellQuote(endpoint)
-          << " -H " << shellQuote("Content-Type: application/json")
-          << " -H " << shellQuote("Authorization: Bearer " + apiKey)
-          << " --data-binary @" << shellQuote(requestPath)
-          << " -o " << shellQuote(responsePath);
+  const int status = res->status;
+  const std::string &responseBody = res->body;
+  LOG_INFO("[LLM DEBUG] HTTP status={}, body_len={}", status,
+           responseBody.size());
 
-  const int exitCode = std::system(command.str().c_str());
-  std::remove(requestPath.c_str());
-  if (exitCode != 0) {
-    std::remove(responsePath.c_str());
-    result.error = "curl failed while calling LLM";
+  if (status < 200 || status >= 300) {
+    result.error =
+        "LLM API returned HTTP " + std::to_string(status) + ": " + responseBody;
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: HTTP status={}, body={}", status,
+              responseBody.substr(0, 300));
     return result;
   }
 
-  const std::string body = readTextFile(responsePath);
-  std::remove(responsePath.c_str());
-  if (body.empty()) {
+  if (responseBody.empty()) {
     result.error = "LLM returned an empty response";
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: empty response body");
     return result;
   }
 
+  // ── 解析响应 JSON ──
   try {
-    const json parsed = json::parse(body);
-    if (parsed.contains("error")) {
-      result.error = parsed["error"].dump();
+    const json parsedResp = json::parse(responseBody);
+    if (parsedResp.contains("error")) {
+      result.error = parsedResp["error"].dump();
+      LOG_ERROR("[LLM DEBUG] chat() FAILED: API error in response: {}",
+                result.error);
       return result;
     }
 
-    const auto &choices = parsed.at("choices");
+    const auto &choices = parsedResp.at("choices");
     if (!choices.is_array() || choices.empty()) {
       result.error = "LLM response has no choices";
+      LOG_ERROR("[LLM DEBUG] chat() FAILED: no choices in response");
       return result;
     }
 
     result.content = choices.at(0).at("message").value("content", "");
     result.success = !result.content.empty();
+    LOG_INFO("[LLM DEBUG] chat() SUCCESS: content_len={}",
+             result.content.size());
     if (!result.success) {
       result.error = "LLM response content is empty";
+      LOG_ERROR(
+          "[LLM DEBUG] chat() WARN: content is empty despite valid response");
     }
   } catch (const std::exception &e) {
     result.error = std::string("failed to parse LLM response: ") + e.what();
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: JSON parse error: {}", e.what());
   }
 
   return result;

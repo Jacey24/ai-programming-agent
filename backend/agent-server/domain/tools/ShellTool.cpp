@@ -1,4 +1,6 @@
 #include "ShellTool.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
+
 #include <sstream>
 
 namespace codepilot {
@@ -45,15 +47,24 @@ ToolResult ShellRunTool::execute(const ToolContext &context,
     timeout = arguments["timeout"].get<int>();
   }
 
+  // 从 WorkspaceManager 获取正确的 ProcessRunner
+  std::shared_ptr<ProcessRunner> activeRunner = runner_;
+  if (!context.workspaceId.empty()) {
+    auto rt = WorkspaceManager::getInstance().getOrCreate(
+        context.workspaceId, context.workspacePath);
+    std::lock_guard lock(rt->executionMutex);
+    activeRunner = rt->processRunner;
+  }
+
   // 设置工作目录
   if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+    activeRunner->setWorkingDirectory(context.workspacePath);
   } else if (arguments.contains("cwd")) {
-    runner_->setWorkingDirectory(arguments["cwd"].get<std::string>());
+    activeRunner->setWorkingDirectory(arguments["cwd"].get<std::string>());
   }
 
   // 执行命令
-  ProcessResult pr = runner_->execute(command, timeout);
+  ProcessResult pr = activeRunner->execute(command, timeout);
 
   // 构建结果
   ToolResult result;

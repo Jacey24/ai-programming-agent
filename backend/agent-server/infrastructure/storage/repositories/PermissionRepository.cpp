@@ -2,10 +2,10 @@
 
 #include <stdexcept>
 
-PermissionRepository::PermissionRepository(sqlite3* db) : db_(db) {}
+PermissionRepository::PermissionRepository(sqlite3 *db) : db_(db) {}
 
 void PermissionRepository::initTable() {
-    const char* sql = R"SQL(
+  const char *sql = R"SQL(
 CREATE TABLE IF NOT EXISTS permission_requests (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
@@ -19,47 +19,140 @@ CREATE TABLE IF NOT EXISTS permission_requests (
 );
 )SQL";
 
-    char* error_message = nullptr;
-    const int exec_result = sqlite3_exec(db_, sql, nullptr, nullptr, &error_message);
-    if (exec_result != SQLITE_OK) {
-        const std::string error = error_message ? error_message : lastError();
-        sqlite3_free(error_message);
-        throw std::runtime_error(error);
-    }
+  char *error_message = nullptr;
+  const int exec_result =
+      sqlite3_exec(db_, sql, nullptr, nullptr, &error_message);
+  if (exec_result != SQLITE_OK) {
+    const std::string error = error_message ? error_message : lastError();
+    sqlite3_free(error_message);
+    throw std::runtime_error(error);
+  }
 }
 
-std::optional<PermissionRequest> PermissionRepository::findById(const std::string& id) {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, tool_name, risk_level, action, reason, status, created_at, resolved_at FROM permission_requests WHERE id = ?;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+PermissionRequest PermissionRepository::create(const std::string &id,
+                                               const std::string &task_id,
+                                               const std::string &tool_name,
+                                               const std::string &risk_level,
+                                               const std::string &action,
+                                               const std::string &reason,
+                                               const std::string &created_at) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "INSERT INTO permission_requests (id, task_id, tool_name, risk_level, "
+      "action, reason, status, created_at) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, task_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, tool_name.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 4, risk_level.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, action.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 6, reason.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 7, "pending", -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 8, created_at.c_str(), -1, SQLITE_TRANSIENT);
 
-    const int step_result = sqlite3_step(stmt);
-    if (step_result == SQLITE_DONE) {
-        sqlite3_finalize(stmt);
-        return std::nullopt;
-    }
-    if (step_result != SQLITE_ROW) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    const std::string error = lastError();
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
 
-    const auto* row_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-    const auto* task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    const auto* tool_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    const auto* risk_level = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-    const auto* action = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-    const auto* reason = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-    const auto* status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-    const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-    const auto* resolved_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+  sqlite3_finalize(stmt);
+  return PermissionRequest{id,     task_id,   tool_name,  risk_level, action,
+                           reason, "pending", created_at, ""};
+}
 
-    PermissionRequest request{
-        row_id ? row_id : "",
+std::optional<PermissionRequest>
+PermissionRepository::findById(const std::string &id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "SELECT id, task_id, tool_name, risk_level, action, reason, status, "
+      "created_at, resolved_at FROM permission_requests WHERE id = ?;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
+
+  sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+  const int step_result = sqlite3_step(stmt);
+  if (step_result == SQLITE_DONE) {
+    sqlite3_finalize(stmt);
+    return std::nullopt;
+  }
+  if (step_result != SQLITE_ROW) {
+    const std::string error = lastError();
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+
+  const auto *row_id =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+  const auto *task_id =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+  const auto *tool_name =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+  const auto *risk_level =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+  const auto *action =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+  const auto *reason =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+  const auto *status =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+  const auto *created_at =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+  const auto *resolved_at =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
+
+  PermissionRequest request{
+      row_id ? row_id : "",           task_id ? task_id : "",
+      tool_name ? tool_name : "",     risk_level ? risk_level : "",
+      action ? action : "",           reason ? reason : "",
+      status ? status : "",           created_at ? created_at : "",
+      resolved_at ? resolved_at : "",
+  };
+
+  sqlite3_finalize(stmt);
+  return request;
+}
+
+std::vector<PermissionRequest> PermissionRepository::findPending() {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql =
+      "SELECT id, task_id, tool_name, risk_level, action, reason, status, "
+      "created_at, resolved_at FROM permission_requests WHERE status = "
+      "'pending' ORDER BY created_at ASC;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
+
+  std::vector<PermissionRequest> requests;
+  int step_result = SQLITE_ROW;
+  while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
+    const auto *id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    const auto *task_id =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+    const auto *tool_name =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+    const auto *risk_level =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
+    const auto *action =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+    const auto *reason =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+    const auto *status =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+    const auto *created_at =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+    const auto *resolved_at =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
+
+    requests.push_back(PermissionRequest{
+        id ? id : "",
         task_id ? task_id : "",
         tool_name ? tool_name : "",
         risk_level ? risk_level : "",
@@ -68,75 +161,41 @@ std::optional<PermissionRequest> PermissionRepository::findById(const std::strin
         status ? status : "",
         created_at ? created_at : "",
         resolved_at ? resolved_at : "",
-    };
+    });
+  }
 
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
-    return request;
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
+  return requests;
 }
 
-std::vector<PermissionRequest> PermissionRepository::findPending() {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, tool_name, risk_level, action, reason, status, created_at, resolved_at FROM permission_requests WHERE status = 'pending' ORDER BY created_at ASC;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
+void PermissionRepository::updateStatus(const std::string &id,
+                                        const std::string &status) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = "UPDATE permission_requests SET status = ?, resolved_at = "
+                    "CURRENT_TIMESTAMP WHERE id = ?;";
+  if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
 
-    std::vector<PermissionRequest> requests;
-    int step_result = SQLITE_ROW;
-    while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const auto* id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-        const auto* task_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        const auto* tool_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        const auto* risk_level = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        const auto* action = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-        const auto* reason = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-        const auto* status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-        const auto* created_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-        const auto* resolved_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+  sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, id.c_str(), -1, SQLITE_TRANSIENT);
 
-        requests.push_back(PermissionRequest{
-            id ? id : "",
-            task_id ? task_id : "",
-            tool_name ? tool_name : "",
-            risk_level ? risk_level : "",
-            action ? action : "",
-            reason ? reason : "",
-            status ? status : "",
-            created_at ? created_at : "",
-            resolved_at ? resolved_at : "",
-        });
-    }
-
-    if (step_result != SQLITE_DONE) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
-
+  const int step_result = sqlite3_step(stmt);
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
     sqlite3_finalize(stmt);
-    return requests;
-}
+    throw std::runtime_error(error);
+  }
 
-void PermissionRepository::updateStatus(const std::string& id, const std::string& status) {
-    sqlite3_stmt* stmt = nullptr;
-    const char* sql = "UPDATE permission_requests SET status = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?;";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        throw std::runtime_error(lastError());
-    }
-
-    sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, id.c_str(), -1, SQLITE_TRANSIENT);
-
-    const int step_result = sqlite3_step(stmt);
-    if (step_result != SQLITE_DONE) {
-        const std::string error = lastError();
-        sqlite3_finalize(stmt);
-        throw std::runtime_error(error);
-    }
-
-    sqlite3_finalize(stmt);
+  sqlite3_finalize(stmt);
 }
 
 std::string PermissionRepository::lastError() const {
-    return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
+  return db_ ? sqlite3_errmsg(db_) : "sqlite database is not open";
 }
