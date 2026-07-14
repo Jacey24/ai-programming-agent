@@ -17,7 +17,7 @@ interface AgentPanelProps {
 const defaultForm: CreateTaskInput = {
   sessionTitle: "CodePilot Web Session",
   workspaceName: "codepilot-workspace",
-  workspacePath: "/workspace",
+  workspacePath: "./workspace",
   taskInput: "",
   autoRunSafeCommands: true,
   requireFileWritePermission: true,

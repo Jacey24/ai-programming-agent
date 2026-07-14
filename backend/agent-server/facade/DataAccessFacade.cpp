@@ -234,13 +234,14 @@ DataAccessFacade::getGlobalContext(const std::string &globalId) {
 // ============================================================
 // Task 组
 // ============================================================
-TaskRecord DataAccessFacade::createTask(const std::string &globalId,
+TaskRecord DataAccessFacade::createTask(const std::string &sessionId,
+                                        const std::string &globalId,
                                         const std::string &workspaceId,
                                         const std::string &goal) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string now = iso8601Now();
-  return TaskRepository(db_).createTask(generateId("task"), globalId,
-                                        workspaceId, goal, now, now);
+  return TaskRepository(db_).createTask(generateId("task"), sessionId,
+                                        globalId, workspaceId, goal, now, now);
 }
 
 std::optional<TaskRecord> DataAccessFacade::getTask(const std::string &id) {
@@ -277,7 +278,7 @@ DataAccessFacade::listTasksByGlobal(const std::string &globalId) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<std::vector<TaskRecord>>(
       "listTasksByGlobal",
-      [&]() { return TaskRepository(db_).findBySessionId(globalId); },
+      [&]() { return TaskRepository(db_).findByGlobalId(globalId); },
       std::vector<TaskRecord>{});
 }
 
