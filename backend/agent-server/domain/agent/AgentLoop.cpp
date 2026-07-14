@@ -380,6 +380,10 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.workspaceId = workspaceId;
           toolCtx.workspacePath =
               ToolSystem::getInstance().workspace().rootPath();
+          toolCtx.options["auto_run_safe_commands"] =
+              options.autoRunSafeCommands ? "true" : "false";
+          toolCtx.options["require_file_write_permission"] =
+              options.requireFileWritePermission ? "true" : "false";
 
           try {
             ToolResult tr = ToolSystem::getInstance().callToolWithPermission(

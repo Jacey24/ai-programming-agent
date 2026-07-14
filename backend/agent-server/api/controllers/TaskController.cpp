@@ -131,29 +131,49 @@ static std::string parseTaskRunOptions(const json &body,
         "400 Bad Request");
   }
 
-  if (!rawOptions.contains("max_steps")) {
-    return "";
+  if (rawOptions.contains("auto_run_safe_commands")) {
+    const json &rawAutoRunSafeCommands =
+        rawOptions["auto_run_safe_commands"];
+    if (!rawAutoRunSafeCommands.is_boolean()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_AUTO_RUN_SAFE_COMMANDS","message":"options.auto_run_safe_commands must be a boolean"}})",
+          "400 Bad Request");
+    }
+    options.autoRunSafeCommands = rawAutoRunSafeCommands.get<bool>();
   }
 
-  const json &rawMaxSteps = rawOptions["max_steps"];
-  if (!rawMaxSteps.is_number_integer()) {
-    return http_response(
-        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
-        "400 Bad Request");
+  if (rawOptions.contains("require_permission_for_file_write")) {
+    const json &rawFileWritePermission =
+        rawOptions["require_permission_for_file_write"];
+    if (!rawFileWritePermission.is_boolean()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_FILE_WRITE_PERMISSION_OPTION","message":"options.require_permission_for_file_write must be a boolean"}})",
+          "400 Bad Request");
+    }
+    options.requireFileWritePermission = rawFileWritePermission.get<bool>();
   }
 
-  try {
-    options.maxSteps = rawMaxSteps.get<int>();
-  } catch (const std::exception &) {
-    return http_response(
-        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
-        "400 Bad Request");
-  }
+  if (rawOptions.contains("max_steps")) {
+    const json &rawMaxSteps = rawOptions["max_steps"];
+    if (!rawMaxSteps.is_number_integer()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
+          "400 Bad Request");
+    }
 
-  if (options.maxSteps < 1 || options.maxSteps > 20) {
-    return http_response(
-        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be between 1 and 20"}})",
-        "400 Bad Request");
+    try {
+      options.maxSteps = rawMaxSteps.get<int>();
+    } catch (const std::exception &) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
+          "400 Bad Request");
+    }
+
+    if (options.maxSteps < 1 || options.maxSteps > 20) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be between 1 and 20"}})",
+          "400 Bad Request");
+    }
   }
 
   return "";
