@@ -1,0 +1,26 @@
+"filename", "language", "JSON", "C++", "CMake", "comment", "blank", "total"
+"d:\VS Code stuff\ai-programming-agent\apps\agent-server\AppBootstrap.cpp", "C++", 0, -145, 0, -11, -23, -179
+"d:\VS Code stuff\ai-programming-agent\apps\agent-server\CMakeLists.txt", "CMake", 0, 0, -176, 0, -14, -190
+"d:\VS Code stuff\ai-programming-agent\apps\agent-server\InternalConsole.cpp", "C++", 0, -813, 0, -43, -74, -930
+"d:\VS Code stuff\ai-programming-agent\apps\agent-server\InternalConsole.h", "C++", 0, -68, 0, -21, -21, -110
+"d:\VS Code stuff\ai-programming-agent\apps\agent-server\main.cpp", "C++", 0, -52, 0, -6, -9, -67
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\ApiClient.cpp", "C++", 0, -318, 0, -6, -50, -374
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\ApiClient.h", "C++", 0, -55, 0, -9, -14, -78
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\CMakeLists.txt", "CMake", 0, 0, -16, 0, -3, -19
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\CliController.cpp", "C++", 0, -729, 0, -18, -58, -805
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\CliController.h", "C++", 0, -56, 0, -6, -13, -75
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\EventPrinter.cpp", "C++", 0, -117, 0, -2, -13, -132
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\EventPrinter.h", "C++", 0, -24, 0, -6, -9, -39
+"d:\VS Code stuff\ai-programming-agent\apps\cli-client\main.cpp", "C++", 0, -13, 0, 0, -3, -16
+"d:\VS Code stuff\ai-programming-agent\apps\tool-tests\tool_test_main.cpp", "C++", 0, -687, 0, -114, -156, -957
+"d:\VS Code stuff\ai-programming-agent\apps\tui-client\CMakeLists.txt", "CMake", 0, 0, -9, 0, -3, -12
+"d:\VS Code stuff\ai-programming-agent\apps\tui-client\TuiApplication.cpp", "C++", 0, -98, 0, 0, -22, -120
+"d:\VS Code stuff\ai-programming-agent\apps\tui-client\main.cpp", "C++", 0, -5, 0, 0, -3, -8
+"d:\VS Code stuff\ai-programming-agent\config\agent.json", "JSON", 16, 0, 0, 0, 0, 16
+"d:\VS Code stuff\ai-programming-agent\config\agent_roles.json", "JSON", 41, 0, 0, 0, 1, 42
+"d:\VS Code stuff\ai-programming-agent\config\experts.json", "JSON", 89, 0, 0, 0, 21, 110
+"d:\VS Code stuff\ai-programming-agent\config\llm.json", "JSON", 47, 0, 0, 0, 0, 47
+"d:\VS Code stuff\ai-programming-agent\config\logging.json", "JSON", 43, 0, 0, 0, 0, 43
+"d:\VS Code stuff\ai-programming-agent\config\tools.json", "JSON", 172, 0, 0, 0, 1, 173
+"d:\VS Code stuff\ai-programming-agent\config\workspace.json", "JSON", 6, 0, 0, 0, 1, 7
+"Total", "-", 414, -3180, -201, -242, -464, -3673

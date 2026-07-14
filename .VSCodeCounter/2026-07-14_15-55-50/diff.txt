@@ -1,0 +1,57 @@
+Date : 2026-07-14 15:55:50
+Directory : d:\VS Code stuff\ai-programming-agent\docs
+Total : 29 files,  7739 codes, 0 comments, 2373 blanks, all 10112 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| Markdown |         22 |      8,153 |          0 |      2,397 |     10,550 |
+| JSON     |          7 |       -414 |          0 |        -24 |       -438 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                          | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                             |         29 |      7,739 |          0 |      2,373 |     10,112 |
+| . (Files)                                                     |         22 |      8,153 |          0 |      2,397 |     10,550 |
+| ..                                                            |          7 |       -414 |          0 |        -24 |       -438 |
+| ..\config                                                     |          7 |       -414 |          0 |        -24 |       -438 |
++---------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                      | language | code       | comment    | blank      | total      |
++---------------------------------------------------------------+----------+------------+------------+------------+------------+
+| d:\VS Code stuff\ai-programming-agent\config\agent.json       | JSON     |        -16 |          0 |          0 |        -16 |
+| d:\VS Code stuff\ai-programming-agent\config\agent_roles.json | JSON     |        -41 |          0 |         -1 |        -42 |
+| d:\VS Code stuff\ai-programming-agent\config\experts.json     | JSON     |        -89 |          0 |        -21 |       -110 |
+| d:\VS Code stuff\ai-programming-agent\config\llm.json         | JSON     |        -47 |          0 |          0 |        -47 |
+| d:\VS Code stuff\ai-programming-agent\config\logging.json     | JSON     |        -43 |          0 |          0 |        -43 |
+| d:\VS Code stuff\ai-programming-agent\config\tools.json       | JSON     |       -172 |          0 |         -1 |       -173 |
+| d:\VS Code stuff\ai-programming-agent\config\workspace.json   | JSON     |         -6 |          0 |         -1 |         -7 |
+| d:\VS Code stuff\ai-programming-agent\docs\Expert配置说明文档.md    | Markdown |        280 |          0 |         92 |        372 |
+| d:\VS Code stuff\ai-programming-agent\docs\SSEGateway设计文档.md  | Markdown |        137 |          0 |         44 |        181 |
+| d:\VS Code stuff\ai-programming-agent\docs\Windows构建指南.md     | Markdown |         51 |          0 |         25 |         76 |
+| d:\VS Code stuff\ai-programming-agent\docs\优化内容通知.md          | Markdown |        161 |          0 |         59 |        220 |
+| d:\VS Code stuff\ai-programming-agent\docs\优化问题跟踪.md          | Markdown |        161 |          0 |         61 |        222 |
+| d:\VS Code stuff\ai-programming-agent\docs\全API参照表.md         | Markdown |        435 |          0 |         99 |        534 |
+| d:\VS Code stuff\ai-programming-agent\docs\内部控制台使用指南.md       | Markdown |         75 |          0 |         23 |         98 |
+| d:\VS Code stuff\ai-programming-agent\docs\分工安排.md            | Markdown |        138 |          0 |         45 |        183 |
+| d:\VS Code stuff\ai-programming-agent\docs\前后端数据传输协议规范.md     | Markdown |        266 |          0 |         81 |        347 |
+| d:\VS Code stuff\ai-programming-agent\docs\前端事件协议规范文档.md      | Markdown |        350 |          0 |         97 |        447 |
+| d:\VS Code stuff\ai-programming-agent\docs\封装状态.md            | Markdown |         97 |          0 |         25 |        122 |
+| d:\VS Code stuff\ai-programming-agent\docs\工具系统接口参考.md        | Markdown |        549 |          0 |        164 |        713 |
+| d:\VS Code stuff\ai-programming-agent\docs\技术栈说明.md           | Markdown |        707 |          0 |        230 |        937 |
+| d:\VS Code stuff\ai-programming-agent\docs\接口文档.md            | Markdown |      1,819 |          0 |        470 |      2,289 |
+| d:\VS Code stuff\ai-programming-agent\docs\整体架构说明.md          | Markdown |      1,477 |          0 |        359 |      1,836 |
+| d:\VS Code stuff\ai-programming-agent\docs\日志系统使用指南.md        | Markdown |        142 |          0 |         44 |        186 |
+| d:\VS Code stuff\ai-programming-agent\docs\最终报告.md            | Markdown |        289 |          0 |         93 |        382 |
+| d:\VS Code stuff\ai-programming-agent\docs\架构门面化重构方案.md       | Markdown |        153 |          0 |         62 |        215 |
+| d:\VS Code stuff\ai-programming-agent\docs\环境配置说明.md          | Markdown |        465 |          0 |        203 |        668 |
+| d:\VS Code stuff\ai-programming-agent\docs\配置协议接口文档.md        | Markdown |        193 |          0 |         59 |        252 |
+| d:\VS Code stuff\ai-programming-agent\docs\重新配置说明.md          | Markdown |         27 |          0 |         14 |         41 |
+| d:\VS Code stuff\ai-programming-agent\docs\长对话上下文持久化机制.md     | Markdown |        181 |          0 |         48 |        229 |
+| Total                                                         |          |      7,739 |          0 |      2,373 |     10,112 |
++---------------------------------------------------------------+----------+------------+------------+------------+------------+

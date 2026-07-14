@@ -25,11 +25,13 @@ TaskService::TaskService(sqlite3* db) : db_(db) {}
 
 TaskRecord TaskService::createTask(
     const std::string& session_id,
+    const std::string& global_id,
     const std::string& workspace_id,
     const std::string& goal) {
     const std::string now = currentTimestamp();
     TaskRepository repository(db_);
-    return repository.createTask(generateId("task"), session_id, workspace_id, goal, now, now);
+    return repository.createTask(generateId("task"), session_id, global_id,
+                                 workspace_id, goal, now, now);
 }
 
 std::optional<TaskRecord> TaskService::getTask(const std::string& task_id) {

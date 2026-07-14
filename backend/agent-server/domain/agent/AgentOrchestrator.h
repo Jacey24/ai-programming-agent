@@ -31,6 +31,7 @@ struct ActiveTaskState {
   std::string currentStage; // expert_start / waiting / received / tool / ...
   std::vector<std::string> expertChain;
   std::string status; // running / completed / failed / cancelled
+  bool terminalEventSent{false};
 };
 
 // ============================================================
@@ -66,7 +67,8 @@ public:
   // globalId: 归属的 Global ID (g_xxx)
   //   若为空或不存在，自动使用默认 Global
   void startTask(const std::string &taskId, const std::string &globalId,
-                 const std::string &workspaceId, const std::string &goal);
+                 const std::string &workspaceId, const std::string &goal,
+                 const TaskRunOptions &options);
 
   // 取消指定任务
   bool cancelTask(const std::string &taskId);
@@ -77,6 +79,7 @@ public:
 
   // ── 查询 ──
   bool isReady() const;
+  bool isReady(ExecutionMode mode) const;
 
 private:
   AgentOrchestrator() = default;
@@ -87,7 +90,13 @@ private:
   // 异步执行
   void runTaskThread(const std::string &taskId, const std::string &globalId,
                      const std::string &workspaceId, const std::string &goal,
+                     TaskRunOptions options,
                      std::shared_ptr<std::atomic<bool>> cancelFlag);
+
+  AgentLoopResult runDirectAnswer(
+      const std::string &taskId, const std::string &globalId,
+      const std::string &workspaceId, const std::string &goal,
+      const std::shared_ptr<std::atomic<bool>> &cancelFlag);
 
   // 任务完成后的收尾（SSE + DB + global_context 归档 + 内存清理）
   void finalizeTask(const std::string &taskId, const std::string &globalId,

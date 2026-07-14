@@ -34,6 +34,12 @@ bool AgentOrchestrator::isReady() const {
   return initialized_ && AgentConfiguration::getInstance().isReady();
 }
 
+bool AgentOrchestrator::isReady(ExecutionMode mode) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return initialized_ && (mode == ExecutionMode::DirectAnswer ||
+                          AgentConfiguration::getInstance().isReady());
+}
+
 // ── 前端注册 ──
 
 int AgentOrchestrator::registerFrontend(const std::string &type) {
@@ -115,7 +121,8 @@ std::string AgentOrchestrator::resolveGlobalId(const std::string &globalId) {
 void AgentOrchestrator::startTask(const std::string &taskId,
                                   const std::string &globalId,
                                   const std::string &workspaceId,
-                                  const std::string &goal) {
+                                  const std::string &goal,
+                                  const TaskRunOptions &options) {
   std::string resolvedGlobalId = resolveGlobalId(globalId);
 
   auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
@@ -130,27 +137,34 @@ void AgentOrchestrator::startTask(const std::string &taskId,
     state.status = "running";
     activeTasks_[taskId] = state;
     cancelFlags_[taskId] = cancelFlag;
-  }
 
-  taskThreads_[taskId] =
-      std::thread(&AgentOrchestrator::runTaskThread, this, taskId,
-                  resolvedGlobalId, workspaceId, goal, cancelFlag);
-  taskThreads_[taskId].detach();
+    taskThreads_[taskId] =
+        std::thread(&AgentOrchestrator::runTaskThread, this, taskId,
+                    resolvedGlobalId, workspaceId, goal, options, cancelFlag);
+    taskThreads_[taskId].detach();
+  }
 }
 
 bool AgentOrchestrator::cancelTask(const std::string &taskId) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto it = cancelFlags_.find(taskId);
-  if (it == cancelFlags_.end())
-    return false;
-  it->second->store(true);
+  bool shouldSendTerminalEvent = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = cancelFlags_.find(taskId);
+    if (it == cancelFlags_.end())
+      return false;
+    it->second->store(true);
 
-  auto stateIt = activeTasks_.find(taskId);
-  if (stateIt != activeTasks_.end()) {
-    stateIt->second.status = "cancelled";
+    auto stateIt = activeTasks_.find(taskId);
+    if (stateIt != activeTasks_.end()) {
+      stateIt->second.status = "cancelled";
+      if (!stateIt->second.terminalEventSent) {
+        stateIt->second.terminalEventSent = true;
+        shouldSendTerminalEvent = true;
+      }
+    }
   }
 
-  if (SSEGateway::getInstance().isInitialized()) {
+  if (shouldSendTerminalEvent && SSEGateway::getInstance().isInitialized()) {
     json meta;
     meta["status"] = "cancelled";
     meta["reason"] = "用户请求取消";
@@ -210,8 +224,22 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
   const std::string dbStatus = statusToDbString(result.status);
   const EventType terminalEvent = statusToTerminalEvent(result.status);
 
+  bool shouldSendTerminalEvent = true;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto stateIt = activeTasks_.find(taskId);
+    if (stateIt != activeTasks_.end()) {
+      if (result.status == "cancelled" &&
+          stateIt->second.terminalEventSent) {
+        shouldSendTerminalEvent = false;
+      } else {
+        stateIt->second.terminalEventSent = true;
+      }
+    }
+  }
+
   // 1. 推送 SSE 终端事件
-  if (SSEGateway::getInstance().isInitialized()) {
+  if (shouldSendTerminalEvent && SSEGateway::getInstance().isInitialized()) {
     json meta;
     meta["status"] = result.status;
     meta["global_id"] = globalId;
@@ -279,61 +307,149 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
     std::lock_guard<std::mutex> lock(mutex_);
     cancelFlags_.erase(taskId);
     taskThreads_.erase(taskId);
-    auto it = activeTasks_.find(taskId);
-    if (it != activeTasks_.end()) {
-      it->second.status = result.status;
-      it->second.expertChain = result.expertChain;
-    }
+    activeTasks_.erase(taskId);
   }
 }
 
 // ── 内部异步执行 ──
 
+AgentLoopResult AgentOrchestrator::runDirectAnswer(
+    const std::string &taskId, const std::string &globalId,
+    const std::string &workspaceId, const std::string &goal,
+    const std::shared_ptr<std::atomic<bool>> &cancelFlag) {
+  (void)globalId;
+  (void)workspaceId;
+
+  AgentLoopResult result;
+  const auto isCancelled = [&cancelFlag]() {
+    return cancelFlag && cancelFlag->load();
+  };
+  const auto appendExecutionLog = [&taskId](const std::string &status,
+                                             const std::string &detail) {
+    if (!DataAccessFacade::getInstance().isInitialized())
+      return;
+    try {
+      DataAccessFacade::getInstance().appendLog(
+          taskId, "direct_answer",
+          json{{"status", status}, {"detail", detail}}.dump());
+    } catch (const std::exception &e) {
+      LOG_ERROR("[DIRECT ANSWER] Failed to append execution log: {}",
+                e.what());
+    }
+  };
+
+  if (isCancelled()) {
+    result.status = "cancelled";
+    result.finalOutput = "任务已取消";
+    return result;
+  }
+
+  const std::string prompt =
+      "请直接回答下面的用户问题。不要调用任何工具，不要修改任何文件，不要"
+      "输出工具调用协议，也不要声称已经执行命令或修改项目。\n\n用户问题：\n" +
+      goal;
+
+  try {
+    if (!LlmClientFacade::getInstance().isAvailable()) {
+      result.status = "failed";
+      result.finalOutput = "直接回答失败：大模型服务不可用";
+      appendExecutionLog("failed", result.finalOutput);
+      return result;
+    }
+
+    const LlmResponse response = LlmClientFacade::getInstance().chat(prompt);
+    if (isCancelled()) {
+      result.status = "cancelled";
+      result.finalOutput = "任务已取消";
+      return result;
+    }
+
+    if (!response.success) {
+      result.status = "failed";
+      result.finalOutput = "直接回答失败：" +
+                           (response.error.empty() ? "大模型调用失败"
+                                                   : response.error);
+      appendExecutionLog("failed", result.finalOutput);
+      return result;
+    }
+    if (response.content.find_first_not_of(" \t\r\n") == std::string::npos) {
+      result.status = "failed";
+      result.finalOutput = "直接回答失败：大模型返回空内容";
+      appendExecutionLog("failed", result.finalOutput);
+      return result;
+    }
+
+    result.status = "completed";
+    result.finalOutput = response.content;
+    if (SSEGateway::getInstance().isInitialized()) {
+      SSEGateway::getInstance().pushDialog(
+          taskId, result.finalOutput,
+          json{{"mode", "direct_answer"}}.dump());
+    }
+    appendExecutionLog("completed", "直接回答已生成并推送");
+  } catch (const std::exception &e) {
+    result.status = "failed";
+    result.finalOutput = std::string("直接回答失败：") + e.what();
+    appendExecutionLog("failed", result.finalOutput);
+  } catch (...) {
+    result.status = "failed";
+    result.finalOutput = "直接回答失败：未知异常";
+    appendExecutionLog("failed", result.finalOutput);
+  }
+
+  return result;
+}
+
 void AgentOrchestrator::runTaskThread(
     const std::string &taskId, const std::string &globalId,
     const std::string &workspaceId, const std::string &goal,
+    TaskRunOptions options,
     std::shared_ptr<std::atomic<bool>> cancelFlag) {
   LOG_INFO("[ORCH DEBUG] runTaskThread START: taskId={}, goal={}", taskId,
            goal.substr(0, 80));
 
+  AgentLoopResult result;
   try {
-    LOG_INFO("[ORCH DEBUG] Creating AgentLoop with config={}",
-             expertConfigPath_);
-    AgentLoop agentLoop(expertConfigPath_);
+    switch (options.mode) {
+    case ExecutionMode::DirectAnswer:
+      result =
+          runDirectAnswer(taskId, globalId, workspaceId, goal, cancelFlag);
+      break;
+    case ExecutionMode::WorkspaceAgent:
+    case ExecutionMode::Auto: {
+      LOG_INFO("[ORCH DEBUG] Creating AgentLoop with config={}",
+               expertConfigPath_);
+      AgentLoop agentLoop(expertConfigPath_);
+      if (!agentLoop.isReady()) {
+        LOG_ERROR("[ORCH DEBUG] AgentLoop NOT READY, aborting");
+        result.status = "config_error";
+        result.finalOutput = "Expert 配置未加载";
+        break;
+      }
 
-    if (!agentLoop.isReady()) {
-      LOG_ERROR("[ORCH DEBUG] AgentLoop NOT READY, aborting");
-      AgentLoopResult errorResult;
-      errorResult.status = "config_error";
-      errorResult.finalOutput = "Expert 配置未加载";
-      finalizeTask(taskId, globalId, errorResult);
-      LOG_INFO("[ORCH DEBUG] runTaskThread END (config_error)");
-      return;
+      LOG_INFO("[ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... "
+               "llmAvailable={}",
+               LlmClientFacade::getInstance().isAvailable());
+      result = agentLoop.run(taskId, globalId, workspaceId, goal, options,
+                             cancelFlag);
+      LOG_INFO(
+          "[ORCH DEBUG] agentLoop.run() returned: status={}, output_len={}",
+          result.status, result.finalOutput.size());
+      break;
     }
-
-    LOG_INFO("[ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... "
-             "llmAvailable={}",
-             LlmClientFacade::getInstance().isAvailable());
-    AgentLoopResult result =
-        agentLoop.run(taskId, globalId, workspaceId, goal, cancelFlag);
-
-    LOG_INFO("[ORCH DEBUG] agentLoop.run() returned: status={}, output_len={}",
-             result.status, result.finalOutput.size());
-    finalizeTask(taskId, globalId, result);
-    LOG_INFO("[ORCH DEBUG] runTaskThread END (normal)");
+    }
   } catch (const std::exception &e) {
     LOG_ERROR("[ORCH DEBUG] runTaskThread EXCEPTION: {}", e.what());
-    AgentLoopResult errorResult;
-    errorResult.status = "failed";
-    errorResult.finalOutput = std::string("Agent 执行异常: ") + e.what();
-    finalizeTask(taskId, globalId, errorResult);
+    result.status = "failed";
+    result.finalOutput = std::string("Agent 执行异常: ") + e.what();
   } catch (...) {
     LOG_ERROR("[ORCH DEBUG] runTaskThread UNKNOWN EXCEPTION");
-    AgentLoopResult errorResult;
-    errorResult.status = "failed";
-    errorResult.finalOutput = "Agent 执行未知异常";
-    finalizeTask(taskId, globalId, errorResult);
+    result.status = "failed";
+    result.finalOutput = "Agent 执行未知异常";
   }
+
+  finalizeTask(taskId, globalId, result);
+  LOG_INFO("[ORCH DEBUG] runTaskThread END: status={}", result.status);
 }
 
 } // namespace codepilot

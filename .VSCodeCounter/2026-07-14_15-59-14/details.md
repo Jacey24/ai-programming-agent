@@ -1,0 +1,130 @@
+# Details
+
+Date : 2026-07-14 15:59:14
+
+Directory d:\\VS Code stuff\\ai-programming-agent\\third_party
+
+Total : 115 files,  454684 codes, 209264 comments, 50453 blanks, all 714401 lines
+
+[Summary](results.md) / Details / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
+
+## Files
+| filename | language | code | comment | blank | total |
+| :--- | :--- | ---: | ---: | ---: | ---: |
+| [third\_party/cpp-httplib/httplib.h](/third_party/cpp-httplib/httplib.h) | C++ | 16,306 | 1,281 | 3,165 | 20,752 |
+| [third\_party/nlohmann\_json/json.hpp](/third_party/nlohmann_json/json.hpp) | C++ | 17,980 | 4,492 | 3,055 | 25,527 |
+| [third\_party/nlohmann\_json/nlohmann/json.hpp](/third_party/nlohmann_json/nlohmann/json.hpp) | C++ | 17,980 | 4,492 | 3,055 | 25,527 |
+| [third\_party/spdlog/include/spdlog/async.h](/third_party/spdlog/include/spdlog/async.h) | C++ | 65 | 18 | 18 | 101 |
+| [third\_party/spdlog/include/spdlog/async\_logger-inl.h](/third_party/spdlog/include/spdlog/async_logger-inl.h) | C++ | 64 | 9 | 14 | 87 |
+| [third\_party/spdlog/include/spdlog/async\_logger.h](/third_party/spdlog/include/spdlog/async_logger.h) | C++ | 46 | 14 | 15 | 75 |
+| [third\_party/spdlog/include/spdlog/cfg/argv.h](/third_party/spdlog/include/spdlog/cfg/argv.h) | C++ | 20 | 12 | 9 | 41 |
+| [third\_party/spdlog/include/spdlog/cfg/env.h](/third_party/spdlog/include/spdlog/cfg/env.h) | C++ | 14 | 17 | 6 | 37 |
+| [third\_party/spdlog/include/spdlog/cfg/helpers-inl.h](/third_party/spdlog/include/spdlog/cfg/helpers-inl.h) | C++ | 79 | 13 | 16 | 108 |
+| [third\_party/spdlog/include/spdlog/cfg/helpers.h](/third_party/spdlog/include/spdlog/cfg/helpers.h) | C++ | 13 | 11 | 6 | 30 |
+| [third\_party/spdlog/include/spdlog/common-inl.h](/third_party/spdlog/include/spdlog/common-inl.h) | C++ | 49 | 3 | 17 | 69 |
+| [third\_party/spdlog/include/spdlog/common.h](/third_party/spdlog/include/spdlog/common.h) | C++ | 320 | 27 | 65 | 412 |
+| [third\_party/spdlog/include/spdlog/details/backtracer-inl.h](/third_party/spdlog/include/spdlog/details/backtracer-inl.h) | C++ | 50 | 3 | 11 | 64 |
+| [third\_party/spdlog/include/spdlog/details/backtracer.h](/third_party/spdlog/include/spdlog/details/backtracer.h) | C++ | 29 | 5 | 12 | 46 |
+| [third\_party/spdlog/include/spdlog/details/circular\_q.h](/third_party/spdlog/include/spdlog/details/circular_q.h) | C++ | 75 | 17 | 24 | 116 |
+| [third\_party/spdlog/include/spdlog/details/console\_globals.h](/third_party/spdlog/include/spdlog/details/console_globals.h) | C++ | 21 | 2 | 6 | 29 |
+| [third\_party/spdlog/include/spdlog/details/file\_helper-inl.h](/third_party/spdlog/include/spdlog/details/file_helper-inl.h) | C++ | 102 | 24 | 27 | 153 |
+| [third\_party/spdlog/include/spdlog/details/file\_helper.h](/third_party/spdlog/include/spdlog/details/file_helper.h) | C++ | 33 | 18 | 11 | 62 |
+| [third\_party/spdlog/include/spdlog/details/fmt\_helper.h](/third_party/spdlog/include/spdlog/details/fmt_helper.h) | C++ | 113 | 13 | 16 | 142 |
+| [third\_party/spdlog/include/spdlog/details/log\_msg-inl.h](/third_party/spdlog/include/spdlog/details/log_msg-inl.h) | C++ | 34 | 2 | 9 | 45 |
+| [third\_party/spdlog/include/spdlog/details/log\_msg.h](/third_party/spdlog/include/spdlog/details/log_msg.h) | C++ | 30 | 3 | 8 | 41 |
+| [third\_party/spdlog/include/spdlog/details/log\_msg\_buffer-inl.h](/third_party/spdlog/include/spdlog/details/log_msg_buffer-inl.h) | C++ | 42 | 2 | 11 | 55 |
+| [third\_party/spdlog/include/spdlog/details/log\_msg\_buffer.h](/third_party/spdlog/include/spdlog/details/log_msg_buffer.h) | C++ | 20 | 4 | 9 | 33 |
+| [third\_party/spdlog/include/spdlog/details/mpmc\_blocking\_q.h](/third_party/spdlog/include/spdlog/details/mpmc_blocking_q.h) | C++ | 131 | 20 | 27 | 178 |
+| [third\_party/spdlog/include/spdlog/details/null\_mutex.h](/third_party/spdlog/include/spdlog/details/null_mutex.h) | C++ | 23 | 3 | 10 | 36 |
+| [third\_party/spdlog/include/spdlog/details/os-inl.h](/third_party/spdlog/include/spdlog/details/os-inl.h) | C++ | 474 | 41 | 80 | 595 |
+| [third\_party/spdlog/include/spdlog/details/os.h](/third_party/spdlog/include/spdlog/details/os.h) | C++ | 57 | 32 | 35 | 124 |
+| [third\_party/spdlog/include/spdlog/details/periodic\_worker-inl.h](/third_party/spdlog/include/spdlog/details/periodic_worker-inl.h) | C++ | 18 | 3 | 6 | 27 |
+| [third\_party/spdlog/include/spdlog/details/periodic\_worker.h](/third_party/spdlog/include/spdlog/details/periodic_worker.h) | C++ | 42 | 9 | 8 | 59 |
+| [third\_party/spdlog/include/spdlog/details/registry-inl.h](/third_party/spdlog/include/spdlog/details/registry-inl.h) | C++ | 202 | 13 | 47 | 262 |
+| [third\_party/spdlog/include/spdlog/details/registry.h](/third_party/spdlog/include/spdlog/details/registry.h) | C++ | 77 | 18 | 35 | 130 |
+| [third\_party/spdlog/include/spdlog/details/synchronous\_factory.h](/third_party/spdlog/include/spdlog/details/synchronous_factory.h) | C++ | 14 | 3 | 6 | 23 |
+| [third\_party/spdlog/include/spdlog/details/tcp\_client-windows.h](/third_party/spdlog/include/spdlog/details/tcp_client-windows.h) | C++ | 106 | 8 | 22 | 136 |
+| [third\_party/spdlog/include/spdlog/details/tcp\_client.h](/third_party/spdlog/include/spdlog/details/tcp_client.h) | C++ | 100 | 9 | 19 | 128 |
+| [third\_party/spdlog/include/spdlog/details/thread\_pool-inl.h](/third_party/spdlog/include/spdlog/details/thread_pool-inl.h) | C++ | 102 | 6 | 25 | 133 |
+| [third\_party/spdlog/include/spdlog/details/thread\_pool.h](/third_party/spdlog/include/spdlog/details/thread_pool.h) | C++ | 90 | 11 | 28 | 129 |
+| [third\_party/spdlog/include/spdlog/details/udp\_client-windows.h](/third_party/spdlog/include/spdlog/details/udp_client-windows.h) | C++ | 78 | 4 | 17 | 99 |
+| [third\_party/spdlog/include/spdlog/details/udp\_client.h](/third_party/spdlog/include/spdlog/details/udp_client.h) | C++ | 59 | 6 | 17 | 82 |
+| [third\_party/spdlog/include/spdlog/details/windows\_include.h](/third_party/spdlog/include/spdlog/details/windows_include.h) | C++ | 8 | 0 | 4 | 12 |
+| [third\_party/spdlog/include/spdlog/fmt/bin\_to\_hex.h](/third_party/spdlog/include/spdlog/fmt/bin_to_hex.h) | C++ | 167 | 27 | 31 | 225 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/args.h](/third_party/spdlog/include/spdlog/fmt/bundled/args.h) | C++ | 136 | 67 | 33 | 236 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/chrono.h](/third_party/spdlog/include/spdlog/fmt/bundled/chrono.h) | C++ | 1,864 | 170 | 207 | 2,241 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/color.h](/third_party/spdlog/include/spdlog/fmt/bundled/color.h) | C++ | 514 | 78 | 52 | 644 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/compile.h](/third_party/spdlog/include/spdlog/fmt/bundled/compile.h) | C++ | 440 | 28 | 68 | 536 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/fmt.license.rst](/third_party/spdlog/include/spdlog/fmt/bundled/fmt.license.rst) | reStructuredText | 22 | 0 | 6 | 28 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/format-inl.h](/third_party/spdlog/include/spdlog/fmt/bundled/format-inl.h) | C++ | 1,446 | 109 | 124 | 1,679 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/format.h](/third_party/spdlog/include/spdlog/fmt/bundled/format.h) | C++ | 3,570 | 536 | 430 | 4,536 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/locale.h](/third_party/spdlog/include/spdlog/fmt/bundled/locale.h) | C++ | 2 | 0 | 1 | 3 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/os.h](/third_party/spdlog/include/spdlog/fmt/bundled/os.h) | C++ | 237 | 137 | 82 | 456 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/ostream.h](/third_party/spdlog/include/spdlog/fmt/bundled/ostream.h) | C++ | 177 | 35 | 34 | 246 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/printf.h](/third_party/spdlog/include/spdlog/fmt/bundled/printf.h) | C++ | 506 | 92 | 78 | 676 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/ranges.h](/third_party/spdlog/include/spdlog/fmt/bundled/ranges.h) | C++ | 573 | 51 | 115 | 739 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/std.h](/third_party/spdlog/include/spdlog/fmt/bundled/std.h) | C++ | 441 | 28 | 69 | 538 |
+| [third\_party/spdlog/include/spdlog/fmt/bundled/xchar.h](/third_party/spdlog/include/spdlog/fmt/bundled/xchar.h) | C++ | 211 | 12 | 37 | 260 |
+| [third\_party/spdlog/include/spdlog/fmt/chrono.h](/third_party/spdlog/include/spdlog/fmt/chrono.h) | C++ | 14 | 7 | 3 | 24 |
+| [third\_party/spdlog/include/spdlog/fmt/compile.h](/third_party/spdlog/include/spdlog/fmt/compile.h) | C++ | 14 | 7 | 3 | 24 |
+| [third\_party/spdlog/include/spdlog/fmt/fmt.h](/third_party/spdlog/include/spdlog/fmt/fmt.h) | C++ | 17 | 8 | 6 | 31 |
+| [third\_party/spdlog/include/spdlog/fmt/ostr.h](/third_party/spdlog/include/spdlog/fmt/ostr.h) | C++ | 14 | 7 | 3 | 24 |
+| [third\_party/spdlog/include/spdlog/fmt/ranges.h](/third_party/spdlog/include/spdlog/fmt/ranges.h) | C++ | 14 | 7 | 3 | 24 |
+| [third\_party/spdlog/include/spdlog/fmt/std.h](/third_party/spdlog/include/spdlog/fmt/std.h) | C++ | 14 | 8 | 3 | 25 |
+| [third\_party/spdlog/include/spdlog/fmt/xchar.h](/third_party/spdlog/include/spdlog/fmt/xchar.h) | C++ | 14 | 7 | 3 | 24 |
+| [third\_party/spdlog/include/spdlog/formatter.h](/third_party/spdlog/include/spdlog/formatter.h) | C++ | 11 | 2 | 5 | 18 |
+| [third\_party/spdlog/include/spdlog/fwd.h](/third_party/spdlog/include/spdlog/fwd.h) | C++ | 11 | 2 | 6 | 19 |
+| [third\_party/spdlog/include/spdlog/logger-inl.h](/third_party/spdlog/include/spdlog/logger-inl.h) | C++ | 147 | 15 | 37 | 199 |
+| [third\_party/spdlog/include/spdlog/logger.h](/third_party/spdlog/include/spdlog/logger.h) | C++ | 272 | 37 | 71 | 380 |
+| [third\_party/spdlog/include/spdlog/mdc.h](/third_party/spdlog/include/spdlog/mdc.h) | C++ | 27 | 8 | 12 | 47 |
+| [third\_party/spdlog/include/spdlog/pattern\_formatter-inl.h](/third_party/spdlog/include/spdlog/pattern_formatter-inl.h) | C++ | 1,051 | 68 | 206 | 1,325 |
+| [third\_party/spdlog/include/spdlog/pattern\_formatter.h](/third_party/spdlog/include/spdlog/pattern_formatter.h) | C++ | 87 | 7 | 25 | 119 |
+| [third\_party/spdlog/include/spdlog/sinks/android\_sink.h](/third_party/spdlog/include/spdlog/sinks/android_sink.h) | C++ | 101 | 13 | 24 | 138 |
+| [third\_party/spdlog/include/spdlog/sinks/ansicolor\_sink-inl.h](/third_party/spdlog/include/spdlog/sinks/ansicolor_sink-inl.h) | C++ | 107 | 9 | 20 | 136 |
+| [third\_party/spdlog/include/spdlog/sinks/ansicolor\_sink.h](/third_party/spdlog/include/spdlog/sinks/ansicolor_sink.h) | C++ | 83 | 12 | 21 | 116 |
+| [third\_party/spdlog/include/spdlog/sinks/base\_sink-inl.h](/third_party/spdlog/include/spdlog/sinks/base_sink-inl.h) | C++ | 45 | 2 | 13 | 60 |
+| [third\_party/spdlog/include/spdlog/sinks/base\_sink.h](/third_party/spdlog/include/spdlog/sinks/base_sink.h) | C++ | 33 | 9 | 10 | 52 |
+| [third\_party/spdlog/include/spdlog/sinks/basic\_file\_sink-inl.h](/third_party/spdlog/include/spdlog/sinks/basic_file_sink-inl.h) | C++ | 31 | 2 | 10 | 43 |
+| [third\_party/spdlog/include/spdlog/sinks/basic\_file\_sink.h](/third_party/spdlog/include/spdlog/sinks/basic_file_sink.h) | C++ | 45 | 8 | 13 | 66 |
+| [third\_party/spdlog/include/spdlog/sinks/callback\_sink.h](/third_party/spdlog/include/spdlog/sinks/callback_sink.h) | C++ | 34 | 9 | 14 | 57 |
+| [third\_party/spdlog/include/spdlog/sinks/daily\_file\_sink.h](/third_party/spdlog/include/spdlog/sinks/daily_file_sink.h) | C++ | 199 | 27 | 27 | 253 |
+| [third\_party/spdlog/include/spdlog/sinks/dist\_sink.h](/third_party/spdlog/include/spdlog/sinks/dist_sink.h) | C++ | 60 | 4 | 18 | 82 |
+| [third\_party/spdlog/include/spdlog/sinks/dup\_filter\_sink.h](/third_party/spdlog/include/spdlog/sinks/dup_filter_sink.h) | C++ | 54 | 26 | 13 | 93 |
+| [third\_party/spdlog/include/spdlog/sinks/hourly\_file\_sink.h](/third_party/spdlog/include/spdlog/sinks/hourly_file_sink.h) | C++ | 151 | 18 | 23 | 192 |
+| [third\_party/spdlog/include/spdlog/sinks/kafka\_sink.h](/third_party/spdlog/include/spdlog/sinks/kafka_sink.h) | C++ | 89 | 9 | 22 | 120 |
+| [third\_party/spdlog/include/spdlog/sinks/mongo\_sink.h](/third_party/spdlog/include/spdlog/sinks/mongo_sink.h) | C++ | 83 | 8 | 18 | 109 |
+| [third\_party/spdlog/include/spdlog/sinks/msvc\_sink.h](/third_party/spdlog/include/spdlog/sinks/msvc_sink.h) | C++ | 49 | 6 | 14 | 69 |
+| [third\_party/spdlog/include/spdlog/sinks/null\_sink.h](/third_party/spdlog/include/spdlog/sinks/null_sink.h) | C++ | 29 | 2 | 11 | 42 |
+| [third\_party/spdlog/include/spdlog/sinks/ostream\_sink.h](/third_party/spdlog/include/spdlog/sinks/ostream_sink.h) | C++ | 32 | 2 | 10 | 44 |
+| [third\_party/spdlog/include/spdlog/sinks/qt\_sinks.h](/third_party/spdlog/include/spdlog/sinks/qt_sinks.h) | C++ | 217 | 45 | 43 | 305 |
+| [third\_party/spdlog/include/spdlog/sinks/ringbuffer\_sink.h](/third_party/spdlog/include/spdlog/sinks/ringbuffer_sink.h) | C++ | 51 | 5 | 12 | 68 |
+| [third\_party/spdlog/include/spdlog/sinks/rotating\_file\_sink-inl.h](/third_party/spdlog/include/spdlog/sinks/rotating_file_sink-inl.h) | C++ | 107 | 18 | 20 | 145 |
+| [third\_party/spdlog/include/spdlog/sinks/rotating\_file\_sink.h](/third_party/spdlog/include/spdlog/sinks/rotating_file_sink.h) | C++ | 59 | 15 | 16 | 90 |
+| [third\_party/spdlog/include/spdlog/sinks/sink-inl.h](/third_party/spdlog/include/spdlog/sinks/sink-inl.h) | C++ | 14 | 2 | 7 | 23 |
+| [third\_party/spdlog/include/spdlog/sinks/sink.h](/third_party/spdlog/include/spdlog/sinks/sink.h) | C++ | 23 | 3 | 9 | 35 |
+| [third\_party/spdlog/include/spdlog/sinks/stdout\_color\_sinks-inl.h](/third_party/spdlog/include/spdlog/sinks/stdout_color_sinks-inl.h) | C++ | 28 | 2 | 9 | 39 |
+| [third\_party/spdlog/include/spdlog/sinks/stdout\_color\_sinks.h](/third_party/spdlog/include/spdlog/sinks/stdout_color_sinks.h) | C++ | 37 | 2 | 11 | 50 |
+| [third\_party/spdlog/include/spdlog/sinks/stdout\_sinks-inl.h](/third_party/spdlog/include/spdlog/sinks/stdout_sinks-inl.h) | C++ | 93 | 11 | 23 | 127 |
+| [third\_party/spdlog/include/spdlog/sinks/stdout\_sinks.h](/third_party/spdlog/include/spdlog/sinks/stdout_sinks.h) | C++ | 59 | 3 | 23 | 85 |
+| [third\_party/spdlog/include/spdlog/sinks/syslog\_sink.h](/third_party/spdlog/include/spdlog/sinks/syslog_sink.h) | C++ | 75 | 13 | 16 | 104 |
+| [third\_party/spdlog/include/spdlog/sinks/systemd\_sink.h](/third_party/spdlog/include/spdlog/sinks/systemd_sink.h) | C++ | 94 | 9 | 19 | 122 |
+| [third\_party/spdlog/include/spdlog/sinks/tcp\_sink.h](/third_party/spdlog/include/spdlog/sinks/tcp_sink.h) | C++ | 51 | 9 | 16 | 76 |
+| [third\_party/spdlog/include/spdlog/sinks/udp\_sink.h](/third_party/spdlog/include/spdlog/sinks/udp_sink.h) | C++ | 46 | 8 | 16 | 70 |
+| [third\_party/spdlog/include/spdlog/sinks/win\_eventlog\_sink.h](/third_party/spdlog/include/spdlog/sinks/win_eventlog_sink.h) | C++ | 162 | 46 | 53 | 261 |
+| [third\_party/spdlog/include/spdlog/sinks/wincolor\_sink-inl.h](/third_party/spdlog/include/spdlog/sinks/wincolor_sink-inl.h) | C++ | 128 | 15 | 21 | 164 |
+| [third\_party/spdlog/include/spdlog/sinks/wincolor\_sink.h](/third_party/spdlog/include/spdlog/sinks/wincolor_sink.h) | C++ | 56 | 10 | 17 | 83 |
+| [third\_party/spdlog/include/spdlog/spdlog-inl.h](/third_party/spdlog/include/spdlog/spdlog-inl.h) | C++ | 63 | 2 | 28 | 93 |
+| [third\_party/spdlog/include/spdlog/spdlog.h](/third_party/spdlog/include/spdlog/spdlog.h) | C++ | 210 | 75 | 68 | 353 |
+| [third\_party/spdlog/include/spdlog/stopwatch.h](/third_party/spdlog/include/spdlog/stopwatch.h) | C++ | 34 | 22 | 11 | 67 |
+| [third\_party/spdlog/include/spdlog/tweakme.h](/third_party/spdlog/include/spdlog/tweakme.h) | C++ | 1 | 121 | 20 | 142 |
+| [third\_party/spdlog/include/spdlog/version.h](/third_party/spdlog/include/spdlog/version.h) | C++ | 6 | 2 | 4 | 12 |
+| [third\_party/sqlite3/shell.c](/third_party/sqlite3/shell.c) | C | 24,939 | 6,680 | 2,082 | 33,701 |
+| [third\_party/sqlite3/sqlite-amalgamation-3490100/shell.c](/third_party/sqlite3/sqlite-amalgamation-3490100/shell.c) | C | 24,939 | 6,680 | 2,082 | 33,701 |
+| [third\_party/sqlite3/sqlite-amalgamation-3490100/sqlite3.c](/third_party/sqlite3/sqlite-amalgamation-3490100/sqlite3.c) | C | 165,023 | 79,883 | 16,549 | 261,455 |
+| [third\_party/sqlite3/sqlite-amalgamation-3490100/sqlite3.h](/third_party/sqlite3/sqlite-amalgamation-3490100/sqlite3.h) | C++ | 1,808 | 11,552 | 356 | 13,716 |
+| [third\_party/sqlite3/sqlite-amalgamation-3490100/sqlite3ext.h](/third_party/sqlite3/sqlite-amalgamation-3490100/sqlite3ext.h) | C++ | 613 | 101 | 6 | 720 |
+| [third\_party/sqlite3/sqlite3.c](/third_party/sqlite3/sqlite3.c) | C | 165,023 | 79,883 | 16,549 | 261,455 |
+| [third\_party/sqlite3/sqlite3.h](/third_party/sqlite3/sqlite3.h) | C++ | 1,808 | 11,552 | 356 | 13,716 |
+| [third\_party/sqlite3/sqlite3ext.h](/third_party/sqlite3/sqlite3ext.h) | C++ | 613 | 101 | 6 | 720 |
+
+[Summary](results.md) / Details / [Diff Summary](diff.md) / [Diff Details](diff-details.md)

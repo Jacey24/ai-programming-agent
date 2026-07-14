@@ -128,8 +128,9 @@ std::string PromptBuilder::buildToolsDescription(const ExpertConfig &expert) {
       desc += "  - " + toolName + "\n";
     }
   }
-  desc += "\n注意: 每步调用一次只能执行一个工具。如需批量操作，请使用 "
-          "shell.run 执行对应的 Shell 命令。\n\n";
+  desc += "\n注意: 每步调用一次只能执行一个工具。如需批量操作，"
+          "请使用 shell.run 执行对应的 Shell 命令"
+          "（Windows: cmd.exe / Unix: bash）。\n\n";
   return desc;
 }
 

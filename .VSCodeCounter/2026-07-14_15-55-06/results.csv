@@ -1,0 +1,9 @@
+"filename", "language", "JSON", "comment", "blank", "total"
+"d:\VS Code stuff\ai-programming-agent\config\agent.json", "JSON", 16, 0, 0, 16
+"d:\VS Code stuff\ai-programming-agent\config\agent_roles.json", "JSON", 41, 0, 1, 42
+"d:\VS Code stuff\ai-programming-agent\config\experts.json", "JSON", 89, 0, 21, 110
+"d:\VS Code stuff\ai-programming-agent\config\llm.json", "JSON", 47, 0, 0, 47
+"d:\VS Code stuff\ai-programming-agent\config\logging.json", "JSON", 43, 0, 0, 43
+"d:\VS Code stuff\ai-programming-agent\config\tools.json", "JSON", 172, 0, 1, 173
+"d:\VS Code stuff\ai-programming-agent\config\workspace.json", "JSON", 6, 0, 1, 7
+"Total", "-", 414, 0, 24, 438

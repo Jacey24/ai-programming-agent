@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <optional>
 #include <sstream>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -236,14 +237,44 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
   const std::string req_body = request_body(request);
   const std::string name = extract_json_string(req_body, "name");
   const std::string path = extract_json_string(req_body, "path");
-  if (name.empty() || path.empty()) {
+  if (name.empty()) {
     return http_response(
-        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"name and path are required"}})",
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"name is required"}})",
         "400 Bad Request");
   }
-  if (!is_workspace_directory(path)) {
+  if (path.empty()) {
     return http_response(
-        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"path must be an existing directory"}})",
+        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"workspace path is required"}})",
+        "400 Bad Request");
+  }
+
+  const std::filesystem::path workspace_path(path);
+  std::error_code filesystem_error;
+  const bool path_exists =
+      std::filesystem::exists(workspace_path, filesystem_error);
+  if (filesystem_error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"failed to access workspace path: )" +
+            json_escape(filesystem_error.message()) + R"("}})",
+        "400 Bad Request");
+  }
+  if (!path_exists) {
+    return http_response(
+        R"({"success":false,"error":{"code":"WORKSPACE_PATH_NOT_FOUND","message":"workspace path does not exist"}})",
+        "404 Not Found");
+  }
+
+  const bool path_is_directory =
+      std::filesystem::is_directory(workspace_path, filesystem_error);
+  if (filesystem_error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"failed to inspect workspace path: )" +
+            json_escape(filesystem_error.message()) + R"("}})",
+        "400 Bad Request");
+  }
+  if (!path_is_directory) {
+    return http_response(
+        R"({"success":false,"error":{"code":"WORKSPACE_PATH_NOT_DIRECTORY","message":"workspace path must be a directory"}})",
         "400 Bad Request");
   }
 

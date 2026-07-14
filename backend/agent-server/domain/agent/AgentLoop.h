@@ -3,6 +3,7 @@
 #include "AgentConfiguration.h"
 #include "PlanManager.h"
 #include "TaskContext.h"
+#include "TaskRunOptions.h"
 #include <atomic>
 #include <memory>
 #include <string>
@@ -42,6 +43,7 @@ public:
   // globalId: 归属的 Global ID（用于 global_context 检索）
   AgentLoopResult run(const std::string &taskId, const std::string &globalId,
                       const std::string &workspaceId, const std::string &goal,
+                      const TaskRunOptions &options,
                       std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
 
   // 检查配置是否加载成功
@@ -51,12 +53,15 @@ private:
   std::string configPath_;
 
   // Expert Chain 主循环
+  // initialSessionHistory: Resume 时传入的历史对话（正常启动传空字符串）
   AgentLoopResult runExpertChain(const std::string &taskId,
                                  const std::string &globalId,
                                  const std::string &workspaceId,
                                  TaskContext &ctx,
                                  const ExpertConfig *entryExpert,
-                                 std::shared_ptr<std::atomic<bool>> cancelFlag);
+                                 const TaskRunOptions &options,
+                                 std::shared_ptr<std::atomic<bool>> cancelFlag,
+                                 const std::string &initialSessionHistory = "");
 
   // ── Critical Exit 兜底 ──
   // 所有非正常的 chain 终止路径（轮次耗尽/路由失败/切换超限等）

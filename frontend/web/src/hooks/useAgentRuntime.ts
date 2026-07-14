@@ -146,7 +146,7 @@ export function useAgentRuntime(options: {
       const session = sessionRef.current ?? await createSession(input.sessionTitle.trim() || "CodePilot Session");
       const workspace = workspaceRef.current ?? await createWorkspace(
         input.workspaceName.trim() || "codepilot-workspace",
-        input.workspacePath.trim() || "/workspace",
+        input.workspacePath.trim() || "./workspace",
       );
       sessionRef.current = session;
       workspaceRef.current = workspace;

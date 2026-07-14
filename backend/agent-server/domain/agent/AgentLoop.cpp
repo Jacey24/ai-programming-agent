@@ -4,6 +4,7 @@
 #include "RouteEngine.h"
 
 #include "application/ToolSystem.h"
+#include "common/logging/Logger.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
@@ -29,6 +30,7 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
                                const std::string &globalId,
                                const std::string &workspaceId,
                                const std::string &goal,
+                               const TaskRunOptions &options,
                                std::shared_ptr<std::atomic<bool>> cancelFlag) {
   auto &cfg = AgentConfiguration::getInstance();
   cfg.reconfigure();
@@ -84,7 +86,7 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
     }
   }
 
-  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert,
+  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert, options,
                         cancelFlag);
 }
 
@@ -93,21 +95,23 @@ AgentLoop::runExpertChain(const std::string &taskId,
                           const std::string &globalId,
                           const std::string &workspaceId, TaskContext &ctx,
                           const ExpertConfig *entryExpert,
-                          std::shared_ptr<std::atomic<bool>> cancelFlag) {
+                          const TaskRunOptions &options,
+                          std::shared_ptr<std::atomic<bool>> cancelFlag,
+                          const std::string &initialSessionHistory) {
   AgentLoopResult result;
   auto &cfg = AgentConfiguration::getInstance();
 
   PlanManager planMgr;
 
   const ExpertConfig *currentExpert = entryExpert;
-  std::string sessionHistory;
+  std::string sessionHistory = initialSessionHistory;
 
-  const int maxExpertSwitches = 20;
+  const int effectiveMaxSteps = std::clamp(options.maxSteps, 1, 20);
   int expertSwitches = 0;
   bool firstRoundInExpert = true;
   int roundsLeft = 0; // ★ 提升到外层，供 double_check continue 使用
 
-  while (currentExpert && expertSwitches < maxExpertSwitches) {
+  while (currentExpert && expertSwitches < effectiveMaxSteps) {
     if (cancelFlag && cancelFlag->load()) {
       result.status = "cancelled";
       result.finalOutput = "任务已被用户取消";
@@ -374,6 +378,10 @@ AgentLoop::runExpertChain(const std::string &taskId,
             toolCtx.workspaceRuntime = WorkspaceManager::getInstance().getOrCreate(
                 workspaceId, toolCtx.workspacePath);
           }
+          toolCtx.options["auto_run_safe_commands"] =
+              options.autoRunSafeCommands ? "true" : "false";
+          toolCtx.options["require_file_write_permission"] =
+              options.requireFileWritePermission ? "true" : "false";
 
           try {
             ToolResult tr = ToolSystem::getInstance().callToolWithPermission(
@@ -687,11 +695,17 @@ AgentLoop::runExpertChain(const std::string &taskId,
     }
   }
 
-  return finalizeWithCriticalSummary(taskId,
-                                     "Expert 切换次数超过上限（" +
-                                         std::to_string(maxExpertSwitches) +
-                                         "），可能存在循环路由",
-                                     "failed", sessionHistory, planMgr, ctx);
+  const std::string budgetMessage =
+      "Expert 阶段预算已耗尽: taskId=" + taskId +
+      ", configured maxSteps=" + std::to_string(options.maxSteps) +
+      ", executed step count=" + std::to_string(expertSwitches);
+  LOG_WARN("{}", budgetMessage);
+  if (DataAccessFacade::getInstance().isInitialized()) {
+    DataAccessFacade::getInstance().appendLog(taskId, "agent_loop",
+                                              budgetMessage);
+  }
+  return finalizeWithCriticalSummary(taskId, budgetMessage, "failed",
+                                     sessionHistory, planMgr, ctx);
 }
 
 AgentLoopResult AgentLoop::finalizeWithCriticalSummary(
