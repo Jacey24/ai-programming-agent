@@ -38,8 +38,13 @@
       "context_isolation": true,
       "context_template": "{role}\n\n{goal}\n\n{plan}\n{summary}\n{tools_desc}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}",
 
-      "visible_tools": ["file.write", "file.read", "file.list", "file.apply_patch",
-                         "shell.run", "git.status", "git.diff"],
+      "visible_tools": [
+        "file.write", "file.read", "file.list", "file.apply_patch",
+        "file.search", "file.mkdir", "file.rmdir", "file.remove",
+        "file.copy", "file.move", "cd", "pwd",
+        "shell.run",
+        "git.status", "git.diff", "git.commit", "git.log", "git.branch"
+      ],
 
       "can_modify_plan": true,
       "can_write_summary": false,
@@ -48,7 +53,7 @@
       "_llm_timeout": 120,
 
       "next_rules": [
-        {"type": "tag_exists", "value": "done", "route_to": "reviewer", "priority": 10},
+        {"type": "tag_exists", "value": "done", "route_to": "summarizer", "priority": 10},
         {"type": "tag_exists", "value": "fail", "route_to": "summarizer", "priority": 5}
       ],
       "on_fail": "summarizer",

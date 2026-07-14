@@ -2,10 +2,8 @@
 #include <fstream>
 #include <sstream>
 
-#ifndef _WIN32
 #include "domain/tools/GitTool.h"
 #include "domain/tools/ShellTool.h"
-#endif
 
 namespace codepilot {
 
@@ -96,11 +94,9 @@ void ToolSystem::init(const std::string &workspacePath,
 
   registerFileTools(*registry_, shell_);
 
-  // 注册 Sprint 2 工具 (仅 Linux/POSIX)
-#ifndef _WIN32
+  // 注册 Shell 和 Git 工具（跨平台：Windows 使用 _popen，POSIX 使用 fork/exec）
   registerShellTools(*registry_, runner_, detector_);
   registerGitTools(*registry_, runner_);
-#endif
 
   // 6. 注册分组提示词
   registry_->registerGroup(

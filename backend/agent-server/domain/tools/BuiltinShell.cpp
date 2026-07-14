@@ -450,7 +450,8 @@ std::string BuiltinShell::getSystemPrompt() const {
   prompt << "- 禁止读取二进制文件\n";
   prompt << "- 单文件最大读取限制为 10MB\n\n";
 
-  prompt << "## 可用工具\n";
+  prompt << "## 可用工具\n\n";
+  prompt << "### 文件操作\n";
   prompt << "- file.list: 列出工作区文件，参数 path(可选), depth(默认2)\n";
   prompt << "- file.read: 读取文件内容，参数 path(必填), start_line(可选), "
             "end_line(可选)\n";
@@ -467,6 +468,19 @@ std::string BuiltinShell::getSystemPrompt() const {
             "patch(必填)\n";
   prompt << "- cd: 切换工作目录，参数 path(必填)\n";
   prompt << "- pwd: 查看当前工作目录\n\n";
+  prompt << "### Shell 命令（Windows: cmd.exe / Unix: bash）\n";
+  prompt << "- shell.run: 在工作区执行命令，参数 command(必填), cwd(可选), "
+            "timeout(可选，默认60秒)\n";
+  prompt << "  高危险命令（如 rm -rf /、del /F /S）被系统阻止。"
+            "中危命令需用户确认后执行。\n\n";
+  prompt << "### Git 版本控制（需安装 Git）\n";
+  prompt << "- git.status: 查看仓库状态\n";
+  prompt << "- git.diff: 查看文件变更，参数 path(可选)\n";
+  prompt
+      << "- git.commit: 暂存并提交所有变更，参数 message(必填) — 需用户确认\n";
+  prompt << "- git.log: 查看提交历史，参数 count(可选，默认20)\n";
+  prompt << "- git.branch: 查看或创建分支，参数 action(可选: list/create), "
+            "name(可选)\n\n";
 
   prompt << "## 文件写入规则\n";
   prompt << "- 写文件、删除文件、删除目录、复制、移动均需要用户确认\n";

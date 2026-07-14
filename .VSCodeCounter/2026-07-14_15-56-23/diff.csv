@@ -1,0 +1,82 @@
+"filename", "language", "TypeScript", "JSON with Comments", "C++", "JSON", "HTML", "TypeScript JSX", "PostCSS", "Markdown", "comment", "blank", "total"
+"d:\VS Code stuff\ai-programming-agent\docs\Expert配置说明文档.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -280, 0, -92, -372
+"d:\VS Code stuff\ai-programming-agent\docs\SSEGateway设计文档.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -137, 0, -44, -181
+"d:\VS Code stuff\ai-programming-agent\docs\Windows构建指南.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -51, 0, -25, -76
+"d:\VS Code stuff\ai-programming-agent\docs\优化内容通知.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -161, 0, -59, -220
+"d:\VS Code stuff\ai-programming-agent\docs\优化问题跟踪.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -161, 0, -61, -222
+"d:\VS Code stuff\ai-programming-agent\docs\全API参照表.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -435, 0, -99, -534
+"d:\VS Code stuff\ai-programming-agent\docs\内部控制台使用指南.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -75, 0, -23, -98
+"d:\VS Code stuff\ai-programming-agent\docs\分工安排.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -138, 0, -45, -183
+"d:\VS Code stuff\ai-programming-agent\docs\前后端数据传输协议规范.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -266, 0, -81, -347
+"d:\VS Code stuff\ai-programming-agent\docs\前端事件协议规范文档.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -350, 0, -97, -447
+"d:\VS Code stuff\ai-programming-agent\docs\封装状态.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -97, 0, -25, -122
+"d:\VS Code stuff\ai-programming-agent\docs\工具系统接口参考.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -549, 0, -164, -713
+"d:\VS Code stuff\ai-programming-agent\docs\技术栈说明.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -707, 0, -230, -937
+"d:\VS Code stuff\ai-programming-agent\docs\接口文档.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -1819, 0, -470, -2289
+"d:\VS Code stuff\ai-programming-agent\docs\整体架构说明.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -1477, 0, -359, -1836
+"d:\VS Code stuff\ai-programming-agent\docs\日志系统使用指南.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -142, 0, -44, -186
+"d:\VS Code stuff\ai-programming-agent\docs\最终报告.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -289, 0, -93, -382
+"d:\VS Code stuff\ai-programming-agent\docs\架构门面化重构方案.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -153, 0, -62, -215
+"d:\VS Code stuff\ai-programming-agent\docs\环境配置说明.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -465, 0, -203, -668
+"d:\VS Code stuff\ai-programming-agent\docs\配置协议接口文档.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -193, 0, -59, -252
+"d:\VS Code stuff\ai-programming-agent\docs\重新配置说明.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -27, 0, -14, -41
+"d:\VS Code stuff\ai-programming-agent\docs\长对话上下文持久化机制.md", "Markdown", 0, 0, 0, 0, 0, 0, 0, -181, 0, -48, -229
+"d:\VS Code stuff\ai-programming-agent\frontend\api-client\AgentApiClient.cpp", "C++", 0, 0, 225, 0, 0, 0, 0, 0, 18, 52, 295
+"d:\VS Code stuff\ai-programming-agent\frontend\api-client\AgentApiClient.h", "C++", 0, 0, 47, 0, 0, 0, 0, 0, 14, 17, 78
+"d:\VS Code stuff\ai-programming-agent\frontend\api-client\EventStreamClient.cpp", "C++", 0, 0, 160, 0, 0, 0, 0, 0, 23, 35, 218
+"d:\VS Code stuff\ai-programming-agent\frontend\api-client\EventStreamClient.h", "C++", 0, 0, 35, 0, 0, 0, 0, 0, 11, 13, 59
+"d:\VS Code stuff\ai-programming-agent\frontend\app\TuiApplication.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\components\DiffViewer.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\components\InputBox.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\components\LogPanel.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\components\MessageList.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\components\StatusPanel.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\state\EventStore.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\state\TaskStateModel.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\state\UiState.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\ChatView.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\HistoryView.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\PermissionDialog.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\TaskView.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\ToolOutputView.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\views\WorkspaceView.cpp", "C++", 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2
+"d:\VS Code stuff\ai-programming-agent\frontend\web\index.html", "HTML", 0, 0, 0, 0, 12, 0, 0, 0, 0, 1, 13
+"d:\VS Code stuff\ai-programming-agent\frontend\web\package-lock.json", "JSON", 0, 0, 0, 3898, 0, 0, 0, 0, 0, 1, 3899
+"d:\VS Code stuff\ai-programming-agent\frontend\web\package.json", "JSON", 0, 0, 0, 29, 0, 0, 0, 0, 0, 1, 30
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\App.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 208, 0, 0, 0, 16, 224
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\client.ts", "TypeScript", 52, 0, 0, 0, 0, 0, 0, 0, 0, 14, 66
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\endpoints.ts", "TypeScript", 46, 0, 0, 0, 0, 0, 0, 0, 0, 2, 48
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\healthApi.ts", "TypeScript", 6, 0, 0, 0, 0, 0, 0, 0, 0, 2, 8
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\permissionApi.ts", "TypeScript", 19, 0, 0, 0, 0, 0, 0, 0, 0, 4, 23
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\taskApi.ts", "TypeScript", 101, 0, 0, 0, 0, 0, 0, 0, 0, 16, 117
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\api\workspaceApi.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 0, 5, 19
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\agent\AgentPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 403, 0, 0, 0, 33, 436
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\agent\PermissionPrompt.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 113, 0, 0, 0, 17, 130
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\chat\AgentChatPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 55, 0, 0, 0, 6, 61
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\chat\ChatComposer.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 106, 0, 0, 0, 9, 115
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\chat\ChatMessageList.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 307, 0, 0, 0, 36, 343
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\chat\FileChangeCard.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 32, 0, 0, 0, 4, 36
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\chat\ToolCallCard.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 38, 0, 0, 0, 5, 43
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\editor\CodeEditor.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 71, 0, 0, 0, 5, 76
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\editor\EditorShell.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 285, 0, 0, 0, 25, 310
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\editor\EditorTabs.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 52, 0, 0, 0, 5, 57
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\editor\EmptyViewer.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 21, 0, 0, 0, 3, 24
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\explorer\FileExplorer.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 62, 0, 0, 0, 5, 67
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\explorer\FileTree.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 131, 0, 0, 0, 15, 146
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\history\HistoryPage.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 173, 0, 0, 0, 15, 188
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\layout\ActivityBar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 40, 0, 0, 0, 5, 45
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\layout\StatusBar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 36, 0, 0, 0, 3, 39
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\layout\TerminalHeader.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 83, 0, 0, 0, 9, 92
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\components\layout\WorkspaceExplorer.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 330, 0, 0, 0, 25, 355
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\hooks\useAgentRuntime.ts", "TypeScript", 450, 0, 0, 0, 0, 0, 0, 0, 2, 54, 506
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\hooks\useClock.ts", "TypeScript", 22, 0, 0, 0, 0, 0, 0, 0, 0, 6, 28
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\hooks\useWorkspaceWorkbench.ts", "TypeScript", 64, 0, 0, 0, 0, 0, 0, 0, 0, 12, 76
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\index.css", "PostCSS", 0, 0, 0, 0, 0, 0, 73, 0, 0, 17, 90
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\main.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 13, 0, 0, 0, 5, 18
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\store\agentReducer.ts", "TypeScript", 333, 0, 0, 0, 0, 0, 0, 0, 0, 17, 350
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\store\workbenchReducer.ts", "TypeScript", 120, 0, 0, 0, 0, 0, 0, 0, 0, 7, 127
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\types.ts", "TypeScript", 33, 0, 0, 0, 0, 0, 0, 0, 0, 10, 43
+"d:\VS Code stuff\ai-programming-agent\frontend\web\src\types\api.ts", "TypeScript", 171, 0, 0, 0, 0, 0, 0, 0, 0, 25, 196
+"d:\VS Code stuff\ai-programming-agent\frontend\web\tsconfig.json", "JSON with Comments", 0, 21, 0, 0, 0, 0, 0, 0, 0, 1, 22
+"d:\VS Code stuff\ai-programming-agent\frontend\web\vite.config.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16
+"Total", "-", 1445, 21, 467, 3927, 12, 2559, 73, -8153, 83, -1822, -1388

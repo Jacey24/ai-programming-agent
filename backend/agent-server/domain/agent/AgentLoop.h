@@ -51,12 +51,14 @@ private:
   std::string configPath_;
 
   // Expert Chain 主循环
+  // initialSessionHistory: Resume 时传入的历史对话（正常启动传空字符串）
   AgentLoopResult runExpertChain(const std::string &taskId,
                                  const std::string &globalId,
                                  const std::string &workspaceId,
                                  TaskContext &ctx,
                                  const ExpertConfig *entryExpert,
-                                 std::shared_ptr<std::atomic<bool>> cancelFlag);
+                                 std::shared_ptr<std::atomic<bool>> cancelFlag,
+                                 const std::string &initialSessionHistory = "");
 
   // ── Critical Exit 兜底 ──
   // 所有非正常的 chain 终止路径（轮次耗尽/路由失败/切换超限等）
