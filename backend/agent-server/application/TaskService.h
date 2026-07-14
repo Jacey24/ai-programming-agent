@@ -14,6 +14,7 @@ public:
 
     TaskRecord createTask(
         const std::string& session_id,
+        const std::string& global_id,
         const std::string& workspace_id,
         const std::string& goal);
     std::optional<TaskRecord> getTask(const std::string& task_id);

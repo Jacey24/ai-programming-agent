@@ -110,17 +110,10 @@ namespace codepilot {
 TaskController::TaskController(std::string database_path)
     : databasePath_(std::move(database_path)) {}
 
-// ★ v2: 兼容层 — 解析 global_id，支持旧字段 session_id
-static std::string resolveGlobalIdFromBody(const json &body) {
-  // 优先新字段 global_id
-  if (body.contains("global_id") && body["global_id"].is_string()) {
-    return body["global_id"].get<std::string>();
+static std::string extractStringField(const json &body, const char *field) {
+  if (body.contains(field) && body[field].is_string()) {
+    return body[field].get<std::string>();
   }
-  // 降级到旧字段 session_id
-  if (body.contains("session_id") && body["session_id"].is_string()) {
-    return body["session_id"].get<std::string>();
-  }
-  // 如果都没有，返回空让 Orchestrator 使用默认 Global
   return "";
 }
 
@@ -133,24 +126,22 @@ std::string TaskController::createTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  const std::string global_id = resolveGlobalIdFromBody(body);
-  const std::string workspace_id = [&]() {
-    if (!body.contains("workspace_id") || !body["workspace_id"].is_string())
-      return std::string();
-    return body["workspace_id"].get<std::string>();
-  }();
-  const std::string input = [&]() {
-    if (!body.contains("input") || !body["input"].is_string())
-      return std::string();
-    return body["input"].get<std::string>();
-  }();
+  const std::string session_id = extractStringField(body, "session_id");
+  const std::string global_id = extractStringField(body, "global_id");
+  const std::string workspace_id = extractStringField(body, "workspace_id");
+  const std::string input = extractStringField(body, "input");
+  if (session_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"SESSION_ID_REQUIRED","message":"session_id is required"}})",
+        "400 Bad Request");
+  }
   if (workspace_id.empty() || input.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id and input are required"}})",
         "400 Bad Request");
   }
 
-  // 创建 DB 任务记录
+  std::string effectiveGlobalId;
   TaskRecord task;
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
@@ -159,11 +150,35 @@ std::string TaskController::createTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
-    std::string effectiveGlobalId = global_id;
-    if (effectiveGlobalId.empty()) {
-      effectiveGlobalId = facade.ensureDefaultGlobal();
+    if (!facade.getSession(session_id)) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
+          "404 Not Found");
     }
-    task = facade.createTask(effectiveGlobalId, workspace_id, input);
+
+    if (!global_id.empty()) {
+      if (!facade.getGlobal(global_id)) {
+        return http_response(
+            R"({"success":false,"error":{"code":"GLOBAL_NOT_FOUND","message":"global not found"}})",
+            "404 Not Found");
+      }
+      effectiveGlobalId = global_id;
+    } else {
+      try {
+        effectiveGlobalId = facade.ensureDefaultGlobal();
+      } catch (const std::exception &error) {
+        return http_response(
+            R"({"success":false,"error":{"code":"DEFAULT_GLOBAL_ERROR","message":")" +
+                json_escape(error.what()) + R"("}})",
+            "500 Internal Server Error");
+      }
+      if (effectiveGlobalId.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"DEFAULT_GLOBAL_ERROR","message":"default global is unavailable"}})",
+            "500 Internal Server Error");
+      }
+    }
+    task = facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
     const auto refreshed = facade.getTask(task.id);
     if (refreshed) {
@@ -194,7 +209,7 @@ std::string TaskController::createTask(const std::string &request) {
         "500 Internal Server Error");
   }
   try {
-    orch.startTask(task.id, global_id, workspace_id, input);
+    orch.startTask(task.id, effectiveGlobalId, workspace_id, input);
   } catch (const std::exception &error) {
     return http_response(
         R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
@@ -204,7 +219,8 @@ std::string TaskController::createTask(const std::string &request) {
 
   std::ostringstream response_body;
   response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
-                << R"(","global_id":")" << json_escape(task.session_id)
+                << R"(","session_id":")" << json_escape(task.session_id)
+                << R"(","global_id":")" << json_escape(task.global_id)
                 << R"(","workspace_id":")" << json_escape(task.workspace_id)
                 << R"(","goal":")" << json_escape(task.goal)
                 << R"(","status":")" << json_escape(task.status) << R"(")";
@@ -231,33 +247,14 @@ std::string TaskController::continueTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  // 从 parent_task_id 提取 global_id（兼容旧行为）
-  const std::string parent_task_id = [&]() {
-    if (!body.contains("parent_task_id") || !body["parent_task_id"].is_string())
-      return std::string();
-    return body["parent_task_id"].get<std::string>();
-  }();
+  const std::string parent_task_id =
+      extractStringField(body, "parent_task_id");
+  std::string session_id = extractStringField(body, "session_id");
 
-  // 如果传了 parent_task_id，查其所属 Global
-  std::string global_id = resolveGlobalIdFromBody(body);
-  if (global_id.empty() && !parent_task_id.empty()) {
-    auto parentTask = DataAccessFacade::getInstance().getTask(parent_task_id);
-    if (parentTask) {
-      global_id =
-          parentTask->session_id; // TaskRecord.session_id 现在存的是 global_id
-    }
-  }
+  std::string global_id = extractStringField(body, "global_id");
 
-  const std::string workspace_id = [&]() {
-    if (!body.contains("workspace_id") || !body["workspace_id"].is_string())
-      return std::string();
-    return body["workspace_id"].get<std::string>();
-  }();
-  const std::string input = [&]() {
-    if (!body.contains("input") || !body["input"].is_string())
-      return std::string();
-    return body["input"].get<std::string>();
-  }();
+  const std::string workspace_id = extractStringField(body, "workspace_id");
+  const std::string input = extractStringField(body, "input");
 
   if (workspace_id.empty() || input.empty()) {
     return http_response(
@@ -265,7 +262,7 @@ std::string TaskController::continueTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  // 创建 DB 任务记录
+  std::string effectiveGlobalId;
   TaskRecord task;
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
@@ -274,11 +271,53 @@ std::string TaskController::continueTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
-    std::string effectiveGlobalId = global_id;
-    if (effectiveGlobalId.empty()) {
-      effectiveGlobalId = facade.ensureDefaultGlobal();
+    if (!parent_task_id.empty()) {
+      const auto parentTask = facade.getTask(parent_task_id);
+      if (parentTask) {
+        if (session_id.empty()) {
+          session_id = parentTask->session_id;
+        }
+        if (global_id.empty()) {
+          global_id = parentTask->global_id;
+        }
+      }
     }
-    task = facade.createTask(effectiveGlobalId, workspace_id, input);
+
+    if (session_id.empty()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_ID_REQUIRED","message":"session_id is required"}})",
+          "400 Bad Request");
+    }
+    if (!facade.getSession(session_id)) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
+          "404 Not Found");
+    }
+
+    if (!global_id.empty()) {
+      if (!facade.getGlobal(global_id)) {
+        return http_response(
+            R"({"success":false,"error":{"code":"GLOBAL_NOT_FOUND","message":"global not found"}})",
+            "404 Not Found");
+      }
+      effectiveGlobalId = global_id;
+    } else {
+      try {
+        effectiveGlobalId = facade.ensureDefaultGlobal();
+      } catch (const std::exception &error) {
+        return http_response(
+            R"({"success":false,"error":{"code":"DEFAULT_GLOBAL_ERROR","message":")" +
+                json_escape(error.what()) + R"("}})",
+            "500 Internal Server Error");
+      }
+      if (effectiveGlobalId.empty()) {
+        return http_response(
+            R"({"success":false,"error":{"code":"DEFAULT_GLOBAL_ERROR","message":"default global is unavailable"}})",
+            "500 Internal Server Error");
+      }
+    }
+
+    task = facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
 
     EventData created = EventData::Create(task.id, EventType::TaskCreated,
@@ -307,7 +346,7 @@ std::string TaskController::continueTask(const std::string &request) {
   }
 
   try {
-    orch.startTask(task.id, global_id, workspace_id, input);
+    orch.startTask(task.id, effectiveGlobalId, workspace_id, input);
   } catch (const std::exception &error) {
     return http_response(
         R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
@@ -317,7 +356,8 @@ std::string TaskController::continueTask(const std::string &request) {
 
   std::ostringstream response_body;
   response_body << R"({"success":true,"data":{"id":")" << json_escape(task.id)
-                << R"(","global_id":")" << json_escape(task.session_id)
+                << R"(","session_id":")" << json_escape(task.session_id)
+                << R"(","global_id":")" << json_escape(task.global_id)
                 << R"(","workspace_id":")" << json_escape(workspace_id)
                 << R"(","goal":")" << json_escape(input)
                 << R"(","status":"running"}})";
@@ -345,8 +385,9 @@ std::string TaskController::listTasks(const std::string &request) {
     if (i > 0) {
       body << ",";
     }
-    body << R"({"id":")" << json_escape(t.id) << R"(","global_id":")"
-         << json_escape(t.session_id) << R"(","workspace_id":")"
+    body << R"({"id":")" << json_escape(t.id) << R"(","session_id":")"
+         << json_escape(t.session_id) << R"(","global_id":")"
+         << json_escape(t.global_id) << R"(","workspace_id":")"
          << json_escape(t.workspace_id) << R"(","goal":")"
          << json_escape(t.goal) << R"(","status":")" << json_escape(t.status)
          << R"(","created_at":")" << json_escape(t.created_at)
@@ -379,7 +420,8 @@ std::string TaskController::getTask(const std::string &request) {
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
-         << R"(","global_id":")" << json_escape(task->session_id)
+         << R"(","session_id":")" << json_escape(task->session_id)
+         << R"(","global_id":")" << json_escape(task->global_id)
          << R"(","workspace_id":")" << json_escape(task->workspace_id)
          << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
          << json_escape(task->status) << R"(")";
@@ -439,7 +481,8 @@ std::string TaskController::cancelTask(const std::string &request) {
 
     std::ostringstream body;
     body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
-         << R"(","global_id":")" << json_escape(task->session_id)
+         << R"(","session_id":")" << json_escape(task->session_id)
+         << R"(","global_id":")" << json_escape(task->global_id)
          << R"(","workspace_id":")" << json_escape(task->workspace_id)
          << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
          << json_escape("cancelled") << R"(")";

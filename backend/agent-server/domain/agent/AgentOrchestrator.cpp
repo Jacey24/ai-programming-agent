@@ -130,12 +130,12 @@ void AgentOrchestrator::startTask(const std::string &taskId,
     state.status = "running";
     activeTasks_[taskId] = state;
     cancelFlags_[taskId] = cancelFlag;
-  }
 
-  taskThreads_[taskId] =
-      std::thread(&AgentOrchestrator::runTaskThread, this, taskId,
-                  resolvedGlobalId, workspaceId, goal, cancelFlag);
-  taskThreads_[taskId].detach();
+    taskThreads_[taskId] =
+        std::thread(&AgentOrchestrator::runTaskThread, this, taskId,
+                    resolvedGlobalId, workspaceId, goal, cancelFlag);
+    taskThreads_[taskId].detach();
+  }
 }
 
 bool AgentOrchestrator::cancelTask(const std::string &taskId) {

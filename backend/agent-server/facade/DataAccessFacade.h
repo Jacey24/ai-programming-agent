@@ -73,7 +73,8 @@ public:
   // ============================================================
   // Task 组
   // ============================================================
-  TaskRecord createTask(const std::string &globalId,
+  TaskRecord createTask(const std::string &sessionId,
+                        const std::string &globalId,
                         const std::string &workspaceId,
                         const std::string &goal);
   std::optional<TaskRecord> getTask(const std::string &id);
