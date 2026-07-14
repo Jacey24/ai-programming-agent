@@ -38,6 +38,12 @@ export interface WorkspaceRecord {
   created_at?: string;
 }
 
+export interface LocalDirectorySelection {
+  cancelled: boolean;
+  name?: string;
+  path?: string;
+}
+
 export interface WorkspaceFileEntry {
   name: string;
   path: string;

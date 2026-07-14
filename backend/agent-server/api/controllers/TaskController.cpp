@@ -5,6 +5,7 @@
 #include "domain/agent/AgentOrchestrator.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <algorithm>
 #include <exception>
@@ -159,6 +160,14 @@ std::string TaskController::createTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
+    const auto workspace = facade.getWorkspace(workspace_id);
+    if (!workspace) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
+    WorkspaceManager::getInstance().getOrCreate(workspace->id,
+                                                 workspace->path);
     std::string effectiveGlobalId = global_id;
     if (effectiveGlobalId.empty()) {
       effectiveGlobalId = facade.ensureDefaultGlobal();
@@ -274,6 +283,14 @@ std::string TaskController::continueTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
+    const auto workspace = facade.getWorkspace(workspace_id);
+    if (!workspace) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
+    WorkspaceManager::getInstance().getOrCreate(workspace->id,
+                                                 workspace->path);
     std::string effectiveGlobalId = global_id;
     if (effectiveGlobalId.empty()) {
       effectiveGlobalId = facade.ensureDefaultGlobal();

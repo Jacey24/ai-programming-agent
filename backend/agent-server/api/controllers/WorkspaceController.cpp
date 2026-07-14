@@ -2,15 +2,24 @@
 #include "infrastructure/storage/SqliteConnection.h"
 
 #include "application/WorkspaceService.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <chrono>
 #include <ctime>
 #include <exception>
+#include <filesystem>
+#include <optional>
 #include <sstream>
 #include <utility>
 #include <vector>
 
 #include <sqlite3.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shobjidl.h>
+#pragma comment(lib, "ole32.lib")
+#endif
 
 namespace {
 
@@ -138,12 +147,90 @@ std::string extract_path_segment(const std::string &request,
   return request_line.substr(segment_start, segment_end - segment_start);
 }
 
+bool is_workspace_directory(const std::string &path) {
+  std::error_code error;
+  return std::filesystem::is_directory(path, error) && !error;
+}
+
+#ifdef _WIN32
+std::string utf8_from_wide(const wchar_t *value) {
+  if (!value) {
+    return {};
+  }
+  const int length = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0,
+                                         nullptr, nullptr);
+  if (length <= 1) {
+    return {};
+  }
+  std::string result(static_cast<std::size_t>(length), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value, -1, result.data(), length, nullptr,
+                      nullptr);
+  result.pop_back();
+  return result;
+}
+
+std::optional<std::string> select_local_directory() {
+  const HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const bool shouldUninitialize = SUCCEEDED(init);
+  if (FAILED(init) && init != RPC_E_CHANGED_MODE) {
+    return std::nullopt;
+  }
+
+  IFileOpenDialog *dialog = nullptr;
+  std::optional<std::string> selected;
+  if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
+    DWORD options = 0;
+    if (SUCCEEDED(dialog->GetOptions(&options))) {
+      dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM |
+                         FOS_PATHMUSTEXIST);
+    }
+    if (SUCCEEDED(dialog->Show(nullptr))) {
+      IShellItem *item = nullptr;
+      if (SUCCEEDED(dialog->GetResult(&item))) {
+        PWSTR path = nullptr;
+        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+          selected = utf8_from_wide(path);
+          CoTaskMemFree(path);
+        }
+        item->Release();
+      }
+    }
+    dialog->Release();
+  }
+  if (shouldUninitialize) {
+    CoUninitialize();
+  }
+  return selected;
+}
+#endif
+
 } // anonymous namespace
 
 namespace codepilot {
 
 WorkspaceController::WorkspaceController(std::string database_path)
     : databasePath_(std::move(database_path)) {}
+
+std::string
+WorkspaceController::selectLocalDirectory(const std::string & /*request*/) {
+#ifdef _WIN32
+  const auto path = select_local_directory();
+  if (!path) {
+    return http_response(R"({"success":true,"data":{"cancelled":true}})");
+  }
+  const auto name = std::filesystem::path(*path).filename().u8string();
+  const std::string utf8Name(reinterpret_cast<const char *>(name.data()),
+                             name.size());
+  return http_response(R"({"success":true,"data":{"cancelled":false,"name":")" +
+                       json_escape(utf8Name) +
+                       R"(","path":")" + json_escape(*path) + R"("}})");
+#else
+  return http_response(
+      R"({"success":false,"error":{"code":"UNSUPPORTED_PLATFORM","message":"native directory selection is only available on Windows"}})",
+      "501 Not Implemented");
+#endif
+}
 
 std::string WorkspaceController::createWorkspace(const std::string &request) {
   const std::string req_body = request_body(request);
@@ -152,6 +239,11 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
   if (name.empty() || path.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"name and path are required"}})",
+        "400 Bad Request");
+  }
+  if (!is_workspace_directory(path)) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"path must be an existing directory"}})",
         "400 Bad Request");
   }
 
@@ -201,6 +293,10 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
 
   sqlite3_close(db);
 
+  // Create the per-workspace runtime immediately.  Future tasks select this
+  // runtime by workspace_id instead of inheriting the server bootstrap path.
+  WorkspaceManager::getInstance().getOrCreate(id, path);
+
   std::ostringstream response_body;
   response_body << R"({"success":true,"data":{"id":")" << json_escape(id)
                 << R"(","name":")" << json_escape(name) << R"(","path":")"
@@ -221,10 +317,16 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
   const std::string req_body = request_body(request);
   const std::string name = extract_json_string(req_body, "name");
   const std::string description = extract_json_string(req_body, "description");
+  const std::string path = extract_json_string(req_body, "path");
 
-  if (name.empty() && description.empty()) {
+  if (name.empty() && description.empty() && path.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"at least one of name, description is required"}})",
+        "400 Bad Request");
+  }
+  if (!path.empty() && !is_workspace_directory(path)) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_WORKSPACE_PATH","message":"path must be an existing directory"}})",
         "400 Bad Request");
   }
 
@@ -256,6 +358,13 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
       sql << ", ";
     sql << "description = ?";
     bindValues.push_back(description);
+    first = false;
+  }
+  if (!path.empty()) {
+    if (!first)
+      sql << ", ";
+    sql << "path = ?";
+    bindValues.push_back(path);
     first = false;
   }
   sql << " WHERE id = ?;";
@@ -298,6 +407,10 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
         R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found after update"}})",
         "404 Not Found");
   }
+
+  // A path update migrates the existing runtime under its execution lock;
+  // selecting this workspace afterwards uses the new working directory.
+  WorkspaceManager::getInstance().getOrCreate(updated->id, updated->path);
 
   std::ostringstream response_body;
   response_body << R"({"success":true,"data":{"id":")"
@@ -446,6 +559,8 @@ std::string WorkspaceController::deleteWorkspace(const std::string &request) {
         R"({"success":false,"error":{"code":"NOT_FOUND","message":"workspace not found or could not be deleted"}})",
         "404 Not Found");
   }
+
+  WorkspaceManager::getInstance().invalidate(workspace_id);
 
   std::ostringstream body;
   body << R"({"success":true,"data":{"id":")" << json_escape(workspace_id)

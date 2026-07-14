@@ -10,17 +10,16 @@ namespace {
 
 template <typename Operation>
 ToolResult executeFileOperation(const ToolContext &context,
-                                const std::shared_ptr<BuiltinShell> &fallback,
                                 Operation &&operation) {
-  if (context.workspaceRuntime) {
-    auto runtime = context.workspaceRuntime;
-    if (!runtime->builtinShell) {
-      return ToolResult::Err("Workspace runtime has no file-operation shell");
-    }
-    std::lock_guard lock(runtime->executionMutex);
-    return operation(*runtime->builtinShell);
+  const auto runtime = context.workspaceRuntime;
+  if (!runtime) {
+    return ToolResult::Err("workspace runtime is required for file operations");
   }
-  return operation(*fallback);
+  std::lock_guard lock(runtime->executionMutex);
+  if (!runtime->builtinShell) {
+    return ToolResult::Err("workspace runtime has no file-operation shell");
+  }
+  return operation(*runtime->builtinShell);
 }
 
 } // namespace
@@ -30,8 +29,6 @@ ToolResult executeFileOperation(const ToolContext &context,
 // ============================================================
 class FileListTool : public Tool {
 public:
-  explicit FileListTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.list"; }
 
@@ -57,13 +54,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.listFiles(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -71,8 +65,6 @@ private:
 // ============================================================
 class FileReadTool : public Tool {
 public:
-  explicit FileReadTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.read"; }
 
@@ -98,13 +90,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.readFile(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -112,8 +101,6 @@ private:
 // ============================================================
 class FileWriteTool : public Tool {
 public:
-  explicit FileWriteTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.write"; }
 
@@ -137,13 +124,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.writeFile(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -151,8 +135,6 @@ private:
 // ============================================================
 class FileApplyPatchTool : public Tool {
 public:
-  explicit FileApplyPatchTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.apply_patch"; }
 
@@ -175,13 +157,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.applyPatch(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -189,8 +168,6 @@ private:
 // ============================================================
 class ChangeDirTool : public Tool {
 public:
-  explicit ChangeDirTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "cd"; }
   std::string description() const override {
@@ -211,13 +188,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.changeDirectory(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -225,8 +199,6 @@ private:
 // ============================================================
 class PwdTool : public Tool {
 public:
-  explicit PwdTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "pwd"; }
   std::string description() const override {
@@ -245,13 +217,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.getWorkingDirectory(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -260,8 +229,6 @@ private:
 // ============================================================
 class FileSearchTool : public Tool {
 public:
-  explicit FileSearchTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.search"; }
   std::string description() const override {
@@ -287,13 +254,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.searchFiles(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -301,8 +265,6 @@ private:
 // ============================================================
 class FileMkdirTool : public Tool {
 public:
-  explicit FileMkdirTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.mkdir"; }
   std::string description() const override {
@@ -324,13 +286,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.makeDirectory(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -338,8 +297,6 @@ private:
 // ============================================================
 class FileRmdirTool : public Tool {
 public:
-  explicit FileRmdirTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.rmdir"; }
   std::string description() const override {
@@ -361,13 +318,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.removeDirectory(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -375,8 +329,6 @@ private:
 // ============================================================
 class FileRemoveTool : public Tool {
 public:
-  explicit FileRemoveTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.remove"; }
   std::string description() const override {
@@ -398,13 +350,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.removeFile(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -412,8 +361,6 @@ private:
 // ============================================================
 class FileCopyTool : public Tool {
 public:
-  explicit FileCopyTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.copy"; }
   std::string description() const override {
@@ -435,13 +382,10 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.copyFile(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
@@ -449,8 +393,6 @@ private:
 // ============================================================
 class FileMoveTool : public Tool {
 public:
-  explicit FileMoveTool(std::shared_ptr<BuiltinShell> shell)
-      : shell_(std::move(shell)) {}
 
   std::string name() const override { return "file.move"; }
   std::string description() const override {
@@ -472,34 +414,30 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+    return executeFileOperation(context, [&arguments](BuiltinShell &shell) {
       return shell.moveFile(arguments);
     });
   }
-
-private:
-  std::shared_ptr<BuiltinShell> shell_;
 };
 
 // ============================================================
 // Factory: register all file/directory tools to ToolRegistry
 // ============================================================
-void registerFileTools(ToolRegistry &registry,
-                       std::shared_ptr<BuiltinShell> shell) {
-  registry.registerTool(std::make_unique<FileListTool>(shell));
-  registry.registerTool(std::make_unique<FileReadTool>(shell));
-  registry.registerTool(std::make_unique<FileWriteTool>(shell));
-  registry.registerTool(std::make_unique<FileApplyPatchTool>(shell));
-  registry.registerTool(std::make_unique<ChangeDirTool>(shell));
-  registry.registerTool(std::make_unique<PwdTool>(shell));
+void registerFileTools(ToolRegistry &registry) {
+  registry.registerTool(std::make_unique<FileListTool>());
+  registry.registerTool(std::make_unique<FileReadTool>());
+  registry.registerTool(std::make_unique<FileWriteTool>());
+  registry.registerTool(std::make_unique<FileApplyPatchTool>());
+  registry.registerTool(std::make_unique<ChangeDirTool>());
+  registry.registerTool(std::make_unique<PwdTool>());
 
   // Sprint 2.5+ 新工具
-  registry.registerTool(std::make_unique<FileSearchTool>(shell));
-  registry.registerTool(std::make_unique<FileMkdirTool>(shell));
-  registry.registerTool(std::make_unique<FileRmdirTool>(shell));
-  registry.registerTool(std::make_unique<FileRemoveTool>(shell));
-  registry.registerTool(std::make_unique<FileCopyTool>(shell));
-  registry.registerTool(std::make_unique<FileMoveTool>(shell));
+  registry.registerTool(std::make_unique<FileSearchTool>());
+  registry.registerTool(std::make_unique<FileMkdirTool>());
+  registry.registerTool(std::make_unique<FileRmdirTool>());
+  registry.registerTool(std::make_unique<FileRemoveTool>());
+  registry.registerTool(std::make_unique<FileCopyTool>());
+  registry.registerTool(std::make_unique<FileMoveTool>());
 }
 
 } // namespace codepilot

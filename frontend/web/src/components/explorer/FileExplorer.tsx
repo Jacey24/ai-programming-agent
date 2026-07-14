@@ -1,4 +1,5 @@
-import { RefreshCw } from "lucide-react";
+import { FolderOpen, RefreshCw } from "lucide-react";
+import { useState } from "react";
 
 import { FileTree } from "./FileTree";
 import type { WorkbenchState } from "../../store/workbenchReducer";
@@ -9,6 +10,7 @@ interface FileExplorerProps {
   tree: WorkbenchState["fileTree"];
   expandedDirectories: string[];
   activeFilePath: string;
+  onChooseWorkspace: () => Promise<unknown>;
   onRefresh: () => void;
   onToggleDirectory: (path: string) => void;
   onOpenFile: (path: string) => void;
@@ -19,10 +21,26 @@ export function FileExplorer({
   tree,
   expandedDirectories,
   activeFilePath,
+  onChooseWorkspace,
   onRefresh,
   onToggleDirectory,
   onOpenFile,
 }: FileExplorerProps) {
+  const [selectingDirectory, setSelectingDirectory] = useState(false);
+  const [directoryError, setDirectoryError] = useState("");
+
+  const chooseWorkspace = async () => {
+    setSelectingDirectory(true);
+    setDirectoryError("");
+    try {
+      await onChooseWorkspace();
+    } catch (error) {
+      setDirectoryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSelectingDirectory(false);
+    }
+  };
+
   return (
     <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-800 bg-[#0d1421]/95 font-mono lg:flex">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -32,15 +50,27 @@ export function FileExplorer({
             <div className="mt-1 truncate text-[11px] text-slate-500">
               {workspace?.path || "/workspace"}
             </div>
+            {directoryError ? <div className="mt-1 truncate text-[10px] text-rose-300">{directoryError}</div> : null}
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded border border-slate-700 text-slate-500 hover:border-cyan-400/50 hover:text-cyan-200"
-            title="Refresh workspace tree"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${tree.status === "loading" ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => void chooseWorkspace()}
+              disabled={selectingDirectory}
+              className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-500 hover:border-cyan-400/50 hover:text-cyan-200 disabled:cursor-wait disabled:opacity-60"
+              title="选择本机目录作为工作区"
+            >
+              <FolderOpen className={`h-3.5 w-3.5 ${selectingDirectory ? "animate-pulse" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-500 hover:border-cyan-400/50 hover:text-cyan-200"
+              title="Refresh workspace tree"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${tree.status === "loading" ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
       </div>
 

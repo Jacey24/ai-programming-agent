@@ -232,14 +232,15 @@ AgentResult Agent::executeTask(const std::string &taskId,
                 workspacePath = workspace->path;
               }
             }
-            if (workspacePath.empty() && ToolSystem::getInstance().isInitialized()) {
-              workspacePath = ToolSystem::getInstance().workspace().rootPath();
+            if (!workspacePath.empty()) {
+              runtime = WorkspaceManager::getInstance().getOrCreate(
+                  workspaceId, workspacePath);
             }
-            runtime = WorkspaceManager::getInstance().getOrCreate(
-                workspaceId, workspacePath.empty() ? "." : workspacePath);
           }
-          toolCtx.workspaceRuntime = runtime;
-          toolCtx.workspacePath = runtime->workspacePath;
+          if (runtime) {
+            toolCtx.workspaceRuntime = runtime;
+            toolCtx.workspacePath = runtime->workspacePath;
+          }
         }
 
         json toolArgs = buildToolArguments(toolName, cmd.toolArgs);

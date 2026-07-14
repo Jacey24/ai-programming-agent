@@ -49,6 +49,7 @@ export type AgentAction =
   | { type: "historyLoading" }
   | { type: "historySuccess"; items: Array<TaskRecord | ChatMessageRecord> }
   | { type: "historyError"; error: string }
+  | { type: "workspaceSelected"; workspace: WorkspaceRecord }
   | { type: "submitStart"; prompt: string; startedAt: string }
   | { type: "submitError"; error: string }
   | { type: "submitSuccess"; session: SessionRecord | null; workspace: WorkspaceRecord | null; task: TaskRecord }
@@ -131,6 +132,8 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return { ...state, history: { status: "success", items: action.items, error: "" } };
     case "historyError":
       return { ...state, history: { status: "error", items: [], error: action.error } };
+    case "workspaceSelected":
+      return { ...state, workspace: action.workspace, error: "" };
     case "submitStart":
       return {
         ...state,

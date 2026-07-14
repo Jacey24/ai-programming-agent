@@ -86,21 +86,20 @@ void ToolSystem::init(const std::string &workspacePath,
   configPath_ = configPath.empty() ? "config/tools.json" : configPath;
 
   // 1. 基础设施层
-  workspace_ = std::make_shared<Workspace>(workspacePath);
-  shell_ = std::make_shared<BuiltinShell>(workspace_);
-  runner_ = std::make_shared<ProcessRunner>();
+  bootstrapRuntime_ = WorkspaceManager::getInstance().getOrCreate(
+      "__bootstrap__", workspacePath);
   detector_ = std::make_shared<RiskDetector>();
   registry_ = std::make_unique<ToolRegistry>();
   eventBus_ = std::make_shared<EventBus>();
   permissionManager_ = std::make_shared<PermissionManager>(eventBus_);
   debugger_ = std::make_unique<Debugger>(eventBus_); // 懒初始化，默认关闭
 
-  registerFileTools(*registry_, shell_);
+  registerFileTools(*registry_);
 
   // 注册 Sprint 2 工具 (仅 Linux/POSIX)
 #ifndef _WIN32
-  registerShellTools(*registry_, runner_, detector_);
-  registerGitTools(*registry_, runner_);
+  registerShellTools(*registry_, bootstrapRuntime_->processRunner, detector_);
+  registerGitTools(*registry_, bootstrapRuntime_->processRunner);
 #endif
 
   // 6. 注册分组提示词
@@ -148,7 +147,7 @@ EventBus &ToolSystem::eventBus() {
 
 Workspace &ToolSystem::workspace() {
   std::shared_lock lock(mutex_);
-  return *workspace_;
+  return *bootstrapRuntime_->workspace;
 }
 
 RiskDetector &ToolSystem::riskDetector() {
@@ -163,7 +162,7 @@ PermissionManager &ToolSystem::permissionManager() {
 
 ProcessRunner &ToolSystem::processRunner() {
   std::shared_lock lock(mutex_);
-  return *runner_;
+  return *bootstrapRuntime_->processRunner;
 }
 
 // ============================================================
@@ -175,17 +174,24 @@ ToolResult ToolSystem::callTool(const std::string &name,
   // Resolve a runtime at the system boundary so tools receive all workspace
   // resources through ToolContext rather than looking up global state.
   ToolContext effectiveContext = context;
-  if (!effectiveContext.workspaceRuntime && !effectiveContext.workspaceId.empty()) {
-    std::string path = effectiveContext.workspacePath;
-    if (path.empty()) {
-      std::shared_lock lock(mutex_);
-      path = workspace_ ? workspace_->rootPath() : ".";
+  if (!effectiveContext.workspaceRuntime) {
+    if (effectiveContext.workspaceId.empty()) {
+      return ToolResult::Err("workspace_id is required for tool execution");
     }
-    effectiveContext.workspaceRuntime =
-        WorkspaceManager::getInstance().getOrCreate(effectiveContext.workspaceId,
-                                                     path);
-    effectiveContext.workspacePath =
-        effectiveContext.workspaceRuntime->workspacePath;
+    if (effectiveContext.workspacePath.empty()) {
+      effectiveContext.workspaceRuntime =
+          WorkspaceManager::getInstance().get(effectiveContext.workspaceId);
+      if (!effectiveContext.workspaceRuntime) {
+        return ToolResult::Err("workspace runtime is not initialized: " +
+                               effectiveContext.workspaceId);
+      }
+    } else {
+      effectiveContext.workspaceRuntime = WorkspaceManager::getInstance()
+                                              .getOrCreate(
+                                                  effectiveContext.workspaceId,
+                                                  effectiveContext.workspacePath);
+    }
+    effectiveContext.workspacePath = effectiveContext.workspaceRuntime->workspacePath;
   }
 
   // 检查工具是否被禁用

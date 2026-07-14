@@ -17,13 +17,6 @@ static std::string path_to_utf8(const std::filesystem::path &p) {
 BuiltinShell::BuiltinShell(std::shared_ptr<Workspace> workspace)
     : workspace_(std::move(workspace)), currentDir_("") {}
 
-void BuiltinShell::setWorkspace(std::shared_ptr<Workspace> ws) {
-  if (ws) {
-    workspace_ = std::move(ws);
-    currentDir_ = "";
-  }
-}
-
 // ============================================================
 // file.list - 列出工作区文件
 // ============================================================

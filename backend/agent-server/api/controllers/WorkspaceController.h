@@ -8,6 +8,7 @@ class WorkspaceController {
 public:
   explicit WorkspaceController(std::string database_path = "/data/agent.db");
 
+  std::string selectLocalDirectory(const std::string &request);
   std::string createWorkspace(const std::string &request);
   std::string updateWorkspace(const std::string &request);
   std::string listWorkspaces(const std::string &request);
