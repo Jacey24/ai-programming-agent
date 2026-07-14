@@ -3,6 +3,7 @@
 #include "AgentConfiguration.h"
 #include "PlanManager.h"
 #include "TaskContext.h"
+#include "TaskRunOptions.h"
 #include <atomic>
 #include <memory>
 #include <string>
@@ -42,6 +43,7 @@ public:
   // globalId: 归属的 Global ID（用于 global_context 检索）
   AgentLoopResult run(const std::string &taskId, const std::string &globalId,
                       const std::string &workspaceId, const std::string &goal,
+                      const TaskRunOptions &options,
                       std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
 
   // 检查配置是否加载成功
@@ -57,6 +59,7 @@ private:
                                  const std::string &workspaceId,
                                  TaskContext &ctx,
                                  const ExpertConfig *entryExpert,
+                                 const TaskRunOptions &options,
                                  std::shared_ptr<std::atomic<bool>> cancelFlag,
                                  const std::string &initialSessionHistory = "");
 

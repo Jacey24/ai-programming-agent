@@ -1,21 +1,12 @@
 #pragma once
 
 #include "domain/agent/Agent.h"
+#include "domain/agent/TaskRunOptions.h"
 
 #include <memory>
 #include <string>
 
 namespace codepilot {
-
-enum class ExecutionMode { Auto, DirectAnswer, WorkspaceAgent };
-
-struct TaskRunOptions {
-  ExecutionMode mode{ExecutionMode::Auto};
-  bool autoRunSafeCommands{true};
-  bool requireFileWritePermission{true};
-  int maxSteps{6};
-  int maxRoundsPerStep{3};
-};
 
 class AgentService {
 public:

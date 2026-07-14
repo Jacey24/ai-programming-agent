@@ -28,7 +28,7 @@ AgentResult AgentService::runTask(const std::string &taskId,
     // orchestrator 内部异步执行 AgentLoop，但 AgentService 需要同步返回结果
     AgentLoop agentLoop("config/experts.json");
     AgentLoopResult loopResult =
-        agentLoop.run(taskId, sessionId, workspaceId, goal);
+        agentLoop.run(taskId, sessionId, workspaceId, goal, options);
 
     AgentResult result;
     result.taskId = taskId;

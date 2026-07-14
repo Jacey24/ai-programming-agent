@@ -115,7 +115,8 @@ std::string AgentOrchestrator::resolveGlobalId(const std::string &globalId) {
 void AgentOrchestrator::startTask(const std::string &taskId,
                                   const std::string &globalId,
                                   const std::string &workspaceId,
-                                  const std::string &goal) {
+                                  const std::string &goal,
+                                  const TaskRunOptions &options) {
   std::string resolvedGlobalId = resolveGlobalId(globalId);
 
   auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
@@ -133,7 +134,7 @@ void AgentOrchestrator::startTask(const std::string &taskId,
 
     taskThreads_[taskId] =
         std::thread(&AgentOrchestrator::runTaskThread, this, taskId,
-                    resolvedGlobalId, workspaceId, goal, cancelFlag);
+                    resolvedGlobalId, workspaceId, goal, options, cancelFlag);
     taskThreads_[taskId].detach();
   }
 }
@@ -292,6 +293,7 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
 void AgentOrchestrator::runTaskThread(
     const std::string &taskId, const std::string &globalId,
     const std::string &workspaceId, const std::string &goal,
+    TaskRunOptions options,
     std::shared_ptr<std::atomic<bool>> cancelFlag) {
   LOG_INFO("[ORCH DEBUG] runTaskThread START: taskId={}, goal={}", taskId,
            goal.substr(0, 80));
@@ -315,7 +317,7 @@ void AgentOrchestrator::runTaskThread(
              "llmAvailable={}",
              LlmClientFacade::getInstance().isAvailable());
     AgentLoopResult result =
-        agentLoop.run(taskId, globalId, workspaceId, goal, cancelFlag);
+        agentLoop.run(taskId, globalId, workspaceId, goal, options, cancelFlag);
 
     LOG_INFO("[ORCH DEBUG] agentLoop.run() returned: status={}, output_len={}",
              result.status, result.finalOutput.size());
