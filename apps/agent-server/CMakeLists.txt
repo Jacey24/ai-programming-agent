@@ -18,6 +18,7 @@ endif()
 add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
+    InternalConsole.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/HttpServer.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/LogController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/FileChangeController.cpp

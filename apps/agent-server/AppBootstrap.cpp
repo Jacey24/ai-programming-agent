@@ -1,3 +1,4 @@
+#include "InternalConsole.h"
 #include "api/HttpServer.h"
 #include "application/ToolSystem.h"
 #include "domain/agent/AgentOrchestrator.h"
@@ -77,7 +78,7 @@ std::string extract_workspace_root(const std::string &config_path) {
 
 } // namespace
 
-int run_agent_server(const std::string &config_path) {
+int run_agent_server(const std::string &config_path, bool enableConsole) {
   std::signal(SIGINT, handle_signal);
 #ifndef _WIN32
   std::signal(SIGTERM, handle_signal);
@@ -158,7 +159,20 @@ int run_agent_server(const std::string &config_path) {
   server_config.databaseError = database_error;
 
   codepilot::HttpServer server(server_config);
+  std::unique_ptr<InternalConsole> console;
+  if (enableConsole) {
+    // 内建调试控制台（非阻塞 start）
+    console = std::make_unique<InternalConsole>("localhost", 8080);
+    console->start();
+    LOG_INFO("InternalConsole started — use --console to access");
+  }
+
   const int result = server.run(running);
+
+  if (console) {
+    console->stop();
+  }
+
   LOG_INFO("CodePilot Agent Server stopped");
   codepilot::log::shutdown();
   return result;

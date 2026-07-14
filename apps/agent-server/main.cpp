@@ -9,7 +9,7 @@
 #include <windows.h>
 #endif
 
-int run_agent_server(const std::string &config_path);
+int run_agent_server(const std::string &config_path, bool enableConsole);
 
 // 从 exe 路径向上查找项目根目录（包含 CMakeLists.txt 或 config/agent.json）
 static std::string findProjectRoot() {
@@ -53,12 +53,15 @@ int main(int argc, char **argv) {
 
   std::string config_path = "config/agent.json";
 
+  bool enableConsole = false;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--config" && i + 1 < argc) {
       config_path = argv[++i];
+    } else if (arg == "--console") {
+      enableConsole = true;
     }
   }
 
-  return run_agent_server(config_path);
+  return run_agent_server(config_path, enableConsole);
 }
