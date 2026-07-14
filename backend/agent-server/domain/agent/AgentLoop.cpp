@@ -95,7 +95,10 @@ AgentLoop::runExpertChain(const std::string &taskId,
                           const std::string &globalId,
                           const std::string &workspaceId, TaskContext &ctx,
                           const ExpertConfig *entryExpert,
+<<<<<<< HEAD
                           const TaskRunOptions &options,
+=======
+>>>>>>> 9eed7c0 (resume小更新)
                           std::shared_ptr<std::atomic<bool>> cancelFlag,
                           const std::string &initialSessionHistory) {
   AgentLoopResult result;

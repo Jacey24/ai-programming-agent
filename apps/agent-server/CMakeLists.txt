@@ -50,6 +50,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/ExpertRegistry.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentConfiguration.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentLoop.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentLoopResumer.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentOrchestrator.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp
