@@ -20,6 +20,8 @@
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
 
+#include "common/logging/Logger.h"
+
 #include "httplib.h"
 
 #include <atomic>
@@ -74,7 +76,48 @@ std::string extract_json_body(const std::string &httpResp) {
   if (pos != std::string::npos) {
     return httpResp.substr(pos + 4);
   }
+  pos = httpResp.find("\n\n");
+  if (pos != std::string::npos) {
+    return httpResp.substr(pos + 2);
+  }
   return httpResp;
+}
+
+bool parse_http_status(const std::string &httpResp, int &status) {
+  const auto lineEnd = httpResp.find('\n');
+  if (lineEnd == std::string::npos) {
+    return false;
+  }
+
+  std::string statusLine = httpResp.substr(0, lineEnd);
+  if (!statusLine.empty() && statusLine.back() == '\r') {
+    statusLine.pop_back();
+  }
+  if (statusLine.rfind("HTTP/", 0) != 0) {
+    return false;
+  }
+
+  const auto codeStart = statusLine.find(' ');
+  if (codeStart == std::string::npos) {
+    return false;
+  }
+  const auto codeEnd = statusLine.find(' ', codeStart + 1);
+  const std::string code = statusLine.substr(
+      codeStart + 1, codeEnd == std::string::npos
+                         ? std::string::npos
+                         : codeEnd - codeStart - 1);
+  if (code.size() != 3 || code[0] < '0' || code[0] > '9' ||
+      code[1] < '0' || code[1] > '9' || code[2] < '0' || code[2] > '9') {
+    return false;
+  }
+
+  const int parsed = (code[0] - '0') * 100 + (code[1] - '0') * 10 +
+                     (code[2] - '0');
+  if (parsed < 100 || parsed > 599) {
+    return false;
+  }
+  status = parsed;
+  return true;
 }
 
 std::string build_query_string(const httplib::Params &params) {
@@ -221,6 +264,14 @@ int HttpServer::run(const std::atomic_bool &running) {
   const std::string &dbPath = cfg.databasePath;
 
   auto respondJson = [](httplib::Response &res, const std::string &httpResp) {
+    int status = 0;
+    if (parse_http_status(httpResp, status)) {
+      res.status = status;
+    } else {
+      LOG_WARN("Controller returned a malformed HTTP status line; using "
+               "httplib default status {}",
+               res.status);
+    }
     res.set_content(extract_json_body(httpResp),
                     "application/json; charset=utf-8");
   };
@@ -505,7 +556,9 @@ int HttpServer::run(const std::atomic_bool &running) {
   svr.set_error_handler(
       [setCors](const httplib::Request &req, httplib::Response &res) {
         setCors(req, res);
-        res.set_content(not_found_json(), "application/json");
+        if (res.body.empty()) {
+          res.set_content(not_found_json(), "application/json");
+        }
       });
 
   std::cout << "Listening: " << cfg.host << ":" << cfg.port << "\n";
