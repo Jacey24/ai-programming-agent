@@ -18,6 +18,12 @@ WorkspaceManager::getOrCreate(const std::string &workspaceId,
     std::shared_lock lock(mutex_);
     auto it = runtimes_.find(workspaceId);
     if (it != runtimes_.end()) {
+      if (!path.empty()) {
+        std::lock_guard runtimeLock(it->second->executionMutex);
+        if (path != it->second->workspacePath) {
+          it->second->relocate(path);
+        }
+      }
       return it->second;
     }
   }
@@ -28,6 +34,12 @@ WorkspaceManager::getOrCreate(const std::string &workspaceId,
   // 双重检查（防止多线程同时创建）
   auto it = runtimes_.find(workspaceId);
   if (it != runtimes_.end()) {
+    if (!path.empty()) {
+      std::lock_guard runtimeLock(it->second->executionMutex);
+      if (path != it->second->workspacePath) {
+        it->second->relocate(path);
+      }
+    }
     return it->second;
   }
 

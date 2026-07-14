@@ -12,6 +12,7 @@
 #include "application/ToolSystem.h"
 #include "domain/tools/Tool.h"
 #include "event/EventBus.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <algorithm>
 #include <atomic>
@@ -220,9 +221,26 @@ AgentResult Agent::executeTask(const std::string &taskId,
         toolCtx.taskId = taskId;
         toolCtx.sessionId = sessionId;
         toolCtx.workspaceId = workspaceId;
-        if (ToolSystem::getInstance().isInitialized()) {
-          toolCtx.workspacePath =
-              ToolSystem::getInstance().workspace().rootPath();
+        if (!workspaceId.empty()) {
+          auto runtime = WorkspaceManager::getInstance().get(workspaceId);
+          if (!runtime) {
+            std::string workspacePath;
+            if (DataAccessFacade::getInstance().isInitialized()) {
+              auto workspace =
+                  DataAccessFacade::getInstance().getWorkspace(workspaceId);
+              if (workspace) {
+                workspacePath = workspace->path;
+              }
+            }
+            if (!workspacePath.empty()) {
+              runtime = WorkspaceManager::getInstance().getOrCreate(
+                  workspaceId, workspacePath);
+            }
+          }
+          if (runtime) {
+            toolCtx.workspaceRuntime = runtime;
+            toolCtx.workspacePath = runtime->workspacePath;
+          }
         }
 
         json toolArgs = buildToolArguments(toolName, cmd.toolArgs);

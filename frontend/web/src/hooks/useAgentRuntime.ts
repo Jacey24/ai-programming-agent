@@ -7,6 +7,7 @@ import {
   createSession,
   createTask,
   createWorkspace,
+  selectLocalWorkspaceDirectory,
   getTask,
   listEventHistory,
   listChatHistory,
@@ -142,12 +143,8 @@ export function useAgentRuntime(options: {
 
   const ensureRuntimeContext = useCallback(
     async (input: CreateTaskInput) => {
-      if (sessionRef.current && workspaceRef.current) {
-        return { session: sessionRef.current, workspace: workspaceRef.current };
-      }
-
-      const session = await createSession(input.sessionTitle.trim() || "CodePilot Session");
-      const workspace = await createWorkspace(
+      const session = sessionRef.current ?? await createSession(input.sessionTitle.trim() || "CodePilot Session");
+      const workspace = workspaceRef.current ?? await createWorkspace(
         input.workspaceName.trim() || "codepilot-workspace",
         input.workspacePath.trim() || "./workspace",
       );
@@ -157,6 +154,21 @@ export function useAgentRuntime(options: {
     },
     [],
   );
+
+  const selectWorkspaceDirectory = useCallback(async () => {
+    const selection = await selectLocalWorkspaceDirectory();
+    if (selection.cancelled || !selection.path) {
+      return null;
+    }
+
+    const workspace = await createWorkspace(
+      selection.name?.trim() || "local-workspace",
+      selection.path,
+    );
+    workspaceRef.current = workspace;
+    dispatch({ type: "workspaceSelected", workspace });
+    return workspace;
+  }, []);
 
   const startPermissionPolling = useCallback(
     (taskId?: string) => {
@@ -456,6 +468,7 @@ export function useAgentRuntime(options: {
     refreshHealth,
     refreshHistory,
     refreshArtifacts,
+    selectWorkspaceDirectory,
     submitTask,
     cancelActiveTask,
     selectHistoryItem,

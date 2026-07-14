@@ -122,6 +122,7 @@ export default function App() {
               tree={workbench.state.fileTree}
               expandedDirectories={workbench.state.expandedDirectories}
               activeFilePath={workbench.state.activeFilePath}
+              onChooseWorkspace={runtime.selectWorkspaceDirectory}
               onRefresh={workbench.refreshTree}
               onToggleDirectory={workbench.toggleDirectory}
               onOpenFile={workbench.openFile}

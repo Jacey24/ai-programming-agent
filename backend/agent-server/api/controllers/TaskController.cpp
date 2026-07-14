@@ -6,6 +6,7 @@
 #include "domain/agent/TaskRunOptions.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <algorithm>
 #include <exception>
@@ -239,6 +240,14 @@ std::string TaskController::createTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
+    const auto workspace = facade.getWorkspace(workspace_id);
+    if (!workspace) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
+    WorkspaceManager::getInstance().getOrCreate(workspace->id,
+                                                 workspace->path);
     if (!facade.getSession(session_id)) {
       return http_response(
           R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
@@ -365,6 +374,14 @@ std::string TaskController::continueTask(const std::string &request) {
           "500 Internal Server Error");
     }
     auto &facade = DataAccessFacade::getInstance();
+    const auto workspace = facade.getWorkspace(workspace_id);
+    if (!workspace) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
+    WorkspaceManager::getInstance().getOrCreate(workspace->id,
+                                                 workspace->path);
     if (!parent_task_id.empty()) {
       const auto parentTask = facade.getTask(parent_task_id);
       if (parentTask) {
@@ -410,7 +427,6 @@ std::string TaskController::continueTask(const std::string &request) {
             "500 Internal Server Error");
       }
     }
-
     task = facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
 

@@ -1,5 +1,5 @@
 #include "ShellTool.h"
-#include "infrastructure/filesystem/WorkspaceManager.h"
+#include "infrastructure/filesystem/WorkspaceRuntime.h"
 
 #include <sstream>
 
@@ -47,17 +47,23 @@ ToolResult ShellRunTool::execute(const ToolContext &context,
     timeout = arguments["timeout"].get<int>();
   }
 
-  // 从 WorkspaceManager 获取正确的 ProcessRunner
+  // Use the runtime carried by the invocation context.  ToolSystem resolves
+  // that runtime before dispatching, so this tool does not consult globals.
   std::shared_ptr<ProcessRunner> activeRunner = runner_;
-  if (!context.workspaceId.empty()) {
-    auto rt = WorkspaceManager::getInstance().getOrCreate(
-        context.workspaceId, context.workspacePath);
-    std::lock_guard lock(rt->executionMutex);
-    activeRunner = rt->processRunner;
+  if (context.workspaceRuntime) {
+    activeRunner = context.workspaceRuntime->processRunner;
+  }
+
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
 
   // 设置工作目录
-  if (!context.workspacePath.empty()) {
+  if (context.workspaceRuntime) {
+    activeRunner->setWorkingDirectory(context.workspaceRuntime->workspacePath);
+  } else if (!context.workspacePath.empty()) {
     activeRunner->setWorkingDirectory(context.workspacePath);
   } else if (arguments.contains("cwd")) {
     activeRunner->setWorkingDirectory(arguments["cwd"].get<std::string>());

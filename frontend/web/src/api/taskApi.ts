@@ -14,6 +14,7 @@ import type {
   TaskEventHistoryPayload,
   ToolCallRecord,
   WorkspaceRecord,
+  LocalDirectorySelection,
 } from "../types/api";
 
 export function createSession(title: string) {
@@ -27,6 +28,12 @@ export function createWorkspace(name: string, path: string) {
   return requestJson<WorkspaceRecord>(endpoints.workspaces, {
     method: "POST",
     body: JSON.stringify({ name, path }),
+  });
+}
+
+export function selectLocalWorkspaceDirectory() {
+  return requestJson<LocalDirectorySelection>(`${endpoints.workspaces}/select-directory`, {
+    method: "POST",
   });
 }
 

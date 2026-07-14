@@ -336,6 +336,9 @@ int HttpServer::run(const std::atomic_bool &running) {
         deleteSession, "DELETE /api/v1/sessions/" + req.matches[1].str());
 
   // Workspace
+  ROUTE(Post, "/api/v1/workspaces/select-directory", WorkspaceController,
+        selectLocalDirectory,
+        "POST /api/v1/workspaces/select-directory \r\n\r\n" + req.body);
   ROUTE(Post, "/api/v1/workspaces", WorkspaceController, createWorkspace,
         "POST /api/v1/workspaces \r\n\r\n" + req.body);
   ROUTE(Get, "/api/v1/workspaces", WorkspaceController, listWorkspaces,

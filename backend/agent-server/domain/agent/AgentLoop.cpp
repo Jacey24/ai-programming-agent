@@ -60,23 +60,18 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
   {
     auto &wm = WorkspaceManager::getInstance();
     auto rt = wm.get(workspaceId);
-    if (rt) {
-      ctx.workspacePath = rt->workspacePath;
-    } else if (DataAccessFacade::getInstance().isInitialized()) {
+    if (!rt && DataAccessFacade::getInstance().isInitialized()) {
       auto ws = DataAccessFacade::getInstance().getWorkspace(workspaceId);
       if (ws) {
-        ctx.workspacePath = ws->path;
-      } else {
-        ctx.workspacePath =
-            ToolSystem::getInstance().isInitialized()
-                ? ToolSystem::getInstance().workspace().rootPath()
-                : ".";
+        rt = wm.getOrCreate(workspaceId, ws->path);
       }
-    } else {
-      ctx.workspacePath = ToolSystem::getInstance().isInitialized()
-                              ? ToolSystem::getInstance().workspace().rootPath()
-                              : ".";
     }
+    if (!rt) {
+      result.status = "workspace_error";
+      result.finalOutput = "Workspace runtime is unavailable: " + workspaceId;
+      return result;
+    }
+    ctx.workspacePath = rt->workspacePath;
   }
 
   // ★ v2: 从 global_context 加载历史摘要注入首轮 prompt
@@ -378,8 +373,11 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.taskId = taskId;
           toolCtx.sessionId = globalId;
           toolCtx.workspaceId = workspaceId;
-          toolCtx.workspacePath =
-              ToolSystem::getInstance().workspace().rootPath();
+          toolCtx.workspacePath = ctx.workspacePath;
+          if (!workspaceId.empty()) {
+            toolCtx.workspaceRuntime = WorkspaceManager::getInstance().getOrCreate(
+                workspaceId, toolCtx.workspacePath);
+          }
           toolCtx.options["auto_run_safe_commands"] =
               options.autoRunSafeCommands ? "true" : "false";
           toolCtx.options["require_file_write_permission"] =

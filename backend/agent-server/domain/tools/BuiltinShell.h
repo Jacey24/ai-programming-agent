@@ -14,9 +14,6 @@ class BuiltinShell {
 public:
   explicit BuiltinShell(std::shared_ptr<Workspace> workspace);
 
-  // 动态切换 Workspace（用于多 workspace 支持）
-  void setWorkspace(std::shared_ptr<Workspace> ws);
-
   // --- 文件操作 ---
   ToolResult listFiles(const json &args);
   ToolResult readFile(const json &args);
@@ -46,7 +43,7 @@ public:
   std::string getSystemPrompt() const;
 
 private:
-  std::shared_ptr<Workspace> workspace_;
+  const std::shared_ptr<Workspace> workspace_;
   std::string currentDir_;
 
   bool applySinglePatch(const std::string &filePath,

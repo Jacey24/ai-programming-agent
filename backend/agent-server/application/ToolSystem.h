@@ -8,7 +8,7 @@
 #include "domain/tools/Tool.h"
 #include "domain/tools/ToolRegistry.h"
 #include "event/EventBus.h"
-#include "infrastructure/filesystem/Workspace.h"
+#include "infrastructure/filesystem/WorkspaceRuntime.h"
 #include "infrastructure/process/ProcessRunner.h"
 
 #include <memory>
@@ -72,6 +72,8 @@ public:
   // --- 子系统访问（其他模块可通过门面获取） ---
   ToolRegistry &registry();
   EventBus &eventBus();
+  // Compatibility accessor for the bootstrap runtime only.  Tool execution
+  // must use ToolContext::workspaceRuntime instead.
   Workspace &workspace();
   RiskDetector &riskDetector();
   PermissionManager &permissionManager();
@@ -143,11 +145,11 @@ private:
 
   mutable std::shared_mutex mutex_;
 
-  std::shared_ptr<Workspace> workspace_;
-  std::shared_ptr<BuiltinShell> shell_;
+  // The bootstrap runtime keeps legacy callers operational.  It is not used
+  // for a ToolContext that names a workspace.
+  std::shared_ptr<WorkspaceRuntime> bootstrapRuntime_;
   std::unique_ptr<ToolRegistry> registry_;
   std::shared_ptr<EventBus> eventBus_;
-  std::shared_ptr<ProcessRunner> runner_;
   std::shared_ptr<RiskDetector> detector_;
   std::shared_ptr<PermissionManager> permissionManager_;
   std::unique_ptr<Debugger> debugger_;

@@ -13,6 +13,8 @@ using json = nlohmann::json;
 
 namespace codepilot {
 
+struct WorkspaceRuntime;
+
 // ============================================================
 // 风险等级枚举
 // 序列化时映射为小写字符串：safe, medium, dangerous, blocked
@@ -105,6 +107,8 @@ struct ToolContext {
   std::string workspacePath;
   std::string sessionId;
   std::map<std::string, std::string> options;
+  // Bound per invocation; tools must not resolve workspaces through globals.
+  std::shared_ptr<WorkspaceRuntime> workspaceRuntime;
 };
 
 // ============================================================
