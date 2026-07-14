@@ -15,8 +15,9 @@ public:
   std::string baseUrl() const;
 
   // ── 任务操作 ──
-  json createTask(const std::string &goal, const std::string &workspaceId = "",
-                  const std::string &workspacePath = "");
+  json createTask(const std::string &goal, const std::string &sessionId,
+                  const std::string &globalId,
+                  const std::string &workspaceId);
   json cancelTask(const std::string &taskId);
   json getTask(const std::string &taskId);
   json listTasks(int page = 1, int pageSize = 20);
