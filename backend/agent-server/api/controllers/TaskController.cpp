@@ -131,6 +131,28 @@ static std::string parseTaskRunOptions(const json &body,
         "400 Bad Request");
   }
 
+  if (rawOptions.contains("execution_mode")) {
+    const json &rawExecutionMode = rawOptions["execution_mode"];
+    if (!rawExecutionMode.is_string()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_EXECUTION_MODE","message":"options.execution_mode must be one of: auto, answer, workspace"}})",
+          "400 Bad Request");
+    }
+
+    const std::string executionMode = rawExecutionMode.get<std::string>();
+    if (executionMode == "auto") {
+      options.mode = ExecutionMode::Auto;
+    } else if (executionMode == "answer") {
+      options.mode = ExecutionMode::DirectAnswer;
+    } else if (executionMode == "workspace") {
+      options.mode = ExecutionMode::WorkspaceAgent;
+    } else {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_EXECUTION_MODE","message":"options.execution_mode must be one of: auto, answer, workspace"}})",
+          "400 Bad Request");
+    }
+  }
+
   if (rawOptions.contains("auto_run_safe_commands")) {
     const json &rawAutoRunSafeCommands =
         rawOptions["auto_run_safe_commands"];
@@ -270,7 +292,7 @@ std::string TaskController::createTask(const std::string &request) {
   }
 
   auto &orch = AgentOrchestrator::getInstance();
-  if (!orch.isReady()) {
+  if (!orch.isReady(options.mode)) {
     return http_response(
         R"({"success":false,"error":{"code":"ORCHESTRATOR_ERROR","message":"AgentOrchestrator not ready"}})",
         "500 Internal Server Error");
@@ -411,7 +433,7 @@ std::string TaskController::continueTask(const std::string &request) {
   }
 
   auto &orch = AgentOrchestrator::getInstance();
-  if (!orch.isReady()) {
+  if (!orch.isReady(options.mode)) {
     return http_response(
         R"({"success":false,"error":{"code":"ORCHESTRATOR_ERROR","message":"AgentOrchestrator not ready"}})",
         "500 Internal Server Error");
