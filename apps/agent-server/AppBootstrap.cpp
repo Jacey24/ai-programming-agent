@@ -66,19 +66,22 @@ std::string extractConfigValue(const std::string &configPath,
 
 std::string extract_storage_path(const std::string &config_path) {
   const std::string path = extractConfigValue(config_path, "storage.path");
-  return path.empty() ? "/data/agent.db" : path;
+  // 相对路径直接返回（sqlite3 相对于 CWD 解析）
+  return path.empty() ? "./storage/agent.db" : path;
 }
 
 std::string extract_workspace_root(const std::string &config_path) {
   const std::string root = extractConfigValue(config_path, "workspace.root");
-  return root.empty() ? "/workspace" : root;
+  return root.empty() ? "./workspace" : root;
 }
 
 } // namespace
 
 int run_agent_server(const std::string &config_path) {
   std::signal(SIGINT, handle_signal);
+#ifndef _WIN32
   std::signal(SIGTERM, handle_signal);
+#endif
 
   // 初始化统一日志系统
   const std::string logConfigPath = "./config/logging.json";
@@ -107,12 +110,36 @@ int run_agent_server(const std::string &config_path) {
 
   // 初始化 LLM 门面（加载 llm.json + llm.local.json）
   codepilot::LlmClientFacade::getInstance().init("config/llm.json");
+  LOG_INFO("LlmClientFacade available: {}",
+           codepilot::LlmClientFacade::getInstance().isAvailable() ? "true"
+                                                                   : "false");
+  LOG_INFO("LlmClientFacade default provider: {}",
+           codepilot::LlmClientFacade::getInstance().getDefaultProvider());
 
   // 初始化 Agent 编排器（加载 Expert 配置，启用 Expert Chain 主循环）
   codepilot::AgentOrchestrator::getInstance().init("config/experts.json");
   LOG_INFO("AgentOrchestrator ready: {}",
            codepilot::AgentOrchestrator::getInstance().isReady() ? "true"
                                                                  : "false");
+  if (codepilot::AgentOrchestrator::getInstance().isReady()) {
+    auto names = codepilot::AgentConfiguration::getInstance().listExpertNames();
+    LOG_INFO("Loaded {} experts", names.size());
+    for (const auto &name : names) {
+      const auto *e =
+          codepilot::AgentConfiguration::getInstance().getExpert(name);
+      std::string tools;
+      for (size_t i = 0; i < e->visibleTools.size(); ++i) {
+        if (i > 0)
+          tools += ",";
+        tools += e->visibleTools[i];
+      }
+      LOG_INFO("  Expert [{}] entry={} llm={}/{} tools=[{}]", name,
+               e->isEntry ? "yes" : "no",
+               e->llmProvider.empty() ? "(default)" : e->llmProvider,
+               e->llmModel.empty() ? "(default)" : e->llmModel,
+               tools.empty() ? "(none)" : tools);
+    }
+  }
 
   LOG_INFO("CodePilot Agent Server starting");
   LOG_INFO("Config: {}", config_path);

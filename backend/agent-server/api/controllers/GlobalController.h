@@ -11,6 +11,7 @@ public:
   std::string createGlobal(const std::string &request);
   std::string getGlobal(const std::string &request);
   std::string listGlobals(const std::string &request);
+  std::string deleteGlobal(const std::string &request);
   std::string getGlobalContext(const std::string &request);
 
 private:

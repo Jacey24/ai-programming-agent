@@ -1,0 +1,1712 @@
+[INFO] Project root: d:\VS Code stuff\ai-programming-agent
+[2026-07-14 03:03:06.338] [info] [default] LlmClientFacade available: true
+[2026-07-14 03:03:06.338] [info] [default] LlmClientFacade default provider: DeepSeek
+[2026-07-14 03:03:06.340] [info] [default] AgentOrchestrator ready: true
+[2026-07-14 03:03:06.340] [info] [default] Loaded 4 experts
+[2026-07-14 03:03:06.340] [info] [default]   Expert [planner] entry=yes llm=(default)/(default) tools=[(none)]
+[2026-07-14 03:03:06.340] [info] [default]   Expert [executor] entry=no llm=(default)/(default) tools=[file.write,file.read,file.list,file.apply_patch,shell.run,git.status,git.diff]
+[2026-07-14 03:03:06.340] [info] [default]   Expert [reviewer] entry=no llm=(default)/(default) tools=[(none)]
+[2026-07-14 03:03:06.340] [info] [default]   Expert [summarizer] entry=no llm=(default)/(default) tools=[(none)]
+[2026-07-14 03:03:06.340] [info] [default] CodePilot Agent Server starting
+[2026-07-14 03:03:06.340] [info] [default] Config: config/agent.json
+[2026-07-14 03:03:06.340] [info] [default] Workspace: ./workspace
+[2026-07-14 03:03:06.340] [info] [default] SQLite: ./storage/agent.db connected=true
+[HttpServer] cpp-httplib listening on 0.0.0.0:8080
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11804050443000_1
+[2026-07-14 03:04:38.966] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_11804049849200_1, goal=hello
+[2026-07-14 03:04:38.966] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 03:04:38.968] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11804056098900_2
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11804056992700_3
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11804057746300_4
+[2026-07-14 03:04:38.973] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29341
+[2026-07-14 03:04:38.973] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:38.974] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:38.984] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:04:38.984] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:41.126] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:41.126] [info] [default] [LLM DEBUG] HTTP status=200, body_len=755
+[2026-07-14 03:04:41.126] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=273
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806212802400_5
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=208
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806213192600_6
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=273
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806213439800_7
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806213913400_8
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806214187000_9
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806214608300_10
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11806214822000_11
+[2026-07-14 03:04:41.130] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29516
+[2026-07-14 03:04:41.130] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:41.131] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:41.131] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:04:41.131] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:44.513] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:44.513] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1313
+[2026-07-14 03:04:44.513] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=819
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11809600557300_12
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=797
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11809601145500_13
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=819
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11809601510000_14
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11809602243000_15
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11809602585400_16
+[2026-07-14 03:04:44.518] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30504
+[2026-07-14 03:04:44.518] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:44.519] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:44.520] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:04:44.520] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:46.071] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:46.071] [info] [default] [LLM DEBUG] HTTP status=200, body_len=877
+[2026-07-14 03:04:46.071] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=387
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11811158349200_17
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=365
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11811158873500_18
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=387
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11811159205100_19
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11811159854300_20
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11811160100700_21
+[2026-07-14 03:04:46.075] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30931
+[2026-07-14 03:04:46.075] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:46.076] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:46.077] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:04:46.077] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:48.263] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:48.263] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1071
+[2026-07-14 03:04:48.263] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=576
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11813350670600_22
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=529
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11813351139100_23
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=576
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11813351326300_24
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11813352505600_25
+[2026-07-14 03:04:48.268] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=26878
+[2026-07-14 03:04:48.268] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:48.269] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:48.270] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:04:48.270] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] HttpServer SSE handler START: taskId=task_11804049849200_1
+[2026-07-14 03:04:49.746] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:49.747] [info] [default] [LLM DEBUG] HTTP status=200, body_len=497
+[2026-07-14 03:04:49.747] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11814834079400_26
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11814834617800_27
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11814835012900_28
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11814835416800_29
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11814835778900_30
+[2026-07-14 03:04:49.751] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29565
+[2026-07-14 03:04:49.751] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:49.752] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:49.753] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:04:49.753] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:51.424] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:51.424] [info] [default] [LLM DEBUG] HTTP status=200, body_len=738
+[2026-07-14 03:04:51.424] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=265
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816511166500_31
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=252
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816511585100_32
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=265
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816512023600_33
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816512496300_34
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816512809200_35
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816513065700_36
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11816513235900_37
+[2026-07-14 03:04:51.428] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=28109
+[2026-07-14 03:04:51.428] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:04:51.429] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:04:51.430] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:04:51.430] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:04:53.678] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:04:53.678] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1316
+[2026-07-14 03:04:53.679] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=831
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=42
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818765123600_38
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818765768500_39
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=debug persist=Always liveClients=0 content_len=831
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818766185900_40
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818766723800_41
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818767085600_42
+[2026-07-14 03:04:53.682] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=completed, output_len=818
+[SSE TRACE] push() ENTER: taskId=task_11804049849200_1 type=task_completed channel=status persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_11804049849200_1 event=task_completed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11818767665700_43
+[2026-07-14 03:04:53.684] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_11804049849200_1 status=completed after 6s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_11804049849200_1 count=43
+[SSE TRACE] HttpServer SSE response: taskId=task_11804049849200_1 sseBody_size=46807
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11957016277100_44
+[2026-07-14 03:07:11.932] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_11957015647200_2, goal=你好
+[2026-07-14 03:07:11.932] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 03:07:11.934] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] HttpServer SSE handler START: taskId=task_11957015647200_2
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11957023391500_45
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11957023809900_46
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11957024089600_47
+[2026-07-14 03:07:11.939] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30648
+[2026-07-14 03:07:11.939] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:11.940] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:11.942] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:07:11.942] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:13.857] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:13.857] [info] [default] [LLM DEBUG] HTTP status=200, body_len=797
+[2026-07-14 03:07:13.857] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=313
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958944361700_48
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=248
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958944873200_49
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=313
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958945124800_50
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958945571300_51
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958945804300_52
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958946138100_53
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11958946315800_54
+[2026-07-14 03:07:13.861] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30829
+[2026-07-14 03:07:13.861] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:13.862] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:13.863] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:13.863] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:20.417] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:20.417] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1174
+[2026-07-14 03:07:20.417] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=680
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11965503578600_55
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=611
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11965503981900_56
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=680
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11965504166000_57
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11965504545200_58
+[2026-07-14 03:07:20.420] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=28385
+[2026-07-14 03:07:20.420] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:20.421] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:20.421] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:20.421] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:22.820] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:22.820] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1023
+[2026-07-14 03:07:22.821] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=547
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=44
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11967907110800_59
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11967907512800_60
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11967907840400_61
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11967908029500_62
+[2026-07-14 03:07:22.823] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31098
+[2026-07-14 03:07:22.823] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:22.825] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:22.826] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:22.826] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:25.717] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:25.717] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1006
+[2026-07-14 03:07:25.717] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=510
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11970804093300_63
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=488
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11970804507600_64
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=510
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11970804783400_65
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11970805224800_66
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11970805424100_67
+[2026-07-14 03:07:25.720] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31777
+[2026-07-14 03:07:25.720] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:25.721] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:25.722] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:25.722] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:28.080] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:28.080] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1015
+[2026-07-14 03:07:28.080] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=526
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11973166767400_68
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11973167184300_69
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11973167383500_70
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11973168057300_71
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11973168378600_72
+[2026-07-14 03:07:28.083] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32317
+[2026-07-14 03:07:28.083] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:28.085] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:28.085] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:28.085] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:29.787] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:29.787] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1047
+[2026-07-14 03:07:29.787] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=554
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11974873893900_73
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=532
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11974874301500_74
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=554
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11974874475200_75
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11974874911900_76
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11974875135600_77
+[2026-07-14 03:07:29.790] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32911
+[2026-07-14 03:07:29.790] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:29.791] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:29.792] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:29.792] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:31.314] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:31.314] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:31.314] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11976400766900_78
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11976401419500_79
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11976401771200_80
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11976402445900_81
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11976402723400_82
+[2026-07-14 03:07:31.318] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=33499
+[2026-07-14 03:07:31.318] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:31.319] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:31.320] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:31.320] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:33.194] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:33.194] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:33.194] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11978282120800_83
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11978282701200_84
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11978282966600_85
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11978283596300_86
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11978283902300_87
+[2026-07-14 03:07:33.199] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=34087
+[2026-07-14 03:07:33.199] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:33.201] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:33.201] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:33.202] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:34.946] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:34.946] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:34.947] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11980033462400_88
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11980033956500_89
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11980034333200_90
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11980035601000_91
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11980035885400_92
+[2026-07-14 03:07:34.951] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=34675
+[2026-07-14 03:07:34.951] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:34.953] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:34.954] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:34.954] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:36.372] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:36.372] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:36.372] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11981458674700_93
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11981459085300_94
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11981459250700_95
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11981459996100_96
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11981460284700_97
+[2026-07-14 03:07:36.375] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35263
+[2026-07-14 03:07:36.375] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:36.377] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:36.378] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:36.378] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11982473518200_98
+[2026-07-14 03:07:37.389] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_11982473269200_3, goal=你好
+[2026-07-14 03:07:37.389] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[SSE TRACE] HttpServer SSE handler START: taskId=task_11982473269200_3
+[2026-07-14 03:07:38.192] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:38.192] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:38.192] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[2026-07-14 03:07:38.194] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983279236100_99
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983279783000_100
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983280156400_101
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983281021800_102
+[SSE TRACE] push() ENTER: taskId=[SSE TRACE] push() ENTER: taskId=task_11982473269200_3task_11957015647200_2 type=agent_message channel= type=agent_message channel=status persist=Always liveClients=status persist=Always liveClients=0 content_len=370 content_len=29
+
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983282435000_104
+[2026-07-14 03:07:38.197] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35945
+[SSE TRACE] push() DB saved: eventId=event_11983282432700_103
+[2026-07-14 03:07:38.198] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983283008100_105
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11983283274800_106
+[2026-07-14 03:07:38.199] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:38.199] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:38.199] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:40.034] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:40.034] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1041
+[2026-07-14 03:07:40.034] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=548
+[2026-07-14 03:07:40.037] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30648
+[2026-07-14 03:07:40.037] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11985121879900_107
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=526
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11985122652000_108
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=548
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11985123020700_109
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11985124058500_110
+[2026-07-14 03:07:40.040] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11985125397900_111
+[2026-07-14 03:07:40.041] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:07:40.041] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986297450500_112
+[2026-07-14 03:07:41.213] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_11986297204300_4, goal=你好
+[2026-07-14 03:07:41.213] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[SSE TRACE] HttpServer SSE handler START: taskId=task_11986297204300_4
+[2026-07-14 03:07:41.725] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:41.725] [info] [default] [LLM DEBUG] HTTP status=200, body_len=809
+[2026-07-14 03:07:41.725] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=325
+[2026-07-14 03:07:41.727] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=36533
+[2026-07-14 03:07:41.727] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986811968800_113
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=dialog persist=Always liveClients=0 content_len=260
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986812469100_114
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=325
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986812710300_115
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986813261000_116
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986813562200_117
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[2026-07-14 03:07:41.729] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986814097000_118
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11986814368700_119
+[2026-07-14 03:07:41.729] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:41.730] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:43.624] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:43.624] [info] [default] [LLM DEBUG] HTTP status=200, body_len=838
+[2026-07-14 03:07:43.624] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=352
+[2026-07-14 03:07:43.626] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always[2026-07-14 03:07:43.626] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30883
+ liveClients=0 content_len=40
+[2026-07-14 03:07:43.627] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988711619900_120
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=330
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988712346600_121
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=debug persist=Always liveClients=0 content_len=352
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988712652900_122
+[2026-07-14 03:07:43.629] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:43.630] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:43.630] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988716275400_123
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988716842700_124
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11988717137700_125
+[2026-07-14 03:07:47.226] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:47.226] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1399
+[2026-07-14 03:07:47.226] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=908
+[2026-07-14 03:07:47.228] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=2458
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[2026-07-14 03:07:47.228] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[2026-07-14 03:07:47.228] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[SSE TRACE] push() DB saved: eventId=event_11992313064200_126
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=dialog persist=Always liveClients=0 content_len=861
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11992313616500_127
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=908
+[2026-07-14 03:07:47.229] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=[2026-07-14 03:07:47.229] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11992313911200_128
+[2026-07-14 03:07:49.745] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:49.745] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1159
+[2026-07-14 03:07:49.745] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=682
+[2026-07-14 03:07:49.747] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30648
+[2026-07-14 03:07:49.747] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=dialog persist=Always liveClients=0 content_len=682
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11994832057300_129
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=agent_message channel=status persist=Always liveClients=0 content_len=50
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11994832540900_130
+[2026-07-14 03:07:49.748] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=682
+[SSE TRACE] push() ENTER: taskId=task_11957015647200_2 type=task_failed channel=status persist=Always liveClients=0 content_len=682
+[2026-07-14 03:07:49.749] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[SSE TRACE] broadcastFrame: taskId=task_11957015647200_2 event=task_failed liveClients=0 matched=0
+[2026-07-14 03:07:49.749] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:07:49.749] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] push() DB saved: eventId=event_11994832992200_131
+[2026-07-14 03:07:49.751] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_11957015647200_2 status=failed after 38s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_11957015647200_2 count=70
+[SSE TRACE] HttpServer SSE response: taskId=task_11957015647200_2 sseBody_size=60023
+[2026-07-14 03:07:51.384] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:51.384] [info] [default] [LLM DEBUG] HTTP status=200, body_len=797
+[2026-07-14 03:07:51.384] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=313
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=status persist=Always liveClients=0 content_len=33
+0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996471235000_133
+[SSE TRACE] push() DB saved: eventId=event_11996471235100_132
+[2026-07-14 03:07:51.386] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=28606
+[2026-07-14 03:07:51.387] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=dialog persist=Always liveClients=0 content_len=248
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[2026-07-14 03:07:51.388] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:51.389] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:51.389] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] push() DB saved: eventId=event_11996471826400_134
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=313
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996480905400_135
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996482497100_136
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996482775700_137
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996483116500_138
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11996483289400_139
+[2026-07-14 03:07:52.874] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:52.875] [info] [default] [LLM DEBUG] HTTP status=200, body_len=497
+[2026-07-14 03:07:52.875] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[2026-07-14 03:07:52.876] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=30829
+[2026-07-14 03:07:52.876] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11997961407100_140
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11997961952300_141
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11997962269500_142
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11997962946400_143
+[2026-07-14 03:07:52.878] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_11997963273400_144
+[2026-07-14 03:07:52.878] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:52.879] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:55.155] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:55.155] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1012
+[2026-07-14 03:07:55.155] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=525
+[2026-07-14 03:07:55.157] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29676
+[2026-07-14 03:07:55.157] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12000241865800_145
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=dialog persist=Always liveClients=0 content_len=478
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12000242387700_146
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=525
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12000242648700_147
+[2026-07-14 03:07:55.158] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:55.159] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:07:55.159] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:07:56.877] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:56.877] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1011
+[2026-07-14 03:07:56.878] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=535
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message type=agent_message channel= channel=statusstatus persist=Always liveClients= persist=Always liveClients=0 content_len=330 content_len=40
+
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001964196200_148
+[SSE TRACE] push() DB saved: eventId=event_12001964196200_149
+[2026-07-14 03:07:56.880] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=28245
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=dialog[2026-07-14 03:07:56.880] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+ persist=Always liveClients=0 content_len=522
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001964908500_150
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=debug persist=Always liveClients=0 content_len=535
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001965248100_151
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=status persist=Always liveClients=0 content_len=34
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001965640600_152
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=agent_message channel=dialog persist=Always liveClients=0 content_len=522
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001965935400_153
+[2026-07-14 03:07:56.881] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=522
+[SSE TRACE] push() ENTER: taskId=task_11982473269200_3 type=task_failed channel=status persist=Always liveClients=0 content_len=522
+[2026-07-14 03:07:56.881] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:56.882] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:07:56.882] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] broadcastFrame: taskId=task_11982473269200_3 event=task_failed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12001966314700_154
+[2026-07-14 03:07:56.884] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_11982473269200_3 status=failed after 20s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_11982473269200_3 count=26
+[SSE TRACE] HttpServer SSE response: taskId=task_11982473269200_3 sseBody_size=39671
+[2026-07-14 03:07:58.399] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:07:58.399] [info] [default] [LLM DEBUG] HTTP status=200, body_len=501
+[2026-07-14 03:07:58.399] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12003486685300_155
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12003487305200_156
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12003487735800_157
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12003488141500_158
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12003488479900_159
+[2026-07-14 03:07:58.403] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29698
+[2026-07-14 03:07:58.403] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:07:58.405] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:07:58.405] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:07:58.405] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:08:00.507] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:08:00.507] [info] [default] [LLM DEBUG] HTTP status=200, body_len=961
+[2026-07-14 03:08:00.508] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=488
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005594650800_160
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=dialog persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005595222100_161
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=debug persist=Always liveClients=0 content_len=488
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005595469800_162
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=status persist=Always liveClients=0 content_len=34
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005595750700_163
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=agent_message channel=dialog persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005595999100_164
+[2026-07-14 03:08:00.511] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=475
+[SSE TRACE] push() ENTER: taskId=task_11986297204300_4 type=task_failed channel=status persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_11986297204300_4 event=task_failed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12005596290400_165
+[2026-07-14 03:08:00.513] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_11986297204300_4 status=failed after 20s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_11986297204300_4 count=26
+[SSE TRACE] HttpServer SSE response: taskId=task_11986297204300_4 sseBody_size=38699
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12503790930900_166
+[2026-07-14 03:16:18.707] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_12503790461000_5, goal=hello 
+[2026-07-14 03:16:18.707] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 03:16:18.708] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12503798798900_167
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12503799518100_168
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12503799920200_169
+[2026-07-14 03:16:18.715] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31447
+[2026-07-14 03:16:18.715] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:16:18.717] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:16:18.718] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:16:18.718] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] HttpServer SSE handler START: taskId=task_12503790461000_5
+[2026-07-14 03:16:20.340] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:16:20.340] [info] [default] [LLM DEBUG] HTTP status=200, body_len=732
+[2026-07-14 03:16:20.340] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=252
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505427777500_170
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=dialog persist=Always liveClients=0 content_len=187
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505428414900_171
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=252
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505428766900_172
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505429351300_173
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505429576400_174
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505429910800_175
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12505430080200_176
+[2026-07-14 03:16:20.345] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31628
+[2026-07-14 03:16:20.345] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:16:20.346] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:16:20.347] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:16:20.347] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:16:22.719] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:16:22.719] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1292
+[2026-07-14 03:16:22.719] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=795
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12507805899700_177
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=dialog persist=Always liveClients=0 content_len=773
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12507806605500_178
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=795
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12507807177600_179
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12507808066800_180
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12507808446100_181
+[2026-07-14 03:16:22.724] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32592
+[2026-07-14 03:16:22.724] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:16:22.726] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:16:22.726] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:16:22.726] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:16:24.512] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:16:24.512] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1270
+[2026-07-14 03:16:24.513] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=768
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12509599418600_182
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=dialog persist=Always liveClients=0 content_len=721
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12509599982600_183
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=768
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12509600249100_184
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12509600585300_185
+[2026-07-14 03:16:24.515] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29237
+[2026-07-14 03:16:24.516] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:16:24.517] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:16:24.517] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:16:24.517] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:16:25.303] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:16:25.303] [info] [default] [LLM DEBUG] HTTP status=200, body_len=497
+[2026-07-14 03:16:25.303] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12510390829000_186
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12510391470200_187
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12510392046200_188
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12510392568700_189
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12510392877600_190
+[2026-07-14 03:16:25.308] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31281
+[2026-07-14 03:16:25.308] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:16:25.310] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:16:25.311] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:16:25.311] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:16:26.631] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:16:26.631] [info] [default] [LLM DEBUG] HTTP status=200, body_len=961
+[2026-07-14 03:16:26.631] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=488
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511719274500_191
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=dialog persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511720020600_192
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=debug persist=Always liveClients=0 content_len=488
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511720360700_193
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=status persist=Always liveClients=0 content_len=34
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511720828300_194
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=agent_message channel=dialog persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511721179200_195
+[2026-07-14 03:16:26.636] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=475
+[SSE TRACE] push() ENTER: taskId=task_12503790461000_5 type=task_failed channel=status persist=Always liveClients=0 content_len=475
+[SSE TRACE] broadcastFrame: taskId=task_12503790461000_5 event=task_failed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_12511721579200_196
+[2026-07-14 03:16:26.638] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_12503790461000_5 status=failed after 8s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_12503790461000_5 count=31
+[SSE TRACE] HttpServer SSE response: taskId=task_12503790461000_5 sseBody_size=42772
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13269146216100_197
+[2026-07-14 03:29:04.062] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_13269145887900_6, goal=test 
+[2026-07-14 03:29:04.062] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 03:29:04.064] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] HttpServer SSE handler START: taskId=task_13269145887900_6
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13269155011100_198
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13269155921400_199
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13269156242500_200
+[2026-07-14 03:29:04.071] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32195
+[2026-07-14 03:29:04.071] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:04.073] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:04.074] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:29:04.074] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:05.925] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:05.925] [info] [default] [LLM DEBUG] HTTP status=200, body_len=783
+[2026-07-14 03:29:05.925] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=303
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271011865800_201
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=238
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271012253400_202
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=303
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271012456400_203
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271012898300_204
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271013159900_205
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271013468800_206
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13271013670600_207
+[2026-07-14 03:29:05.929] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32403
+[2026-07-14 03:29:05.929] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:05.930] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:05.930] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:05.930] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:07.194] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:07.194] [info] [default] [LLM DEBUG] HTTP status=200, body_len=710
+[2026-07-14 03:29:07.194] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=225
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272282097200_208
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=214
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272282907300_209
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=225
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272283326400_210
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=22
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272283813500_211
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=45
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272285523700_212
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272285896200_213
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13272286082700_214
+[2026-07-14 03:29:07.201] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32827
+[2026-07-14 03:29:07.201] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:07.202] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:07.203] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:07.203] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:08.583] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:08.583] [info] [default] [LLM DEBUG] HTTP status=200, body_len=804
+[2026-07-14 03:29:08.584] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=320
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13273670608200_215
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=273
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13273671148500_216
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=320
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13273671431200_217
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13273671770200_218
+[2026-07-14 03:29:08.587] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29614
+[2026-07-14 03:29:08.587] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:08.591] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:08.591] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:08.591] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:10.026] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:10.026] [info] [default] [LLM DEBUG] HTTP status=200, body_len=814
+[2026-07-14 03:29:10.026] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=341
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=44
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13275112398300_219
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13275112957300_220
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13275113409700_221
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13275113641500_222
+[2026-07-14 03:29:10.029] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32687
+[2026-07-14 03:29:10.029] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:10.030] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:10.031] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:10.031] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:11.729] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:11.729] [info] [default] [LLM DEBUG] HTTP status=200, body_len=628
+[2026-07-14 03:29:11.730] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=141
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276816441700_223
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=136
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276817637000_224
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=141
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276818133400_225
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=22
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276818707400_226
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=45
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276819365800_227
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276819936400_228
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13276820194500_229
+[2026-07-14 03:29:11.736] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=33027
+[2026-07-14 03:29:11.736] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:11.737] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:11.738] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:11.738] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:13.079] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:13.079] [info] [default] [LLM DEBUG] HTTP status=200, body_len=815
+[2026-07-14 03:29:13.080] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=331
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13278167577800_230
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=284
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13278168224800_231
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=331
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13278168644500_232
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13278169251000_233
+[2026-07-14 03:29:13.084] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=29920
+[2026-07-14 03:29:13.084] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:13.085] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:13.086] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:29:13.086] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:15.073] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:15.073] [info] [default] [LLM DEBUG] HTTP status=200, body_len=501
+[2026-07-14 03:29:15.073] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13280160365500_234
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13280160865500_235
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13280161209400_236
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13280161518800_237
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13280161688900_238
+[2026-07-14 03:29:15.077] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31777
+[2026-07-14 03:29:15.077] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:15.078] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:15.078] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:29:15.078] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:16.597] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:16.597] [info] [default] [LLM DEBUG] HTTP status=200, body_len=771
+[2026-07-14 03:29:16.597] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=298
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281683559800_239
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=285
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281684064400_240
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=298
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281684282900_241
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281684546700_242
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281684883100_243
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281685437200_244
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13281685645900_245
+[2026-07-14 03:29:16.601] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31429
+[2026-07-14 03:29:16.601] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:29:16.602] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:29:16.602] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:29:16.602] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:29:18.859] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:29:18.859] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1316
+[2026-07-14 03:29:18.859] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=831
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=42
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283945968500_246
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283946425100_247
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=debug persist=Always liveClients=0 content_len=831
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283946663000_248
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283946938200_249
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283947135600_250
+[2026-07-14 03:29:18.862] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=completed, output_len=818
+[SSE TRACE] push() ENTER: taskId=task_13269145887900_6 type=task_completed channel=status persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13269145887900_6 event=task_completed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13283947427000_251
+[2026-07-14 03:29:18.864] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_13269145887900_6 status=completed after 15s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_13269145887900_6 count=55
+[SSE TRACE] HttpServer SSE response: taskId=task_13269145887900_6 sseBody_size=51991
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13706755089500_252
+[2026-07-14 03:36:21.670] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_13706754841500_7, goal=看一下文件目录里面有什么？
+[2026-07-14 03:36:21.671] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 03:36:21.674] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13706767611400_253
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13706768481800_254
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13706768954400_255
+[2026-07-14 03:36:21.684] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=33968
+[2026-07-14 03:36:21.684] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] HttpServer SSE handler START: taskId=task_13706754841500_7
+[2026-07-14 03:36:21.687] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:21.688] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:36:21.688] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:23.622] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:23.622] [info] [default] [LLM DEBUG] HTTP status=200, body_len=727
+[2026-07-14 03:36:23.622] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=247
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708708612300_256
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=182
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708709113600_257
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=247
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708709337100_258
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708709769800_259
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708709970900_260
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708710279400_261
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13708710446600_262
+[2026-07-14 03:36:23.625] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=34176
+[2026-07-14 03:36:23.625] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:36:23.627] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:23.627] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:36:23.627] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:26.136] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:26.136] [info] [default] [LLM DEBUG] HTTP status=200, body_len=694
+[2026-07-14 03:36:26.136] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=210
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711222920300_263
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=205
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711223321100_264
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=210
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711223489500_265
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=22
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711223741100_266
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=45
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711224194900_267
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711224556800_268
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13711224742200_269
+[2026-07-14 03:36:26.140] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=34585
+[2026-07-14 03:36:26.140] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:36:26.141] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:26.141] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:36:26.141] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:27.734] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:27.734] [info] [default] [LLM DEBUG] HTTP status=200, body_len=804
+[2026-07-14 03:36:27.735] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=320
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13712821158800_270
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=273
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13712821551700_271
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=320
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13712821718000_272
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=33
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13712822061600_273
+[2026-07-14 03:36:27.737] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=31387
+[2026-07-14 03:36:27.737] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:36:27.738] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:27.738] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 03:36:27.739] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:28.923] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:28.924] [info] [default] [LLM DEBUG] HTTP status=200, body_len=497
+[2026-07-14 03:36:28.924] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=27
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13714010130600_274
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13714010708700_275
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13714011030000_276
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13714011362300_277
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13714011534400_278
+[2026-07-14 03:36:28.926] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=33324
+[2026-07-14 03:36:28.927] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:36:28.928] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:28.928] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:36:28.928] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:30.359] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:30.359] [info] [default] [LLM DEBUG] HTTP status=200, body_len=771
+[2026-07-14 03:36:30.359] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=298
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715445488700_279
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=285
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715445875200_280
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=298
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715446036100_281
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715446301700_282
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715446498000_283
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=32
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715446740500_284
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13715446909600_285
+[2026-07-14 03:36:30.362] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=32907
+[2026-07-14 03:36:30.362] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 03:36:30.363] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 03:36:30.363] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 03:36:30.363] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 03:36:32.497] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 03:36:32.497] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1316
+[2026-07-14 03:36:32.497] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=831
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=42
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717583634000_286
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717584028900_287
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=debug persist=Always liveClients=0 content_len=831
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717584234200_288
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717584498300_289
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=agent_message channel=dialog persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717584688500_290
+[2026-07-14 03:36:32.500] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=completed, output_len=818
+[SSE TRACE] push() ENTER: taskId=task_13706754841500_7 type=task_completed channel=status persist=Always liveClients=0 content_len=818
+[SSE TRACE] broadcastFrame: taskId=task_13706754841500_7 event=task_completed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_13717585042300_291
+[2026-07-14 03:36:32.502] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_13706754841500_7 status=completed after 11s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_13706754841500_7 count=40
+[SSE TRACE] HttpServer SSE response: taskId=task_13706754841500_7 sseBody_size=48353
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15205428792400_292
+[2026-07-14 04:01:20.344] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_15205428539800_8, goal=你好
+[2026-07-14 04:01:20.344] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 04:01:20.347] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15205437757900_293
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15205438320800_294
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15205438696400_295
+[2026-07-14 04:01:20.354] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35379
+[2026-07-14 04:01:20.354] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:20.356] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:20.357] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 04:01:20.357] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[SSE TRACE] HttpServer SSE handler START: taskId=task_15205428539800_8
+[2026-07-14 04:01:22.384] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:01:22.384] [info] [default] [LLM DEBUG] HTTP status=200, body_len=794
+[2026-07-14 04:01:22.384] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=310
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207470926800_296
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=245
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207471316900_297
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=310
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207471498300_298
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207471954500_299
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207472192300_300
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207472514700_301
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15207472689500_302
+[2026-07-14 04:01:22.388] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35560
+[2026-07-14 04:01:22.388] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:22.389] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:22.389] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:01:22.389] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:01:25.143] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:01:25.143] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1290
+[2026-07-14 04:01:25.143] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=789
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15210229799000_303
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=767
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15210230214700_304
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=789
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15210230503900_305
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15210230982200_306
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15210231182500_307
+[2026-07-14 04:01:25.146] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=36518
+[2026-07-14 04:01:25.146] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:25.147] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:25.148] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:01:25.148] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:01:26.991] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:01:26.991] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:01:26.992] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15212078153000_308
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15212078934800_309
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15212079096100_310
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15212079566000_311
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15212079812500_312
+[2026-07-14 04:01:26.995] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=37082
+[2026-07-14 04:01:26.995] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:26.996] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:26.996] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:01:26.996] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:01:28.994] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:01:28.994] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:01:28.994] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15214080456200_313
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15214080890600_314
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15214081078400_315
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15214081557400_316
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15214081772900_317
+[2026-07-14 04:01:28.997] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=37646
+[2026-07-14 04:01:28.997] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:28.998] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:28.998] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:01:28.999] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:01:31.230] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:01:31.230] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:01:31.230] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15216316736800_318
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15216317117100_319
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15216317280900_320
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15216317749100_321
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15216317926900_322
+[2026-07-14 04:01:31.233] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=38210
+[2026-07-14 04:01:31.233] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:01:31.234] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:01:31.235] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:01:31.235] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:17.063] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:17.063] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:17.064] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15262151151100_323
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15262151611600_324
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15262151788600_325
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15262152284200_326
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15262152475800_327
+[2026-07-14 04:02:17.067] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=38774
+[2026-07-14 04:02:17.067] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:17.069] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:17.069] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:02:17.069] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:18.713] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:18.713] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:18.713] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15263799785700_328
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15263800171200_329
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15263800332300_330
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15263800784500_331
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15263801045100_332
+[2026-07-14 04:02:18.716] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=39338
+[2026-07-14 04:02:18.716] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:18.717] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:18.718] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:02:18.718] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:20.710] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:20.710] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:20.710] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15265796355900_333
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15265796742100_334
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15265796932800_335
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15265797404700_336
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15265797611300_337
+[2026-07-14 04:02:20.713] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=39902
+[2026-07-14 04:02:20.713] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:20.714] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:20.714] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:02:20.714] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:22.875] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:22.875] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:22.876] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15267961982600_338
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15267962362800_339
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15267962591600_340
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15267963005200_341
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15267963182100_342
+[2026-07-14 04:02:22.878] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=40560
+[2026-07-14 04:02:22.878] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:22.879] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:22.880] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:02:22.880] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:24.547] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:24.547] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:24.547] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15269633560500_343
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15269633967400_344
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15269634130900_345
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15269634616700_346
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15269634797800_347
+[2026-07-14 04:02:24.550] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=41124
+[2026-07-14 04:02:24.550] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:24.551] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:24.552] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:02:24.552] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:26.175] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:26.175] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1022
+[2026-07-14 04:02:26.175] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=524
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=40
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15271261628100_348
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=502
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15271262087600_349
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=debug persist=Always liveClients=0 content_len=524
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15271262251400_350
+[2026-07-14 04:02:26.177] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=2458
+[2026-07-14 04:02:26.177] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:02:26.177] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:02:26.178] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 04:02:26.178] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:02:29.321] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:02:29.321] [info] [default] [LLM DEBUG] HTTP status=200, body_len=1374
+[2026-07-14 04:02:29.322] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=897
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=dialog persist=Always liveClients=0 content_len=897
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15274408054600_351
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=agent_message channel=status persist=Always liveClients=0 content_len=50
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15274408424900_352
+[2026-07-14 04:02:29.323] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=897
+[SSE TRACE] push() ENTER: taskId=task_15205428539800_8 type=task_failed channel=status persist=Always liveClients=0 content_len=897
+[SSE TRACE] broadcastFrame: taskId=task_15205428539800_8 event=task_failed liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15274408795500_353
+[2026-07-14 04:02:29.325] [info] [default] [ORCH DEBUG] runTaskThread END (normal)
+[SSE TRACE] HttpServer SSE poll: taskId=task_15205428539800_8 status=failed after 69s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_15205428539800_8 count=62
+[SSE TRACE] HttpServer SSE response: taskId=task_15205428539800_8 sseBody_size=62163
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=task_created channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=task_created liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15327321699800_354
+[2026-07-14 04:03:22.237] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_15327321202500_9, goal=写一个二分查找cpp文件
+[2026-07-14 04:03:22.237] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 04:03:22.240] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15327332514400_355
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=debug persist=Always liveClients=0 content_len=29
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15327333346800_356
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15327333852400_357
+[2026-07-14 04:03:22.249] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35426
+[2026-07-14 04:03:22.249] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[SSE TRACE] HttpServer SSE handler START: taskId=task_15327321202500_9
+[2026-07-14 04:03:22.252] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:03:22.253] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 04:03:22.253] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:03:24.273] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:03:24.273] [info] [default] [LLM DEBUG] HTTP status=200, body_len=857
+[2026-07-14 04:03:24.273] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=377
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=39
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329359554600_358
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=dialog persist=Always liveClients=0 content_len=312
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329359953000_359
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=debug persist=Always liveClients=0 content_len=377
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329360107400_360
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=36
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329360515500_361
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=30
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329360965900_362
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=debug persist=Always liveClients=0 content_len=31
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329361306600_363
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=37
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15329361478500_364
+[2026-07-14 04:03:24.276] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=35681
+[2026-07-14 04:03:24.276] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 04:03:24.278] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 04:03:24.278] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 04:03:24.278] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 04:03:30.259] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 04:03:30.259] [info] [default] [LLM DEBUG] HTTP status=200, body_len=2811
+[2026-07-14 04:03:30.260] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=2233
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=41
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15335346376100_365
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=dialog persist=Always liveClients=0 content_len=1059
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15335346799900_366
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=debug persist=Always liveClients=0 content_len=2233
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15335346995900_367
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=status persist=Always liveClients=0 content_len=23
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15335347503200_368
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=task_cancelled channel=status persist=Always liveClients=0 content_len=24
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=task_cancelled liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15403719309400_369
+[SSE TRACE] HttpServer SSE poll: taskId=task_15327321202500_9 status=cancelled after 76s
+[SSE TRACE] HttpServer SSE events from DB: taskId=task_15327321202500_9 count=16
+[SSE TRACE] HttpServer SSE response: taskId=task_15327321202500_9 sseBody_size=8416
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=agent_message channel=debug persist=Always liveClients=0 content_len=89
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=agent_message liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15455358748700_370
+[2026-07-14 04:05:30.274] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=cancelled, output_len=24
+[SSE TRACE] push() ENTER: taskId=task_15327321202500_9 type=task_cancelled channel=status persist=Always liveClients=0 content_len=24
+[SSE TRACE] broadcastFrame: taskId=task_15327321202500_9 event=task_cancelled liveClients=0 matched=0
+[SSE TRACE] push() DB saved: eventId=event_15455359299700_371
+[2026-07-14 04:05:30.276] [info] [default] [ORCH DEBUG] runTaskThread END (normal)

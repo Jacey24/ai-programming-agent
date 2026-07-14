@@ -10,6 +10,9 @@ struct WorkspaceRecord {
   std::string id;
   std::string name;
   std::string path;
+  std::string description;
+  std::string last_opened_at;
+  std::string permissions_config;
   std::string created_at;
 };
 
@@ -23,6 +26,7 @@ public:
                          const std::string &created_at);
   std::optional<WorkspaceRecord> findById(const std::string &workspace_id);
   std::vector<WorkspaceRecord> listAll();
+  bool deleteById(const std::string &workspace_id);
 
 private:
   sqlite3 *db_;

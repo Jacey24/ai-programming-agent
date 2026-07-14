@@ -10,6 +10,7 @@ struct GlobalRecord {
   std::string id;
   std::string name;
   std::string description;
+  std::string workspace_id;
   std::string created_at;
   std::string updated_at;
 };
@@ -34,7 +35,8 @@ public:
   GlobalRecord createGlobal(const std::string &id, const std::string &name,
                             const std::string &description,
                             const std::string &created_at,
-                            const std::string &updated_at);
+                            const std::string &updated_at,
+                            const std::string &workspace_id = "");
   std::optional<GlobalRecord> findById(const std::string &global_id);
   std::vector<GlobalRecord> listAll();
   bool deleteById(const std::string &global_id);

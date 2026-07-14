@@ -4,15 +4,19 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
+#define close_socket closesocket
 #else
 #include <sys/socket.h>
 #include <unistd.h>
+#define close_socket close
 #endif
 
 #include <atomic>
 #include <chrono>
 #include <cstring>
 #include <ctime>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -111,8 +115,10 @@ void SSEGateway::broadcastFrame(const std::string &taskId,
   std::string frame = "event: " + eventName + "\ndata: " + data + "\n\n";
 
   std::lock_guard<std::mutex> lock(clientsMutex_);
+  int matched = 0;
   for (auto &client : liveClients_) {
-    if (client.taskId == taskId && client.alive) {
+    if (client.taskId == taskId && client.alive && client.directPush) {
+      ++matched;
       try {
         client.sendFn(frame);
       } catch (...) {
@@ -314,17 +320,29 @@ void SSEGateway::pushProgress(const std::string &taskId, int current, int total,
 }
 
 // ============================================================
-// 旧接口：通过 clientFd
+// 旧接口：通过 clientFd（已弃用，保留向后兼容）
 // ============================================================
 void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
+  // 先发 HTTP 响应头（旧接口自己处理，因为不经过 httplib）
+  const std::string headers =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/event-stream; charset=utf-8\r\n"
+      "Cache-Control: no-cache\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
+      "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+      "Access-Control-Allow-Headers: Content-Type\r\n"
+      "Connection: keep-alive\r\n\r\n";
+  send(clientFd, headers.data(), static_cast<int>(headers.size()),
+       MSG_NOSIGNAL);
+
   auto sendFn = [clientFd](const std::string &frame) {
-    send(clientFd, frame.data(), frame.size(), MSG_NOSIGNAL);
+    send(clientFd, frame.data(), static_cast<int>(frame.size()), MSG_NOSIGNAL);
   };
   streamTaskEvents(sendFn, taskId);
 }
 
 // ============================================================
-// 新接口：通过回调
+// 新接口：通过回调（不发送 HTTP 头 —— 由 httplib 等上层处理）
 // ============================================================
 void SSEGateway::streamTaskEvents(SendCallback sendFn,
                                   const std::string &taskId) {
@@ -335,16 +353,6 @@ void SSEGateway::streamTaskEvents(SendCallback sendFn,
     sendFn(errFrame);
     return;
   }
-
-  const std::string headers =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/event-stream; charset=utf-8\r\n"
-      "Cache-Control: no-cache\r\n"
-      "Access-Control-Allow-Origin: *\r\n"
-      "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
-      "Access-Control-Allow-Headers: Content-Type\r\n"
-      "Connection: keep-alive\r\n\r\n";
-  sendFn(headers);
 
   streamTaskEventsImpl(taskId, sendFn);
 }
@@ -361,7 +369,7 @@ void SSEGateway::streamTaskEventsImpl(const std::string &taskId,
   // 注册客户端
   {
     std::lock_guard<std::mutex> lock(clientsMutex_);
-    liveClients_.push_back({taskId, true, sendFn});
+    liveClients_.push_back({taskId, true, false, sendFn});
   }
 
   // 订阅 EventBus 实时事件

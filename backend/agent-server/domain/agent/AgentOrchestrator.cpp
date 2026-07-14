@@ -1,7 +1,10 @@
 #include "AgentOrchestrator.h"
 #include "AgentConfiguration.h"
 #include "facade/DataAccessFacade.h"
+#include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
+
+#include "common/logging/Logger.h"
 
 #include <nlohmann/json.hpp>
 
@@ -290,20 +293,47 @@ void AgentOrchestrator::runTaskThread(
     const std::string &taskId, const std::string &globalId,
     const std::string &workspaceId, const std::string &goal,
     std::shared_ptr<std::atomic<bool>> cancelFlag) {
-  AgentLoop agentLoop(expertConfigPath_);
+  LOG_INFO("[ORCH DEBUG] runTaskThread START: taskId={}, goal={}", taskId,
+           goal.substr(0, 80));
 
-  if (!agentLoop.isReady()) {
+  try {
+    LOG_INFO("[ORCH DEBUG] Creating AgentLoop with config={}",
+             expertConfigPath_);
+    AgentLoop agentLoop(expertConfigPath_);
+
+    if (!agentLoop.isReady()) {
+      LOG_ERROR("[ORCH DEBUG] AgentLoop NOT READY, aborting");
+      AgentLoopResult errorResult;
+      errorResult.status = "config_error";
+      errorResult.finalOutput = "Expert 配置未加载";
+      finalizeTask(taskId, globalId, errorResult);
+      LOG_INFO("[ORCH DEBUG] runTaskThread END (config_error)");
+      return;
+    }
+
+    LOG_INFO("[ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... "
+             "llmAvailable={}",
+             LlmClientFacade::getInstance().isAvailable());
+    AgentLoopResult result =
+        agentLoop.run(taskId, globalId, workspaceId, goal, cancelFlag);
+
+    LOG_INFO("[ORCH DEBUG] agentLoop.run() returned: status={}, output_len={}",
+             result.status, result.finalOutput.size());
+    finalizeTask(taskId, globalId, result);
+    LOG_INFO("[ORCH DEBUG] runTaskThread END (normal)");
+  } catch (const std::exception &e) {
+    LOG_ERROR("[ORCH DEBUG] runTaskThread EXCEPTION: {}", e.what());
     AgentLoopResult errorResult;
-    errorResult.status = "config_error";
-    errorResult.finalOutput = "Expert 配置未加载";
+    errorResult.status = "failed";
+    errorResult.finalOutput = std::string("Agent 执行异常: ") + e.what();
     finalizeTask(taskId, globalId, errorResult);
-    return;
+  } catch (...) {
+    LOG_ERROR("[ORCH DEBUG] runTaskThread UNKNOWN EXCEPTION");
+    AgentLoopResult errorResult;
+    errorResult.status = "failed";
+    errorResult.finalOutput = "Agent 执行未知异常";
+    finalizeTask(taskId, globalId, errorResult);
   }
-
-  AgentLoopResult result =
-      agentLoop.run(taskId, globalId, workspaceId, goal, cancelFlag);
-
-  finalizeTask(taskId, globalId, result);
 }
 
 } // namespace codepilot

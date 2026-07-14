@@ -18,6 +18,8 @@ namespace codepilot {
 struct TaskContext {
   std::string taskId;
   std::string globalId;                  // 归属的 Global ID (g_xxx)
+  std::string workspaceId;               // 工作区 ID (w_xxx)
+  std::string workspacePath;             // 工作区文件系统路径
   std::string goal;                      // 用户原始需求
   Plan currentPlan;                      // 当前 plan 状态
   std::string summary;                   // 当前任务阶段的自然语言摘要

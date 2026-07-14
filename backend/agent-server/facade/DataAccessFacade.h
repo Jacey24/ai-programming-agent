@@ -91,6 +91,7 @@ public:
                                   const std::string &path);
   std::optional<WorkspaceRecord> getWorkspace(const std::string &id);
   std::vector<WorkspaceRecord> listWorkspaces();
+  bool deleteWorkspace(const std::string &id);
 
   // ============================================================
   // 执行日志组

@@ -208,6 +208,16 @@ std::string PromptBuilder::buildInitial(const ExpertConfig &expert,
                     "剩余轮次: " + std::to_string(expert.maxInternalRounds));
   tmpl = replaceAll(tmpl, "{session}", ""); // 首轮无 session
 
+  // 注入 workspace 上下文
+  std::string workspaceInfo;
+  if (!ctx.workspacePath.empty()) {
+    workspaceInfo = "\n## 工作目录\n你当前的工作目录是: " + ctx.workspacePath +
+                    "\n所有文件操作都以此为基础路径。使用相对路径时，"
+                    "会自动解析到此工作目录下。\n";
+    workspaceInfo += "工作区标识: " + ctx.workspaceId + "\n";
+  }
+  tmpl = replaceAll(tmpl, "{workspace}", workspaceInfo);
+
   return tmpl;
 }
 

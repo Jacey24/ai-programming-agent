@@ -1,0 +1,98 @@
+[INFO] Project root: d:\VS Code stuff\ai-programming-agent
+[2026-07-14 02:03:18.308] [info] [default] LlmClientFacade available: true
+[2026-07-14 02:03:18.308] [info] [default] LlmClientFacade default provider: DeepSeek
+[2026-07-14 02:03:18.309] [info] [default] AgentOrchestrator ready: true
+[2026-07-14 02:03:18.309] [info] [default] Loaded 4 experts
+[2026-07-14 02:03:18.309] [info] [default]   Expert [planner] entry=yes llm=(default)/(default) tools=[(none)]
+[2026-07-14 02:03:18.309] [info] [default]   Expert [executor] entry=no llm=(default)/(default) tools=[file.write,file.read,file.list,file.apply_patch,shell.run,git.status,git.diff]
+[2026-07-14 02:03:18.309] [info] [default]   Expert [reviewer] entry=no llm=(default)/(default) tools=[(none)]
+[2026-07-14 02:03:18.309] [info] [default]   Expert [summarizer] entry=no llm=(default)/(default) tools=[(none)]
+[2026-07-14 02:03:18.309] [info] [default] CodePilot Agent Server starting
+[2026-07-14 02:03:18.309] [info] [default] Config: config/agent.json
+[2026-07-14 02:03:18.309] [info] [default] Workspace: ./workspace
+[2026-07-14 02:03:18.309] [info] [default] SQLite: ./storage/agent.db connected=true
+[2026-07-14 02:03:58.214] [info] [default] [ORCH DEBUG] runTaskThread START: taskId=task_8163298554900_1, goal=test
+[2026-07-14 02:03:58.214] [info] [default] [ORCH DEBUG] Creating AgentLoop with config=config/experts.json
+[2026-07-14 02:03:58.216] [info] [default] [ORCH DEBUG] AgentLoop ready, calling agentLoop.run()... llmAvailable=true
+[2026-07-14 02:03:58.220] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=20590
+[2026-07-14 02:03:58.220] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:03:58.221] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:03:58.231] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 02:03:58.231] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:03:59.999] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:03:59.999] [info] [default] [LLM DEBUG] HTTP status=200, body_len=752
+[2026-07-14 02:04:00.000] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=272
+[2026-07-14 02:04:00.004] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=20798
+[2026-07-14 02:04:00.004] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:00.006] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:00.007] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:00.007] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:02.028] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:02.028] [info] [default] [LLM DEBUG] HTTP status=200, body_len=834
+[2026-07-14 02:04:02.028] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=348
+[2026-07-14 02:04:02.035] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=21345
+[2026-07-14 02:04:02.035] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:02.035] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:02.036] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:02.036] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:03.771] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:03.771] [info] [default] [LLM DEBUG] HTTP status=200, body_len=822
+[2026-07-14 02:04:03.771] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=338
+[2026-07-14 02:04:03.774] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=18045
+[2026-07-14 02:04:03.774] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:03.776] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:03.776] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:03.776] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:05.607] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:05.607] [info] [default] [LLM DEBUG] HTTP status=200, body_len=811
+[2026-07-14 02:04:05.608] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=338
+[2026-07-14 02:04:05.611] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=21100
+[2026-07-14 02:04:05.611] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:05.612] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:05.612] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:05.612] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:06.932] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:06.932] [info] [default] [LLM DEBUG] HTTP status=200, body_len=691
+[2026-07-14 02:04:06.932] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=208
+[2026-07-14 02:04:06.937] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=21507
+[2026-07-14 02:04:06.938] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:06.938] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:06.939] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:06.939] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:08.458] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:08.458] [info] [default] [LLM DEBUG] HTTP status=200, body_len=822
+[2026-07-14 02:04:08.459] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=338
+[2026-07-14 02:04:08.461] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=18347
+[2026-07-14 02:04:08.461] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:08.462] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:08.462] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:08.462] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:10.449] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:10.449] [info] [default] [LLM DEBUG] HTTP status=200, body_len=760
+[2026-07-14 02:04:10.449] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=287
+[2026-07-14 02:04:10.453] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=21402
+[2026-07-14 02:04:10.453] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:10.454] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:10.454] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:10.454] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:12.247] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:12.247] [info] [default] [LLM DEBUG] HTTP status=200, body_len=833
+[2026-07-14 02:04:12.247] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=349
+[2026-07-14 02:04:12.251] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=18671
+[2026-07-14 02:04:12.251] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:12.252] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:12.252] [info] [default] [LLM DEBUG] Timeout: 120s (request=120, config=120)
+[2026-07-14 02:04:12.252] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:13.394] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:13.394] [info] [default] [LLM DEBUG] HTTP status=200, body_len=502
+[2026-07-14 02:04:13.394] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=25
+[2026-07-14 02:04:13.396] [info] [default] [LLM DEBUG] chat() called, model=deepseek-chat, prompt_len=20300
+[2026-07-14 02:04:13.396] [info] [default] [LLM DEBUG] API key resolved: len=35, apiKeyEnv=DEEPSEEK_API_KEY
+[2026-07-14 02:04:13.397] [info] [default] [LLM DEBUG] Parsed URL: schemeHost=https://api.deepseek.com, endpoint=/v1/chat/completions
+[2026-07-14 02:04:13.398] [info] [default] [LLM DEBUG] Timeout: 60s (request=60, config=120)
+[2026-07-14 02:04:13.398] [info] [default] [LLM DEBUG] Sending POST to /v1/chat/completions...
+[2026-07-14 02:04:15.568] [info] [default] [LLM DEBUG] POST returned, res_ptr=valid
+[2026-07-14 02:04:15.568] [info] [default] [LLM DEBUG] HTTP status=200, body_len=926
+[2026-07-14 02:04:15.568] [info] [default] [LLM DEBUG] chat() SUCCESS: content_len=452
+[2026-07-14 02:04:15.571] [info] [default] [ORCH DEBUG] agentLoop.run() returned: status=failed, output_len=439
+[2026-07-14 02:04:15.572] [info] [default] [ORCH DEBUG] runTaskThread END (normal)

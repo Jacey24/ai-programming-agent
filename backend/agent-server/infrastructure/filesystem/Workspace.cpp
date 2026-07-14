@@ -4,8 +4,16 @@
 #include <fstream>
 #include <sstream>
 
-
 namespace codepilot {
+
+// C++20: std::filesystem::path::u8string() returns std::u8string (char8_t),
+// which cannot implicitly convert to std::string (char).
+// On Windows with MSVC, path::string() returns ANSI (GBK) encoding,
+// so we must use u8string() and manually convert to std::string.
+static std::string path_to_utf8(const std::filesystem::path &p) {
+  auto u8 = p.u8string();
+  return std::string(reinterpret_cast<const char *>(u8.data()), u8.size());
+}
 
 static const std::vector<std::string> kDefaultIgnoredDirs = {
     ".git",   "build",  "dist",  "node_modules",
@@ -155,7 +163,7 @@ void Workspace::listFilesRecursive(const std::filesystem::path &dirPath,
 
   try {
     for (const auto &entry : std::filesystem::directory_iterator(dirPath)) {
-      std::string name = entry.path().filename().string();
+      std::string name = path_to_utf8(entry.path().filename());
 
       // 跳过忽略目录
       if (isIgnored(name))

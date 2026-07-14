@@ -190,6 +190,38 @@ std::string GlobalController::listGlobals(const std::string & /*request*/) {
   }
 }
 
+std::string GlobalController::deleteGlobal(const std::string &request) {
+  const std::string global_id =
+      extract_path_segment(request, "/api/v1/globals/");
+  if (global_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"global_id is required"}})",
+        "400 Bad Request");
+  }
+
+  if (!DataAccessFacade::getInstance().isInitialized()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+        "500 Internal Server Error");
+  }
+
+  try {
+    bool ok = DataAccessFacade::getInstance().deleteGlobal(global_id);
+    if (!ok) {
+      return http_response(
+          R"({"success":false,"error":{"code":"NOT_FOUND","message":"global not found"}})",
+          "404 Not Found");
+    }
+    return http_response(R"({"success":true,"data":{"id":")" +
+                         json_escape(global_id) + R"("}})");
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+}
+
 std::string GlobalController::getGlobalContext(const std::string &request) {
   const std::string full_segment =
       extract_path_segment(request, "/api/v1/globals/");

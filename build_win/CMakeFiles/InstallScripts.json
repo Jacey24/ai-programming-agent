@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/VS Code stuff/ai-programming-agent/build_win/cmake_install.cmake",
+		"D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/cmake_install.cmake",
+		"D:/VS Code stuff/ai-programming-agent/build_win/apps/cli-client/cmake_install.cmake",
+		"D:/VS Code stuff/ai-programming-agent/build_win/apps/tui-client/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

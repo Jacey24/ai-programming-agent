@@ -2,11 +2,11 @@
   "storage": {
     "comment": "SQLite 数据库路径。DataAccessFacade 通过此路径初始化。",
     "type": "sqlite",
-    "path": "/data/agent.db"
+    "path": "./storage/agent.db"
   },
   "workspace": {
     "comment": "Agent 工作区根路径。ToolSystem 通过此路径初始化。",
-    "root": "/workspace"
+    "root": "./workspace"
   },
   "server": {
     "comment": "服务器绑定地址与端口。",

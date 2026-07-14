@@ -1,0 +1,36 @@
+# CMake generation dependency list for this directory.
+D:/DevTools/vcpkg/scripts/buildsystems/vcpkg.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeCInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeCXXInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeCommonLanguageInclude.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeDependentOption.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeGenericSystem.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeInitializeConfigs.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeLanguageInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeRCInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeSystemSpecificInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/CMakeSystemSpecificInitialize.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Compiler/MSVC-C.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Compiler/MSVC-CXX.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Compiler/MSVC.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Internal/CMakeCLinkerInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Internal/CMakeCXXLinkerInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Internal/CMakeCommonLinkerInformation.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Linker/MSVC-C.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Linker/MSVC-CXX.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Linker/MSVC.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Linker/Windows-MSVC-C.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Linker/Windows-MSVC-CXX.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Linker/Windows-MSVC.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Windows-Initialize.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Windows-MSVC-C.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Windows-MSVC-CXX.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Windows-MSVC.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/Windows.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/Platform/WindowsPaths.cmake
+D:/VS Code stuff/ai-programming-agent/CMakeLists.txt
+D:/VS Code stuff/ai-programming-agent/build_win/CMakeFiles/4.3.3/CMakeCCompiler.cmake
+D:/VS Code stuff/ai-programming-agent/build_win/CMakeFiles/4.3.3/CMakeCXXCompiler.cmake
+D:/VS Code stuff/ai-programming-agent/build_win/CMakeFiles/4.3.3/CMakeRCCompiler.cmake
+D:/VS Code stuff/ai-programming-agent/build_win/CMakeFiles/4.3.3/CMakeSystem.cmake

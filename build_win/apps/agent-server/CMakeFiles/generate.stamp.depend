@@ -1,0 +1,7 @@
+# CMake generation dependency list for this directory.
+D:/DevTools/vcpkg/installed/x64-windows/share/openssl/vcpkg-cmake-wrapper.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/FindOpenSSL.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/FindPackageHandleStandardArgs.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/FindPackageMessage.cmake
+D:/DevTools/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3/mingw64/share/cmake-4.3/Modules/SelectLibraryConfigurations.cmake
+D:/VS Code stuff/ai-programming-agent/apps/agent-server/CMakeLists.txt

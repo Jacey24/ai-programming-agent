@@ -1,5 +1,6 @@
 #include "facade/DataAccessFacade.h"
 #include "infrastructure/storage/SqliteConnection.h"
+#include "infrastructure/storage/migrations/MigrationRunner.h"
 
 #include <atomic>
 #include <chrono>
@@ -130,6 +131,9 @@ void DataAccessFacade::createAllTables() {
                "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
                "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;",
                nullptr, nullptr, nullptr);
+
+  // 版本化数据库迁移（幂等，自动处理 ALTER TABLE 等增量变更）
+  MigrationRunner(db_).migrate();
 }
 
 // ============================================================
@@ -307,6 +311,13 @@ DataAccessFacade::getWorkspace(const std::string &id) {
 std::vector<WorkspaceRecord> DataAccessFacade::listWorkspaces() {
   std::lock_guard<std::mutex> lock(mutex_);
   return WorkspaceRepository(db_).listAll();
+}
+
+bool DataAccessFacade::deleteWorkspace(const std::string &id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<bool>(
+      "deleteWorkspace",
+      [&]() { return WorkspaceRepository(db_).deleteById(id); }, false);
 }
 
 // ============================================================

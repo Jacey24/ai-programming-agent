@@ -1,0 +1,10 @@
+^D:\VS CODE STUFF\AI-PROGRAMMING-AGENT\APPS\AGENT-SERVER\CMAKELISTS.TXT
+setlocal
+D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\bin\cmake.exe "-SD:/VS Code stuff/ai-programming-agent" "-BD:/VS Code stuff/ai-programming-agent/build_win" --check-stamp-file "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

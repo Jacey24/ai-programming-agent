@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\apps\tool-tests\tool_test_main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\ToolSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\ToolRegistry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\FileTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\BuiltinShell.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\ShellTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\GitTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\security\RiskDetector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\debug\Debugger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\security\PermissionManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\filesystem\Workspace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\process\ProcessRunner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\event\EventBus.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\event\EventDispatcher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\VS Code stuff\ai-programming-agent\apps\agent-server\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{9649900B-367A-3B0D-8FD7-3153065484B3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

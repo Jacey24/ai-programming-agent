@@ -9,6 +9,11 @@
 struct SessionRecord {
   std::string id;
   std::string title;
+  std::string alias;
+  std::string workspace_id;
+  std::string summary;
+  std::string summary_updated_at;
+  std::string last_active_at;
   std::string created_at;
   std::string updated_at;
 };

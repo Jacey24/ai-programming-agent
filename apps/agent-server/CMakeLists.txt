@@ -1,3 +1,20 @@
+# SQLite3 单体源文件（跨平台，无需预装库）
+add_library(sqlite3 STATIC
+    ${CMAKE_SOURCE_DIR}/third_party/sqlite3/sqlite3.c
+)
+set_source_files_properties(
+    ${CMAKE_SOURCE_DIR}/third_party/sqlite3/sqlite3.c
+    PROPERTIES LANGUAGE C
+)
+target_include_directories(sqlite3 PUBLIC
+    ${CMAKE_SOURCE_DIR}/third_party/sqlite3
+)
+if(MSVC)
+    target_compile_definitions(sqlite3 PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+    )
+endif()
+
 add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
@@ -47,6 +64,8 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventDispatcher.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceManager.cpp
     ${CMAKE_SOURCE_DIR}/modules/common/logging/LogConfig.cpp
     ${CMAKE_SOURCE_DIR}/modules/common/logging/Logger.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/GlobalRepository.cpp
@@ -58,6 +77,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/TaskRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/ToolCallRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/migrations/MigrationRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/WorkspaceRepository.cpp
 )
 
@@ -67,10 +87,30 @@ target_include_directories(codepilot-agent-server PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
     ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
     ${CMAKE_SOURCE_DIR}/third_party/sqlite3
+    ${CMAKE_SOURCE_DIR}/third_party/cpp-httplib
     ${CMAKE_SOURCE_DIR}/modules
 )
 
 target_link_libraries(codepilot-agent-server PRIVATE sqlite3)
+
+# OpenSSL 强制要求 - LLM HTTPS 客户端必需
+# 当未通过 -DCMAKE_TOOLCHAIN_FILE 指定 vcpkg 时，手动指定路径
+if(NOT DEFINED OPENSSL_ROOT_DIR AND EXISTS "D:/DevTools/vcpkg/installed/x64-windows")
+    set(OPENSSL_ROOT_DIR "D:/DevTools/vcpkg/installed/x64-windows")
+endif()
+find_package(OpenSSL REQUIRED)
+target_link_libraries(codepilot-agent-server PRIVATE
+    OpenSSL::SSL
+    OpenSSL::Crypto
+)
+target_compile_definitions(codepilot-agent-server PRIVATE
+    CPPHTTPLIB_OPENSSL_SUPPORT
+)
+message(STATUS "OpenSSL found: ${OPENSSL_VERSION} - LLM HTTPS Client enabled")
+
+if(WIN32)
+    target_link_libraries(codepilot-agent-server PRIVATE ws2_32)
+endif()
 
 install(TARGETS codepilot-agent-server RUNTIME DESTINATION bin)
 

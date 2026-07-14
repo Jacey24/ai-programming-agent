@@ -1,0 +1,504 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A87ABEA7-5BF9-35A6-AA04-5D3A83557519}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <VcpkgEnabled>false</VcpkgEnabled>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>codepilot-agent-server</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="do_not_import_user.props" Condition="exists('do_not_import_user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">codepilot-agent-server.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">codepilot-agent-server</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">codepilot-agent-server.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">codepilot-agent-server</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">codepilot-agent-server.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">codepilot-agent-server</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">codepilot-agent-server.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">codepilot-agent-server</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "D:/DevTools/vcpkg/installed/x64-windows/include" /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message></Message>
+      <Command>setlocal
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noprofile -executionpolicy Bypass -file D:/DevTools/vcpkg/scripts/buildsystems/msbuild/applocal.ps1 -targetBinary "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Debug/codepilot-agent-server.exe" -installedDir D:/DevTools/vcpkg/installed/x64-windows/debug/bin -OutVariable out
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>Debug\sqlite3.lib;D:\DevTools\vcpkg\installed\x64-windows\debug\lib\libssl.lib;D:\DevTools\vcpkg\installed\x64-windows\debug\lib\libcrypto.lib;ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Debug/codepilot-agent-server.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Debug/codepilot-agent-server.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "D:/DevTools/vcpkg/installed/x64-windows/include" /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message></Message>
+      <Command>setlocal
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noprofile -executionpolicy Bypass -file D:/DevTools/vcpkg/scripts/buildsystems/msbuild/applocal.ps1 -targetBinary "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Release/codepilot-agent-server.exe" -installedDir D:/DevTools/vcpkg/installed/x64-windows/bin -OutVariable out
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>Release\sqlite3.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libssl.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libcrypto.lib;ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Release/codepilot-agent-server.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/Release/codepilot-agent-server.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "D:/DevTools/vcpkg/installed/x64-windows/include" /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message></Message>
+      <Command>setlocal
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noprofile -executionpolicy Bypass -file D:/DevTools/vcpkg/scripts/buildsystems/msbuild/applocal.ps1 -targetBinary "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/MinSizeRel/codepilot-agent-server.exe" -installedDir D:/DevTools/vcpkg/installed/x64-windows/bin -OutVariable out
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>MinSizeRel\sqlite3.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libssl.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libcrypto.lib;ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/MinSizeRel/codepilot-agent-server.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/MinSizeRel/codepilot-agent-server.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /external:I "D:/DevTools/vcpkg/installed/x64-windows/include" /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CPPHTTPLIB_OPENSSL_SUPPORT;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\VS Code stuff\ai-programming-agent\apps\agent-server;D:\VS Code stuff\ai-programming-agent\backend\agent-server;D:\VS Code stuff\ai-programming-agent\third_party\nlohmann_json;D:\VS Code stuff\ai-programming-agent\third_party\spdlog\include;D:\VS Code stuff\ai-programming-agent\third_party\sqlite3;D:\VS Code stuff\ai-programming-agent\third_party\cpp-httplib;D:\VS Code stuff\ai-programming-agent\modules;D:\DevTools\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <PostBuildEvent>
+      <Message></Message>
+      <Command>setlocal
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noprofile -executionpolicy Bypass -file D:/DevTools/vcpkg/scripts/buildsystems/msbuild/applocal.ps1 -targetBinary "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/RelWithDebInfo/codepilot-agent-server.exe" -installedDir D:/DevTools/vcpkg/installed/x64-windows/bin -OutVariable out
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+    </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>RelWithDebInfo\sqlite3.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libssl.lib;D:\DevTools\vcpkg\installed\x64-windows\lib\libcrypto.lib;ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention></DataExecutionPrevention>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
+      <ImportLibrary>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/RelWithDebInfo/codepilot-agent-server.lib</ImportLibrary>
+      <LinkErrorReporting></LinkErrorReporting>
+      <ProgramDataBaseFile>D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/RelWithDebInfo/codepilot-agent-server.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress></RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\VS Code stuff\ai-programming-agent\apps\agent-server\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule D:/VS Code stuff/ai-programming-agent/apps/agent-server/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\bin\cmake.exe "-SD:/VS Code stuff/ai-programming-agent" "-BD:/VS Code stuff/ai-programming-agent/build_win" --check-stamp-file "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\DevTools\vcpkg\installed\x64-windows\share\openssl\vcpkg-cmake-wrapper.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindOpenSSL.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageMessage.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\SelectLibraryConfigurations.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule D:/VS Code stuff/ai-programming-agent/apps/agent-server/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\bin\cmake.exe "-SD:/VS Code stuff/ai-programming-agent" "-BD:/VS Code stuff/ai-programming-agent/build_win" --check-stamp-file "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\DevTools\vcpkg\installed\x64-windows\share\openssl\vcpkg-cmake-wrapper.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindOpenSSL.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageMessage.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\SelectLibraryConfigurations.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule D:/VS Code stuff/ai-programming-agent/apps/agent-server/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\bin\cmake.exe "-SD:/VS Code stuff/ai-programming-agent" "-BD:/VS Code stuff/ai-programming-agent/build_win" --check-stamp-file "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\DevTools\vcpkg\installed\x64-windows\share\openssl\vcpkg-cmake-wrapper.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindOpenSSL.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageMessage.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\SelectLibraryConfigurations.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule D:/VS Code stuff/ai-programming-agent/apps/agent-server/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\bin\cmake.exe "-SD:/VS Code stuff/ai-programming-agent" "-BD:/VS Code stuff/ai-programming-agent/build_win" --check-stamp-file "D:/VS Code stuff/ai-programming-agent/build_win/apps/agent-server/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\DevTools\vcpkg\installed\x64-windows\share\openssl\vcpkg-cmake-wrapper.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindOpenSSL.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageHandleStandardArgs.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\FindPackageMessage.cmake;D:\DevTools\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3\mingw64\share\cmake-4.3\Modules\SelectLibraryConfigurations.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\apps\agent-server\main.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\apps\agent-server\AppBootstrap.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\HttpServer.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\LogController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\FileChangeController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\ReplayController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\PermissionController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\SessionController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\TaskController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\ToolController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\WorkspaceController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\WorkspaceFileController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\ExpertController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\ConfigController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\GlobalController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\api\controllers\DebugController.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\LogService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\FileChangeService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\ReplayService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\SessionService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\TaskService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\ToolSystem.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\application\WorkspaceService.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\facade\DataAccessFacade.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\facade\LlmClientFacade.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\facade\SSEGateway.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\MessageBus.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\PromptBuilder.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\RouteEngine.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\PlanManager.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\ExpertRegistry.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\AgentConfiguration.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\AgentLoop.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\agent\AgentOrchestrator.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\llm\LlmClient.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\llm\OpenAICompatibleClient.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\BuiltinShell.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\FileTool.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\ShellTool.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\GitTool.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\tools\ToolRegistry.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\security\RiskDetector.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\debug\Debugger.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\domain\security\PermissionManager.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\process\ProcessRunner.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\event\EventBus.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\event\EventDispatcher.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\filesystem\Workspace.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\filesystem\WorkspaceRuntime.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\filesystem\WorkspaceManager.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\modules\common\logging\LogConfig.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\modules\common\logging\Logger.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\GlobalRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\EventRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\FileChangeRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\LogRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\PermissionRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\ReplayRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\SessionRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\TaskRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\ToolCallRepository.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\migrations\MigrationRunner.cpp" />
+    <ClCompile Include="D:\VS Code stuff\ai-programming-agent\backend\agent-server\infrastructure\storage\repositories\WorkspaceRepository.cpp" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="D:\VS Code stuff\ai-programming-agent\build_win\ZERO_CHECK.vcxproj">
+      <Project>{5539A6C3-AE0A-395E-A1BA-93E22BC7B7EC}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="D:\VS Code stuff\ai-programming-agent\build_win\apps\agent-server\sqlite3.vcxproj">
+      <Project>{20E597C3-99F8-3EB0-B23A-72189416B61A}</Project>
+      <Name>sqlite3</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS globals (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
+    workspace_id TEXT DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -23,6 +24,11 @@ CREATE TABLE IF NOT EXISTS globals (
     sqlite3_free(error_message);
     throw std::runtime_error(error);
   }
+
+  // 兼容迁移：为已有数据库添加 workspace_id 列
+  const char *migrate_sql =
+      "ALTER TABLE globals ADD COLUMN workspace_id TEXT DEFAULT ''";
+  sqlite3_exec(db_, migrate_sql, nullptr, nullptr, nullptr);
 }
 
 void GlobalRepository::initContextTable() {
@@ -52,11 +58,12 @@ GlobalRecord GlobalRepository::createGlobal(const std::string &id,
                                             const std::string &name,
                                             const std::string &description,
                                             const std::string &created_at,
-                                            const std::string &updated_at) {
+                                            const std::string &updated_at,
+                                            const std::string &workspace_id) {
   sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "INSERT INTO globals (id, name, description, created_at, updated_at) "
-      "VALUES (?, ?, ?, ?, ?);";
+  const char *sql = "INSERT INTO globals (id, name, description, workspace_id, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?);";
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     throw std::runtime_error(lastError());
   }
@@ -64,8 +71,9 @@ GlobalRecord GlobalRepository::createGlobal(const std::string &id,
   sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 3, description.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 4, created_at.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 5, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 4, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, created_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 6, updated_at.c_str(), -1, SQLITE_TRANSIENT);
 
   const int step_result = sqlite3_step(stmt);
   if (step_result != SQLITE_DONE) {
@@ -75,15 +83,16 @@ GlobalRecord GlobalRepository::createGlobal(const std::string &id,
   }
 
   sqlite3_finalize(stmt);
-  return GlobalRecord{id, name, description, created_at, updated_at};
+  return GlobalRecord{id,           name,       description,
+                      workspace_id, created_at, updated_at};
 }
 
 std::optional<GlobalRecord>
 GlobalRepository::findById(const std::string &global_id) {
   sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "SELECT id, name, description, created_at, updated_at FROM globals WHERE "
-      "id = ?;";
+  const char *sql = "SELECT id, name, description, workspace_id, created_at, "
+                    "updated_at FROM globals WHERE "
+                    "id = ?;";
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     throw std::runtime_error(lastError());
   }
@@ -106,15 +115,18 @@ GlobalRepository::findById(const std::string &global_id) {
       reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
   const auto *description =
       reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
-  const auto *created_at =
+  const auto *ws_id =
       reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
-  const auto *updated_at =
+  const auto *created_at =
       reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+  const auto *updated_at =
+      reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
 
   GlobalRecord global{
       id ? id : "",
       name ? name : "",
       description ? description : "",
+      ws_id ? ws_id : "",
       created_at ? created_at : "",
       updated_at ? updated_at : "",
   };
@@ -156,9 +168,9 @@ std::string GlobalRepository::lastError() const {
 
 std::vector<GlobalRecord> GlobalRepository::listAll() {
   sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "SELECT id, name, description, created_at, updated_at FROM globals ORDER "
-      "BY created_at DESC;";
+  const char *sql = "SELECT id, name, description, workspace_id, created_at, "
+                    "updated_at FROM globals ORDER "
+                    "BY created_at DESC;";
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     throw std::runtime_error(lastError());
   }
@@ -170,19 +182,22 @@ std::vector<GlobalRecord> GlobalRepository::listAll() {
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
     const auto *name =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
-    const auto *description =
+    const auto *desc =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
-    const auto *created_at =
+    const auto *ws_id =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3));
-    const auto *updated_at =
+    const auto *created =
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+    const auto *updated =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
 
     globals.push_back(GlobalRecord{
         id ? id : "",
         name ? name : "",
-        description ? description : "",
-        created_at ? created_at : "",
-        updated_at ? updated_at : "",
+        desc ? desc : "",
+        ws_id ? ws_id : "",
+        created ? created : "",
+        updated ? updated : "",
     });
   }
 

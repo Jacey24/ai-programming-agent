@@ -7,10 +7,12 @@
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <iostream>
 #include <sstream>
 
 namespace codepilot {
@@ -48,7 +50,32 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
   TaskContext ctx;
   ctx.taskId = taskId;
   ctx.globalId = globalId;
+  ctx.workspaceId = workspaceId;
   ctx.goal = goal;
+
+  // 解析 workspace 路径：优先从 WorkspaceManager 缓存获取，降级查
+  // DB，最后用默认值
+  {
+    auto &wm = WorkspaceManager::getInstance();
+    auto rt = wm.get(workspaceId);
+    if (rt) {
+      ctx.workspacePath = rt->workspacePath;
+    } else if (DataAccessFacade::getInstance().isInitialized()) {
+      auto ws = DataAccessFacade::getInstance().getWorkspace(workspaceId);
+      if (ws) {
+        ctx.workspacePath = ws->path;
+      } else {
+        ctx.workspacePath =
+            ToolSystem::getInstance().isInitialized()
+                ? ToolSystem::getInstance().workspace().rootPath()
+                : ".";
+      }
+    } else {
+      ctx.workspacePath = ToolSystem::getInstance().isInitialized()
+                              ? ToolSystem::getInstance().workspace().rootPath()
+                              : ".";
+    }
+  }
 
   // ★ v2: 从 global_context 加载历史摘要注入首轮 prompt
   // 让同一 Global 下的后续 Task 自动感知前序任务的上下文
@@ -194,7 +221,27 @@ AgentLoop::runExpertChain(const std::string &taskId,
         llmResp = LlmClientFacade::getInstance().chat(prompt, provider, model,
                                                       timeout);
       } else {
-        lastOutput = "<done>LLM 未配置，跳过执行</done>";
+        // 推送明确的错误信息到 SSE
+        if (SSEGateway::getInstance().isInitialized()) {
+          json errMeta;
+          errMeta["source"] = "llm";
+          errMeta["expert"] = currentExpert->name;
+          errMeta["stage"] = "error";
+          errMeta["reason"] = "LLM 门面未初始化或无可用的 API Key";
+          SSEGateway::getInstance().push(
+              taskId, EventType::AgentMessage,
+              "[" + currentExpert->name +
+                  "] ⚠ LLM 不可用: 请检查 config/llm.json 和 API Key 环境变"
+                  "量",
+              errMeta, SSEGateway::Channel::Status,
+              SSEGateway::Persist::Always);
+          SSEGateway::getInstance().pushDialog(
+              taskId, "⚠ 无法执行任务: LLM 未配置。请设置 " +
+                          LlmClientFacade::getInstance().getDefaultProvider() +
+                          " 的 API Key 环境变量，然后重启服务。");
+        }
+        lastOutput =
+            "<done>LLM 未配置，跳过执行。请检查 API Key 环境变量。</done>";
         break;
       }
 

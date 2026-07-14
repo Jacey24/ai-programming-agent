@@ -166,6 +166,8 @@ private:
   struct SseClient {
     std::string taskId;
     bool alive{true};
+    bool directPush{
+        true}; // false = only EventBus callback, skip broadcastFrame
     SendCallback sendFn;
   };
   std::vector<SseClient> liveClients_;
