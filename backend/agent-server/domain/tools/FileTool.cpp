@@ -1,10 +1,29 @@
 #include "FileTool.h"
-#include "infrastructure/filesystem/WorkspaceManager.h"
+#include "infrastructure/filesystem/WorkspaceRuntime.h"
 
 #include <memory>
 #include <utility>
 
 namespace codepilot {
+
+namespace {
+
+template <typename Operation>
+ToolResult executeFileOperation(const ToolContext &context,
+                                const std::shared_ptr<BuiltinShell> &fallback,
+                                Operation &&operation) {
+  if (context.workspaceRuntime) {
+    auto runtime = context.workspaceRuntime;
+    if (!runtime->builtinShell) {
+      return ToolResult::Err("Workspace runtime has no file-operation shell");
+    }
+    std::lock_guard lock(runtime->executionMutex);
+    return operation(*runtime->builtinShell);
+  }
+  return operation(*fallback);
+}
+
+} // namespace
 
 // ============================================================
 // FileListTool - implements file.list
@@ -38,21 +57,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->listFiles(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.listFiles(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -87,21 +98,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->readFile(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.readFile(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -134,21 +137,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->writeFile(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.writeFile(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -180,21 +175,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->applyPatch(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.applyPatch(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -224,21 +211,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->changeDirectory(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.changeDirectory(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -266,21 +245,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->getWorkingDirectory(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.getWorkingDirectory(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -316,21 +287,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->searchFiles(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.searchFiles(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -361,21 +324,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->makeDirectory(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.makeDirectory(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -406,21 +361,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->removeDirectory(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.removeDirectory(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -451,21 +398,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->removeFile(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.removeFile(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -496,21 +435,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->copyFile(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.copyFile(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================
@@ -541,21 +472,13 @@ public:
 
   ToolResult execute(const ToolContext &context,
                      const json &arguments) override {
-    switchWorkspace(context);
-    return shell_->moveFile(arguments);
+    return executeFileOperation(context, shell_, [&arguments](BuiltinShell &shell) {
+      return shell.moveFile(arguments);
+    });
   }
 
 private:
   std::shared_ptr<BuiltinShell> shell_;
-
-  void switchWorkspace(const ToolContext &ctx) {
-    if (!ctx.workspaceId.empty()) {
-      auto rt = WorkspaceManager::getInstance().getOrCreate(ctx.workspaceId,
-                                                            ctx.workspacePath);
-      std::lock_guard lock(rt->executionMutex);
-      shell_->setWorkspace(rt->workspace);
-    }
-  }
 };
 
 // ============================================================

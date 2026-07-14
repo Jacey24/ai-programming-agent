@@ -1,8 +1,29 @@
 #include "GitTool.h"
-#include "infrastructure/filesystem/WorkspaceManager.h"
+#include "infrastructure/filesystem/WorkspaceRuntime.h"
 #include <sstream>
 
 namespace codepilot {
+
+namespace {
+
+std::shared_ptr<ProcessRunner>
+runnerFor(const ToolContext &context,
+          const std::shared_ptr<ProcessRunner> &fallback) {
+  if (context.workspaceRuntime && context.workspaceRuntime->processRunner) {
+    return context.workspaceRuntime->processRunner;
+  }
+  return fallback;
+}
+
+void setWorkingDirectory(const ToolContext &context, ProcessRunner &runner) {
+  if (context.workspaceRuntime) {
+    runner.setWorkingDirectory(context.workspaceRuntime->workspacePath);
+  } else if (!context.workspacePath.empty()) {
+    runner.setWorkingDirectory(context.workspacePath);
+  }
+}
+
+} // namespace
 
 // ============================================================
 // GitStatusTool 实现
@@ -27,12 +48,15 @@ RiskLevel GitStatusTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitStatusTool::execute(const ToolContext &context,
                                   const json & /*arguments*/) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
+  auto runner = runnerFor(context, runner_);
+  setWorkingDirectory(context, *runner);
 
-  ProcessResult pr = runner_->execute("git status", 30);
+  ProcessResult pr = runner->execute("git status", 30);
 
   ToolResult result;
   result.success = pr.success;
@@ -82,17 +106,20 @@ RiskLevel GitDiffTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitDiffTool::execute(const ToolContext &context,
                                 const json &arguments) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
+  auto runner = runnerFor(context, runner_);
+  setWorkingDirectory(context, *runner);
 
   std::string cmd = "git diff";
   if (arguments.contains("path")) {
     cmd += " -- \"" + arguments["path"].get<std::string>() + "\"";
   }
 
-  ProcessResult pr = runner_->execute(cmd, 30);
+  ProcessResult pr = runner->execute(cmd, 30);
 
   ToolResult result;
   result.success = pr.success;
@@ -145,10 +172,13 @@ RiskLevel GitCommitTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitCommitTool::execute(const ToolContext &context,
                                   const json &arguments) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
+  auto runner = runnerFor(context, runner_);
+  setWorkingDirectory(context, *runner);
 
   // 获取 commit message
   std::string message = "update";
@@ -157,7 +187,7 @@ ToolResult GitCommitTool::execute(const ToolContext &context,
   }
 
   // Step 1: git add .
-  ProcessResult addResult = runner_->execute("git add .", 30);
+  ProcessResult addResult = runner->execute("git add .", 30);
   if (!addResult.success) {
     std::ostringstream oss;
     oss << "git add failed (exit code " << addResult.exitCode << ")\n";
@@ -169,7 +199,7 @@ ToolResult GitCommitTool::execute(const ToolContext &context,
 
   // Step 2: git commit -m "message"
   std::string commitCmd = "git commit -m \"" + message + "\"";
-  ProcessResult commitResult = runner_->execute(commitCmd, 30);
+  ProcessResult commitResult = runner->execute(commitCmd, 30);
 
   ToolResult result;
   result.success = commitResult.success;
@@ -222,9 +252,13 @@ RiskLevel GitLogTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitLogTool::execute(const ToolContext &context,
                                const json &arguments) {
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
+  auto runner = runnerFor(context, runner_);
+  setWorkingDirectory(context, *runner);
 
   int count = arguments.contains("count") ? arguments["count"].get<int>() : 20;
   if (count < 1)
@@ -233,7 +267,7 @@ ToolResult GitLogTool::execute(const ToolContext &context,
     count = 100;
 
   std::string cmd = "git log --oneline -n " + std::to_string(count);
-  ProcessResult pr = runner_->execute(cmd, 30);
+  ProcessResult pr = runner->execute(cmd, 30);
 
   ToolResult result;
   result.success = pr.success;
@@ -288,9 +322,13 @@ RiskLevel GitBranchTool::riskLevel(const json &arguments) const {
 
 ToolResult GitBranchTool::execute(const ToolContext &context,
                                   const json &arguments) {
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
+  std::unique_lock<std::mutex> workspaceLock;
+  if (context.workspaceRuntime) {
+    workspaceLock = std::unique_lock<std::mutex>(
+        context.workspaceRuntime->executionMutex);
   }
+  auto runner = runnerFor(context, runner_);
+  setWorkingDirectory(context, *runner);
 
   std::string action = arguments.contains("action")
                            ? arguments["action"].get<std::string>()
@@ -309,7 +347,7 @@ ToolResult GitBranchTool::execute(const ToolContext &context,
     cmd = "git branch";
   }
 
-  ProcessResult pr = runner_->execute(cmd, 30);
+  ProcessResult pr = runner->execute(cmd, 30);
 
   ToolResult result;
   result.success = pr.success;

@@ -1,4 +1,5 @@
 #include "ToolSystem.h"
+#include "infrastructure/filesystem/WorkspaceManager.h"
 #include <fstream>
 #include <sstream>
 
@@ -171,6 +172,22 @@ ProcessRunner &ToolSystem::processRunner() {
 ToolResult ToolSystem::callTool(const std::string &name,
                                 const ToolContext &context,
                                 const json &arguments) {
+  // Resolve a runtime at the system boundary so tools receive all workspace
+  // resources through ToolContext rather than looking up global state.
+  ToolContext effectiveContext = context;
+  if (!effectiveContext.workspaceRuntime && !effectiveContext.workspaceId.empty()) {
+    std::string path = effectiveContext.workspacePath;
+    if (path.empty()) {
+      std::shared_lock lock(mutex_);
+      path = workspace_ ? workspace_->rootPath() : ".";
+    }
+    effectiveContext.workspaceRuntime =
+        WorkspaceManager::getInstance().getOrCreate(effectiveContext.workspaceId,
+                                                     path);
+    effectiveContext.workspacePath =
+        effectiveContext.workspaceRuntime->workspacePath;
+  }
+
   // 检查工具是否被禁用
   {
     std::shared_lock lock(mutex_);
@@ -182,10 +199,10 @@ ToolResult ToolSystem::callTool(const std::string &name,
 
   // 发布 ToolStarted 事件（EventBus 内部有锁）
   json startedMeta{{"tool_name", name}, {"arguments", arguments}};
-  const auto callId = context.options.find("tool_call_id");
-  if (callId != context.options.end())
+  const auto callId = effectiveContext.options.find("tool_call_id");
+  if (callId != effectiveContext.options.end())
     startedMeta["tool_call_id"] = callId->second;
-  eventBus_->publish(EventData::Create(context.taskId, EventType::ToolStarted,
+  eventBus_->publish(EventData::Create(effectiveContext.taskId, EventType::ToolStarted,
                                        "Starting tool: " + name, startedMeta));
 
   // ---- 重复指令检测（写锁范围尽可能小） ----
@@ -217,7 +234,7 @@ ToolResult ToolSystem::callTool(const std::string &name,
   if (debugger_ && debugger_->isEnabled() &&
       debugger_->hasBreakpoint(name, BreakpointType::BeforeToolCall)) {
     json debugResult =
-        debugger_->pauseBeforeTool(context.taskId, name, arguments);
+        debugger_->pauseBeforeTool(effectiveContext.taskId, name, arguments);
     if (debugResult.contains("__skip__") &&
         debugResult["__skip__"].get<bool>()) {
       // 用户选择"跳过"此工具
@@ -231,7 +248,7 @@ ToolResult ToolSystem::callTool(const std::string &name,
       meta["success"] = skipResult.success;
       meta["skipped_by_debugger"] = true;
       eventBus_->publish(
-          EventData::Create(context.taskId, EventType::ToolFinished,
+          EventData::Create(effectiveContext.taskId, EventType::ToolFinished,
                             "Tool skipped by debugger: " + name, meta));
       return skipResult;
     }
@@ -239,13 +256,13 @@ ToolResult ToolSystem::callTool(const std::string &name,
   }
 
   // 调用工具（Registry 调用本身不持有锁，避免死锁）
-  ToolResult result = registry_->call(name, context, effectiveArgs);
+  ToolResult result = registry_->call(name, effectiveContext, effectiveArgs);
 
   // ★ 断点检查：工具执行后
   if (debugger_ && debugger_->isEnabled() &&
       debugger_->hasBreakpoint(name, BreakpointType::AfterToolCall)) {
     result =
-        debugger_->pauseAfterTool(context.taskId, name, effectiveArgs, result);
+        debugger_->pauseAfterTool(effectiveContext.taskId, name, effectiveArgs, result);
   }
 
   // ---- 更新调用历史 & 统计（写锁） ----
@@ -287,7 +304,7 @@ ToolResult ToolSystem::callTool(const std::string &name,
   meta["tool_name"] = name;
   meta["success"] = result.success;
   meta["exit_code"] = result.exitCode;
-  if (callId != context.options.end())
+  if (callId != effectiveContext.options.end())
     meta["tool_call_id"] = callId->second;
   if (result.metadata.contains("duplicate_warning")) {
     meta["duplicate_warning"] = result.metadata["duplicate_warning"];
@@ -296,9 +313,9 @@ ToolResult ToolSystem::callTool(const std::string &name,
   const std::string output =
       (result.success ? result.output : result.error).substr(0, 4000);
   eventBus_->publish(
-      EventData::Create(context.taskId, EventType::ToolOutput, output, meta));
+      EventData::Create(effectiveContext.taskId, EventType::ToolOutput, output, meta));
   eventBus_->publish(EventData::Create(
-      context.taskId, EventType::ToolFinished,
+      effectiveContext.taskId, EventType::ToolFinished,
       result.success ? "Tool finished" : "Tool failed: " + result.error, meta));
 
   return result;

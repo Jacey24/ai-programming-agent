@@ -133,6 +133,8 @@ add_executable(tool-tests EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/debug/Debugger.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventBus.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/event/EventDispatcher.cpp
@@ -168,6 +170,8 @@ add_executable(agent-loop-test
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/debug/Debugger.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/security/PermissionManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/Workspace.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/filesystem/WorkspaceManager.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp

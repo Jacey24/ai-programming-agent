@@ -374,8 +374,11 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.taskId = taskId;
           toolCtx.sessionId = globalId;
           toolCtx.workspaceId = workspaceId;
-          toolCtx.workspacePath =
-              ToolSystem::getInstance().workspace().rootPath();
+          toolCtx.workspacePath = ctx.workspacePath;
+          if (!workspaceId.empty()) {
+            toolCtx.workspaceRuntime = WorkspaceManager::getInstance().getOrCreate(
+                workspaceId, toolCtx.workspacePath);
+          }
 
           try {
             ToolResult tr = ToolSystem::getInstance().callToolWithPermission(

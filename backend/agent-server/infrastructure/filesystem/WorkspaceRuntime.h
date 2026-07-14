@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Workspace.h"
+#include "domain/tools/BuiltinShell.h"
 #include "domain/tools/ToolRegistry.h"
 #include "infrastructure/process/ProcessRunner.h"
 
@@ -28,6 +29,7 @@ struct WorkspaceRuntime {
   std::string workspacePath;
 
   std::shared_ptr<Workspace> workspace;
+  std::shared_ptr<BuiltinShell> builtinShell;
   std::shared_ptr<ProcessRunner> processRunner;
   std::shared_ptr<ToolRegistry> toolRegistry;
 
