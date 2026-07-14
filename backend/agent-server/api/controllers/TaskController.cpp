@@ -3,6 +3,7 @@
 #include "application/ToolSystem.h"
 
 #include "domain/agent/AgentOrchestrator.h"
+#include "domain/agent/TaskRunOptions.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/SSEGateway.h"
 
@@ -117,6 +118,47 @@ static std::string extractStringField(const json &body, const char *field) {
   return "";
 }
 
+static std::string parseTaskRunOptions(const json &body,
+                                       TaskRunOptions &options) {
+  if (!body.contains("options")) {
+    return "";
+  }
+
+  const json &rawOptions = body["options"];
+  if (!rawOptions.is_object()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_OPTIONS","message":"options must be an object"}})",
+        "400 Bad Request");
+  }
+
+  if (!rawOptions.contains("max_steps")) {
+    return "";
+  }
+
+  const json &rawMaxSteps = rawOptions["max_steps"];
+  if (!rawMaxSteps.is_number_integer()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
+        "400 Bad Request");
+  }
+
+  try {
+    options.maxSteps = rawMaxSteps.get<int>();
+  } catch (const std::exception &) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be an integer between 1 and 20"}})",
+        "400 Bad Request");
+  }
+
+  if (options.maxSteps < 1 || options.maxSteps > 20) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_MAX_STEPS","message":"options.max_steps must be between 1 and 20"}})",
+        "400 Bad Request");
+  }
+
+  return "";
+}
+
 std::string TaskController::createTask(const std::string &request) {
   const std::string body_content = request_body(request);
   json body = json::parse(body_content, nullptr, false);
@@ -130,6 +172,11 @@ std::string TaskController::createTask(const std::string &request) {
   const std::string global_id = extractStringField(body, "global_id");
   const std::string workspace_id = extractStringField(body, "workspace_id");
   const std::string input = extractStringField(body, "input");
+  TaskRunOptions options;
+  if (const std::string error = parseTaskRunOptions(body, options);
+      !error.empty()) {
+    return error;
+  }
   if (session_id.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"SESSION_ID_REQUIRED","message":"session_id is required"}})",
@@ -209,7 +256,7 @@ std::string TaskController::createTask(const std::string &request) {
         "500 Internal Server Error");
   }
   try {
-    orch.startTask(task.id, effectiveGlobalId, workspace_id, input);
+    orch.startTask(task.id, effectiveGlobalId, workspace_id, input, options);
   } catch (const std::exception &error) {
     return http_response(
         R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
@@ -255,6 +302,11 @@ std::string TaskController::continueTask(const std::string &request) {
 
   const std::string workspace_id = extractStringField(body, "workspace_id");
   const std::string input = extractStringField(body, "input");
+  TaskRunOptions options;
+  if (const std::string error = parseTaskRunOptions(body, options);
+      !error.empty()) {
+    return error;
+  }
 
   if (workspace_id.empty() || input.empty()) {
     return http_response(
@@ -346,7 +398,7 @@ std::string TaskController::continueTask(const std::string &request) {
   }
 
   try {
-    orch.startTask(task.id, effectiveGlobalId, workspace_id, input);
+    orch.startTask(task.id, effectiveGlobalId, workspace_id, input, options);
   } catch (const std::exception &error) {
     return http_response(
         R"({"success":false,"error":{"code":"TASK_CREATE_ERROR","message":")" +
