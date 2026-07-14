@@ -155,8 +155,7 @@ static std::string parseTaskRunOptions(const json &body,
   }
 
   if (rawOptions.contains("auto_run_safe_commands")) {
-    const json &rawAutoRunSafeCommands =
-        rawOptions["auto_run_safe_commands"];
+    const json &rawAutoRunSafeCommands = rawOptions["auto_run_safe_commands"];
     if (!rawAutoRunSafeCommands.is_boolean()) {
       return http_response(
           R"({"success":false,"error":{"code":"INVALID_AUTO_RUN_SAFE_COMMANDS","message":"options.auto_run_safe_commands must be a boolean"}})",
@@ -211,7 +210,7 @@ std::string TaskController::createTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  const std::string session_id = extractStringField(body, "session_id");
+  std::string session_id = extractStringField(body, "session_id");
   const std::string global_id = extractStringField(body, "global_id");
   const std::string workspace_id = extractStringField(body, "workspace_id");
   const std::string input = extractStringField(body, "input");
@@ -221,9 +220,7 @@ std::string TaskController::createTask(const std::string &request) {
     return error;
   }
   if (session_id.empty()) {
-    return http_response(
-        R"({"success":false,"error":{"code":"SESSION_ID_REQUIRED","message":"session_id is required"}})",
-        "400 Bad Request");
+    session_id = "s_default";
   }
   if (workspace_id.empty() || input.empty()) {
     return http_response(
@@ -246,12 +243,10 @@ std::string TaskController::createTask(const std::string &request) {
           R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
           "404 Not Found");
     }
-    WorkspaceManager::getInstance().getOrCreate(workspace->id,
-                                                 workspace->path);
+    WorkspaceManager::getInstance().getOrCreate(workspace->id, workspace->path);
+    // Auto-create session if not found
     if (!facade.getSession(session_id)) {
-      return http_response(
-          R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
-          "404 Not Found");
+      facade.createSession("Auto Session");
     }
 
     if (!global_id.empty()) {
@@ -276,7 +271,8 @@ std::string TaskController::createTask(const std::string &request) {
             "500 Internal Server Error");
       }
     }
-    task = facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
+    task =
+        facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
     const auto refreshed = facade.getTask(task.id);
     if (refreshed) {
@@ -345,8 +341,7 @@ std::string TaskController::continueTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  const std::string parent_task_id =
-      extractStringField(body, "parent_task_id");
+  const std::string parent_task_id = extractStringField(body, "parent_task_id");
   std::string session_id = extractStringField(body, "session_id");
 
   std::string global_id = extractStringField(body, "global_id");
@@ -380,8 +375,7 @@ std::string TaskController::continueTask(const std::string &request) {
           R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
           "404 Not Found");
     }
-    WorkspaceManager::getInstance().getOrCreate(workspace->id,
-                                                 workspace->path);
+    WorkspaceManager::getInstance().getOrCreate(workspace->id, workspace->path);
     if (!parent_task_id.empty()) {
       const auto parentTask = facade.getTask(parent_task_id);
       if (parentTask) {
@@ -427,7 +421,8 @@ std::string TaskController::continueTask(const std::string &request) {
             "500 Internal Server Error");
       }
     }
-    task = facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
+    task =
+        facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
 
     EventData created = EventData::Create(task.id, EventType::TaskCreated,
