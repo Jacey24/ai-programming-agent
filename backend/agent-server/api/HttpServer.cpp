@@ -207,8 +207,14 @@ int HttpServer::run(const std::atomic_bool &running) {
         ctx->cv.notify_one();
       }
     };
-    std::thread([sendFn, taskId]() {
+    std::thread([sendFn, taskId, ctx]() {
       SSEGateway::getInstance().streamTaskEvents(sendFn, taskId);
+
+      {
+        std::lock_guard<std::mutex> lock(ctx->mtx);
+        ctx->streamDone = true;
+      }
+      ctx->cv.notify_all();
     }).detach();
   });
 
