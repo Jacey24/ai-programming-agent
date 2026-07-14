@@ -322,20 +322,14 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     return r;
   }
 
-  // 检查配置覆盖中的风险等级
-  RiskLevel level = tool->riskLevel(arguments);
+  const RiskLevel detectedLevel = tool->riskLevel(arguments);
+  RiskLevel level = detectedLevel;
   const auto optionEnabled = [&context](const char *name, bool fallback) {
     const auto it = context.options.find(name);
     return it == context.options.end() ? fallback : it->second == "true";
   };
-  const bool fileWrite = name == "file.write" || name == "file.apply_patch";
-  if (fileWrite && !optionEnabled("require_file_write_permission", true)) {
-    level = RiskLevel::Safe;
-  }
-  if (name == "shell.run" && level == RiskLevel::Safe &&
-      !optionEnabled("auto_run_safe_commands", true)) {
-    level = RiskLevel::Medium;
-  }
+
+  // 先应用管理员配置，再在明确支持的场景中应用任务级策略。
   {
     std::shared_lock lock(mutex_);
     auto configIt = configOverrides_.find(name);
@@ -344,6 +338,31 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
       // 用配置中的 risk_level 覆盖工具的默认风险等级
       level = riskLevelFromString(configIt->second.riskLevelOverride);
     }
+  }
+
+  if (name == "shell.run") {
+    // 命令检测得到的 Dangerous/Blocked 是不可由配置或任务选项降低的底线。
+    if (detectedLevel == RiskLevel::Blocked) {
+      level = RiskLevel::Blocked;
+    } else if (detectedLevel == RiskLevel::Dangerous) {
+      if (level != RiskLevel::Blocked) {
+        level = RiskLevel::Dangerous;
+      }
+    } else if (detectedLevel == RiskLevel::Safe &&
+               level != RiskLevel::Dangerous &&
+               level != RiskLevel::Blocked) {
+      level = optionEnabled("auto_run_safe_commands", true)
+                  ? RiskLevel::Safe
+                  : RiskLevel::Medium;
+    }
+  }
+
+  const bool fileWrite = name == "file.write" || name == "file.apply_patch";
+  if (fileWrite && level != RiskLevel::Dangerous &&
+      level != RiskLevel::Blocked) {
+    level = optionEnabled("require_file_write_permission", true)
+                ? RiskLevel::Medium
+                : RiskLevel::Safe;
   }
 
   // 2. 如果 blocked，直接拒绝
