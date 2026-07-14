@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 
@@ -55,9 +56,15 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
   ctx.workspaceId = workspaceId;
   ctx.goal = goal;
 
-  // 解析 workspace 路径：优先从 WorkspaceManager 缓存获取，降级查
-  // DB，最后用默认值
+  // 解析并验证当前 Task 的 workspace 路径。带 workspace_id 的 Task
+  // 不允许回退到 ToolSystem 的全局默认目录。
   {
+    if (workspaceId.empty()) {
+      result.status = "failed";
+      result.finalOutput = "Task 缺少 workspace_id，无法创建工具执行上下文";
+      return result;
+    }
+
     auto &wm = WorkspaceManager::getInstance();
     auto rt = wm.get(workspaceId);
     if (rt) {
@@ -66,17 +73,26 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
       auto ws = DataAccessFacade::getInstance().getWorkspace(workspaceId);
       if (ws) {
         ctx.workspacePath = ws->path;
-      } else {
-        ctx.workspacePath =
-            ToolSystem::getInstance().isInitialized()
-                ? ToolSystem::getInstance().workspace().rootPath()
-                : ".";
       }
-    } else {
-      ctx.workspacePath = ToolSystem::getInstance().isInitialized()
-                              ? ToolSystem::getInstance().workspace().rootPath()
-                              : ".";
     }
+
+    if (ctx.workspacePath.empty()) {
+      result.status = "failed";
+      result.finalOutput = "Workspace 不存在或路径为空: " + workspaceId;
+      return result;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path workspacePath(ctx.workspacePath);
+    const auto canonicalPath =
+        std::filesystem::weakly_canonical(workspacePath, ec);
+    if (ec || !std::filesystem::exists(canonicalPath, ec) || ec ||
+        !std::filesystem::is_directory(canonicalPath, ec) || ec) {
+      result.status = "failed";
+      result.finalOutput = "Workspace 路径无效或不是目录: " + ctx.workspacePath;
+      return result;
+    }
+    ctx.workspacePath = canonicalPath.string();
   }
 
   // ★ v2: 从 global_context 加载历史摘要注入首轮 prompt
@@ -378,8 +394,7 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.taskId = taskId;
           toolCtx.sessionId = globalId;
           toolCtx.workspaceId = workspaceId;
-          toolCtx.workspacePath =
-              ToolSystem::getInstance().workspace().rootPath();
+          toolCtx.workspacePath = ctx.workspacePath;
           toolCtx.options["auto_run_safe_commands"] =
               options.autoRunSafeCommands ? "true" : "false";
           toolCtx.options["require_file_write_permission"] =

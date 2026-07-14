@@ -4,6 +4,29 @@
 
 namespace codepilot {
 
+namespace {
+
+template <typename Operation>
+ToolResult executeGitOperation(const ToolContext &context,
+                               Operation &&operation) {
+  if (context.workspaceId.empty() || context.workspacePath.empty()) {
+    return ToolResult::Err("Workspace context is required for git tools");
+  }
+
+  auto runtime = WorkspaceManager::getInstance().getOrCreate(
+      context.workspaceId, context.workspacePath);
+  if (!runtime || !runtime->processRunner) {
+    return ToolResult::Err("Failed to initialize workspace runtime: " +
+                           context.workspaceId);
+  }
+
+  std::lock_guard lock(runtime->executionMutex);
+  runtime->processRunner->setWorkingDirectory(runtime->workspacePath);
+  return operation(*runtime->processRunner);
+}
+
+} // namespace
+
 // ============================================================
 // GitStatusTool 实现
 // ============================================================
@@ -27,32 +50,29 @@ RiskLevel GitStatusTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitStatusTool::execute(const ToolContext &context,
                                   const json & /*arguments*/) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
-  }
+  return executeGitOperation(context, [](ProcessRunner &runner) {
+    ProcessResult pr = runner.execute("git status", 30);
 
-  ProcessResult pr = runner_->execute("git status", 30);
+    ToolResult result;
+    result.success = pr.success;
+    result.exitCode = pr.exitCode;
 
-  ToolResult result;
-  result.success = pr.success;
-  result.exitCode = pr.exitCode;
-
-  if (pr.success) {
-    result.output = pr.output;
-  } else {
-    std::ostringstream oss;
-    oss << "Git status failed (exit code " << pr.exitCode << ")\n";
-    if (!pr.output.empty()) {
-      oss << pr.output << "\n";
+    if (pr.success) {
+      result.output = pr.output;
+    } else {
+      std::ostringstream oss;
+      oss << "Git status failed (exit code " << pr.exitCode << ")\n";
+      if (!pr.output.empty()) {
+        oss << pr.output << "\n";
+      }
+      if (!pr.errorOutput.empty()) {
+        oss << pr.errorOutput;
+      }
+      result.error = oss.str();
     }
-    if (!pr.errorOutput.empty()) {
-      oss << pr.errorOutput;
-    }
-    result.error = oss.str();
-  }
 
-  return result;
+    return result;
+  });
 }
 
 // ============================================================
@@ -82,37 +102,34 @@ RiskLevel GitDiffTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitDiffTool::execute(const ToolContext &context,
                                 const json &arguments) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
-  }
-
   std::string cmd = "git diff";
   if (arguments.contains("path")) {
     cmd += " -- \"" + arguments["path"].get<std::string>() + "\"";
   }
 
-  ProcessResult pr = runner_->execute(cmd, 30);
+  return executeGitOperation(context, [&cmd](ProcessRunner &runner) {
+    ProcessResult pr = runner.execute(cmd, 30);
 
-  ToolResult result;
-  result.success = pr.success;
-  result.exitCode = pr.exitCode;
+    ToolResult result;
+    result.success = pr.success;
+    result.exitCode = pr.exitCode;
 
-  if (pr.success) {
-    result.output = pr.output;
-  } else {
-    std::ostringstream oss;
-    oss << "Git diff failed (exit code " << pr.exitCode << ")\n";
-    if (!pr.output.empty()) {
-      oss << pr.output << "\n";
+    if (pr.success) {
+      result.output = pr.output;
+    } else {
+      std::ostringstream oss;
+      oss << "Git diff failed (exit code " << pr.exitCode << ")\n";
+      if (!pr.output.empty()) {
+        oss << pr.output << "\n";
+      }
+      if (!pr.errorOutput.empty()) {
+        oss << pr.errorOutput;
+      }
+      result.error = oss.str();
     }
-    if (!pr.errorOutput.empty()) {
-      oss << pr.errorOutput;
-    }
-    result.error = oss.str();
-  }
 
-  return result;
+    return result;
+  });
 }
 
 // ============================================================
@@ -145,54 +162,51 @@ RiskLevel GitCommitTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitCommitTool::execute(const ToolContext &context,
                                   const json &arguments) {
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
-  }
-
   // 获取 commit message
   std::string message = "update";
   if (arguments.contains("message")) {
     message = arguments["message"].get<std::string>();
   }
 
-  // Step 1: git add .
-  ProcessResult addResult = runner_->execute("git add .", 30);
-  if (!addResult.success) {
-    std::ostringstream oss;
-    oss << "git add failed (exit code " << addResult.exitCode << ")\n";
-    if (!addResult.errorOutput.empty()) {
-      oss << addResult.errorOutput;
+  return executeGitOperation(context, [&message](ProcessRunner &runner) {
+    // Step 1: git add .
+    ProcessResult addResult = runner.execute("git add .", 30);
+    if (!addResult.success) {
+      std::ostringstream oss;
+      oss << "git add failed (exit code " << addResult.exitCode << ")\n";
+      if (!addResult.errorOutput.empty()) {
+        oss << addResult.errorOutput;
+      }
+      return ToolResult::Err(oss.str(), addResult.exitCode);
     }
-    return ToolResult::Err(oss.str(), addResult.exitCode);
-  }
 
-  // Step 2: git commit -m "message"
-  std::string commitCmd = "git commit -m \"" + message + "\"";
-  ProcessResult commitResult = runner_->execute(commitCmd, 30);
+    // Step 2: git commit -m "message"
+    std::string commitCmd = "git commit -m \"" + message + "\"";
+    ProcessResult commitResult = runner.execute(commitCmd, 30);
 
-  ToolResult result;
-  result.success = commitResult.success;
-  result.exitCode = commitResult.exitCode;
+    ToolResult result;
+    result.success = commitResult.success;
+    result.exitCode = commitResult.exitCode;
 
-  if (commitResult.success) {
-    result.output = commitResult.output;
-    result.metadata = {{"staged_files", addResult.output.empty()
-                                            ? "all changes staged"
-                                            : addResult.output}};
-  } else {
-    std::ostringstream oss;
-    oss << "Git commit failed (exit code " << commitResult.exitCode << ")\n";
-    if (!commitResult.output.empty()) {
-      oss << commitResult.output << "\n";
+    if (commitResult.success) {
+      result.output = commitResult.output;
+      result.metadata = {{"staged_files", addResult.output.empty()
+                                              ? "all changes staged"
+                                              : addResult.output}};
+    } else {
+      std::ostringstream oss;
+      oss << "Git commit failed (exit code " << commitResult.exitCode << ")\n";
+      if (!commitResult.output.empty()) {
+        oss << commitResult.output << "\n";
+      }
+      if (!commitResult.errorOutput.empty()) {
+        oss << commitResult.errorOutput;
+      }
+      result.error = oss.str();
     }
-    if (!commitResult.errorOutput.empty()) {
-      oss << commitResult.errorOutput;
-    }
-    result.error = oss.str();
-  }
 
-  return result;
+    return result;
+  });
 }
 
 // ============================================================
@@ -222,10 +236,6 @@ RiskLevel GitLogTool::riskLevel(const json & /*arguments*/) const {
 
 ToolResult GitLogTool::execute(const ToolContext &context,
                                const json &arguments) {
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
-  }
-
   int count = arguments.contains("count") ? arguments["count"].get<int>() : 20;
   if (count < 1)
     count = 1;
@@ -233,25 +243,27 @@ ToolResult GitLogTool::execute(const ToolContext &context,
     count = 100;
 
   std::string cmd = "git log --oneline -n " + std::to_string(count);
-  ProcessResult pr = runner_->execute(cmd, 30);
+  return executeGitOperation(context, [&cmd](ProcessRunner &runner) {
+    ProcessResult pr = runner.execute(cmd, 30);
 
-  ToolResult result;
-  result.success = pr.success;
-  result.exitCode = pr.exitCode;
+    ToolResult result;
+    result.success = pr.success;
+    result.exitCode = pr.exitCode;
 
-  if (pr.success) {
-    result.output = pr.output;
-  } else {
-    std::ostringstream oss;
-    oss << "Git log failed (exit code " << pr.exitCode << ")\n";
-    if (!pr.output.empty())
-      oss << pr.output << "\n";
-    if (!pr.errorOutput.empty())
-      oss << pr.errorOutput;
-    result.error = oss.str();
-  }
+    if (pr.success) {
+      result.output = pr.output;
+    } else {
+      std::ostringstream oss;
+      oss << "Git log failed (exit code " << pr.exitCode << ")\n";
+      if (!pr.output.empty())
+        oss << pr.output << "\n";
+      if (!pr.errorOutput.empty())
+        oss << pr.errorOutput;
+      result.error = oss.str();
+    }
 
-  return result;
+    return result;
+  });
 }
 
 // ============================================================
@@ -288,10 +300,6 @@ RiskLevel GitBranchTool::riskLevel(const json &arguments) const {
 
 ToolResult GitBranchTool::execute(const ToolContext &context,
                                   const json &arguments) {
-  if (!context.workspacePath.empty()) {
-    runner_->setWorkingDirectory(context.workspacePath);
-  }
-
   std::string action = arguments.contains("action")
                            ? arguments["action"].get<std::string>()
                            : "list";
@@ -309,25 +317,27 @@ ToolResult GitBranchTool::execute(const ToolContext &context,
     cmd = "git branch";
   }
 
-  ProcessResult pr = runner_->execute(cmd, 30);
+  return executeGitOperation(context, [&cmd](ProcessRunner &runner) {
+    ProcessResult pr = runner.execute(cmd, 30);
 
-  ToolResult result;
-  result.success = pr.success;
-  result.exitCode = pr.exitCode;
+    ToolResult result;
+    result.success = pr.success;
+    result.exitCode = pr.exitCode;
 
-  if (pr.success) {
-    result.output = pr.output;
-  } else {
-    std::ostringstream oss;
-    oss << "Git branch failed (exit code " << pr.exitCode << ")\n";
-    if (!pr.output.empty())
-      oss << pr.output << "\n";
-    if (!pr.errorOutput.empty())
-      oss << pr.errorOutput;
-    result.error = oss.str();
-  }
+    if (pr.success) {
+      result.output = pr.output;
+    } else {
+      std::ostringstream oss;
+      oss << "Git branch failed (exit code " << pr.exitCode << ")\n";
+      if (!pr.output.empty())
+        oss << pr.output << "\n";
+      if (!pr.errorOutput.empty())
+        oss << pr.errorOutput;
+      result.error = oss.str();
+    }
 
-  return result;
+    return result;
+  });
 }
 
 // ============================================================

@@ -47,24 +47,24 @@ ToolResult ShellRunTool::execute(const ToolContext &context,
     timeout = arguments["timeout"].get<int>();
   }
 
-  // 从 WorkspaceManager 获取正确的 ProcessRunner
-  std::shared_ptr<ProcessRunner> activeRunner = runner_;
-  if (!context.workspaceId.empty()) {
-    auto rt = WorkspaceManager::getInstance().getOrCreate(
-        context.workspaceId, context.workspacePath);
-    std::lock_guard lock(rt->executionMutex);
-    activeRunner = rt->processRunner;
+  if (context.workspaceId.empty() || context.workspacePath.empty()) {
+    return ToolResult::Err("Workspace context is required for shell.run");
   }
 
-  // 设置工作目录
-  if (!context.workspacePath.empty()) {
-    activeRunner->setWorkingDirectory(context.workspacePath);
-  } else if (arguments.contains("cwd")) {
-    activeRunner->setWorkingDirectory(arguments["cwd"].get<std::string>());
+  auto runtime = WorkspaceManager::getInstance().getOrCreate(
+      context.workspaceId, context.workspacePath);
+  if (!runtime || !runtime->processRunner) {
+    return ToolResult::Err("Failed to initialize workspace runtime: " +
+                           context.workspaceId);
   }
 
-  // 执行命令
-  ProcessResult pr = activeRunner->execute(command, timeout);
+  ProcessResult pr;
+  {
+    // 同一 workspace 的目录设置和命令执行必须是一个原子操作。
+    std::lock_guard lock(runtime->executionMutex);
+    runtime->processRunner->setWorkingDirectory(runtime->workspacePath);
+    pr = runtime->processRunner->execute(command, timeout);
+  }
 
   // 构建结果
   ToolResult result;
