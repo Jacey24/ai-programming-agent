@@ -62,7 +62,7 @@ void CliController::printHelp() {
       << std::endl;
   std::cout << "    /session delete <id>         删除对话" << std::endl;
   std::cout << "\n  === 权限 ===" << std::endl;
-  std::cout << "    /perm list                   列出待处理权限" << std::endl;
+  std::cout << "    /perm list [task_id]         列出待处理权限" << std::endl;
   std::cout << "    /perm approve [id]           批准权限 (无参=首个pending)"
             << std::endl;
   std::cout << "    /perm reject <id>            拒绝权限" << std::endl;
@@ -166,6 +166,8 @@ int CliController::run() {
     // Permission commands
     else if (input == "/perm list") {
       handlePermList();
+    } else if (input.rfind("/perm list ", 0) == 0) {
+      handlePermList(input.substr(11));
     } else if (input == "/perm approve") {
       handlePermApprove("");
     } else if (input.rfind("/perm approve ", 0) == 0) {
@@ -726,8 +728,8 @@ void CliController::handleSessionDelete(const std::string &args) {
 
 // ── 权限命令 ──
 
-void CliController::handlePermList() {
-  auto resp = client_.listPermissions();
+void CliController::handlePermList(const std::string &taskId) {
+  auto resp = client_.listPermissions(taskId);
   if (!resp.value("success", false)) {
     printError(resp);
     return;
