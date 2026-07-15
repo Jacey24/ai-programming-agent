@@ -3,8 +3,11 @@ import { endpoints } from "./endpoints";
 import type { PermissionRecord } from "../types/api";
 
 export function listPendingPermissions(taskId?: string) {
-  const query = taskId ? `?task_id=${encodeURIComponent(taskId)}` : "";
-  return requestJson<{ items: PermissionRecord[] }>(`${endpoints.permissionsPending}${query}`);
+  const query = new URLSearchParams({ status: "pending" });
+  if (taskId) {
+    query.set("task_id", taskId);
+  }
+  return requestJson<{ items: PermissionRecord[] }>(`${endpoints.permissionsPending}?${query}`);
 }
 
 export function approvePermission(permissionId: string) {

@@ -223,7 +223,7 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
     case "eventsReset":
       return { ...state, events: idleList<TaskEventRecord>(), steps: [] };
     case "eventReceived": {
-      const nextEvents = [action.event, ...state.events.items].slice(0, 200);
+      const nextEvents = mergeIncomingEvent(action.event, state.events.items).slice(0, 200);
       const nextTask = eventToTask(state.activeTask, action.event);
       return {
         ...state,
@@ -235,11 +235,13 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       };
     }
     case "eventHistorySuccess": {
-      const unique = uniqueEvents(action.events).slice(-200).reverse();
+      const merged = mergeStreamMessageHistory(
+        mergeEventHistory(action.events, state.events.items),
+      ).slice(0, 200);
       return {
         ...state,
-        events: { status: "success", items: unique, error: "" },
-        steps: eventsToSteps(unique),
+        events: { status: "success", items: merged, error: "" },
+        steps: eventsToSteps(merged),
         error: "",
       };
     }
@@ -266,18 +268,179 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
   }
 }
 
-function uniqueEvents(events: TaskEventRecord[]) {
-  const seen = new Set<string>();
+function mergeIncomingEvent(incoming: TaskEventRecord, currentEvents: TaskEventRecord[]) {
+  const incomingStream = streamMetadata(incoming);
+  if (incomingStream?.message_id) {
+    const streamIndex = currentEvents.findIndex(
+      (event) => streamMetadata(event)?.message_id === incomingStream.message_id,
+    );
+
+    if (incoming.type === "agent_message_chunk") {
+      if (streamIndex === -1) {
+        return [
+          {
+            ...incoming,
+            id: `stream:${incomingStream.message_id}`,
+            type: "agent_message",
+            metadata: { ...incomingStream, streaming: true },
+          },
+          ...currentEvents,
+        ];
+      }
+
+      const existing = currentEvents[streamIndex];
+      const existingStream = streamMetadata(existing);
+      if (existingStream?.done || existingStream?.stream_end) {
+        return currentEvents;
+      }
+      if (
+        typeof incomingStream.sequence === "number"
+        && typeof existingStream?.sequence === "number"
+        && incomingStream.sequence <= existingStream.sequence
+      ) {
+        return currentEvents;
+      }
+
+      return currentEvents.map((event, index) => index === streamIndex
+        ? {
+            ...existing,
+            content: `${existing.content || ""}${incoming.content || ""}`,
+            metadata: { ...existingStream, ...incomingStream, streaming: true },
+          }
+        : event);
+    }
+
+    if (incoming.type === "agent_message" && streamIndex !== -1) {
+      const existing = currentEvents[streamIndex];
+      return currentEvents.map((event, index) => index === streamIndex
+        ? {
+            ...existing,
+            ...incoming,
+            type: "agent_message",
+            content: incoming.content ?? existing.content,
+            metadata: { ...streamMetadata(existing), ...incomingStream, streaming: false },
+          }
+        : event);
+    }
+  }
+
+  const duplicateIndex = incoming.id
+    ? currentEvents.findIndex((event) => event.id === incoming.id)
+    : -1;
+  return duplicateIndex === -1
+    ? [incoming, ...currentEvents]
+    : currentEvents.map((event, index) =>
+        index === duplicateIndex ? mergeEventRecords(incoming, event) : event,
+      );
+}
+
+function mergeStreamMessageHistory(events: TaskEventRecord[]) {
   const result: TaskEventRecord[] = [];
+  const positions = new Map<string, number>();
+
   for (const event of events) {
-    const key = event.id || `${event.type || "event"}:${event.created_at || ""}:${event.content || ""}`;
-    if (seen.has(key)) {
+    const metadata = streamMetadata(event);
+    if (!metadata?.message_id) {
+      result.push(event);
       continue;
     }
-    seen.add(key);
-    result.push(event);
+
+    const existingIndex = positions.get(metadata.message_id);
+    if (existingIndex === undefined) {
+      positions.set(metadata.message_id, result.length);
+      result.push(event);
+      continue;
+    }
+
+    const existing = result[existingIndex];
+    const existingMetadata = streamMetadata(existing);
+    if ((metadata.done || metadata.stream_end) && !(existingMetadata?.done || existingMetadata?.stream_end)) {
+      result[existingIndex] = event;
+    }
   }
+
   return result;
+}
+
+interface StreamMetadata {
+  message_id?: string;
+  sequence?: number;
+  streaming?: boolean;
+  done?: boolean;
+  stream_end?: boolean;
+  [key: string]: unknown;
+}
+
+function streamMetadata(event: TaskEventRecord): StreamMetadata | null {
+  if (!event.metadata || typeof event.metadata !== "object" || Array.isArray(event.metadata)) {
+    return null;
+  }
+  const metadata = event.metadata as StreamMetadata;
+  return typeof metadata.message_id === "string" ? metadata : null;
+}
+
+function mergeEventHistory(historyEvents: TaskEventRecord[], currentEvents: TaskEventRecord[]) {
+  // Both the reducer and its consumers use newest-first order. Current events
+  // already have that order; history is returned oldest-first by the API.
+  const candidates = [...currentEvents, ...historyEvents.slice().reverse()];
+  const merged: TaskEventRecord[] = [];
+  const positionsById = new Map<string, number>();
+
+  for (const event of candidates) {
+    if (!event.id) {
+      // The shared type permits id-less SSE fallback records. Without a stable
+      // server id there is no safe deduplication key, so retain them as-is.
+      merged.push(event);
+      continue;
+    }
+
+    const existingIndex = positionsById.get(event.id);
+    if (existingIndex === undefined) {
+      positionsById.set(event.id, merged.length);
+      merged.push(event);
+      continue;
+    }
+
+    merged[existingIndex] = mergeEventRecords(merged[existingIndex], event);
+  }
+
+  return merged
+    .map((event, index) => ({ event, index, time: eventTime(event) }))
+    .sort((left, right) => right.time - left.time || left.index - right.index)
+    .map(({ event }) => event);
+}
+
+function mergeEventRecords(preferred: TaskEventRecord, alternative: TaskEventRecord): TaskEventRecord {
+  const primary = eventCompleteness(alternative) > eventCompleteness(preferred) ? alternative : preferred;
+  const secondary = primary === preferred ? alternative : preferred;
+  return {
+    id: primary.id || secondary.id,
+    task_id: primary.task_id || secondary.task_id,
+    type: primary.type || secondary.type,
+    content: primary.content || secondary.content,
+    metadata: hasMetadata(primary.metadata) ? primary.metadata : secondary.metadata,
+    created_at: primary.created_at || secondary.created_at,
+  };
+}
+
+function eventCompleteness(event: TaskEventRecord) {
+  return [event.id, event.task_id, event.type, event.content, event.created_at].filter(Boolean).length
+    + (hasMetadata(event.metadata) ? 1 : 0);
+}
+
+function hasMetadata(metadata: unknown) {
+  if (metadata === undefined || metadata === null) {
+    return false;
+  }
+  if (typeof metadata === "object" && !Array.isArray(metadata)) {
+    return Object.keys(metadata).length > 0;
+  }
+  return true;
+}
+
+function eventTime(event: TaskEventRecord) {
+  const parsed = event.created_at ? Date.parse(event.created_at) : Number.NaN;
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
 function eventToTask(task: TaskRecord | null, event: TaskEventRecord): TaskRecord | null {

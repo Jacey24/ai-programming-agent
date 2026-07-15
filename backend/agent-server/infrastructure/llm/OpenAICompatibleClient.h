@@ -24,6 +24,7 @@ public:
   static std::string resolveApiKey(const OpenAICompatibleConfig &config);
 
   LlmResponse chat(const LlmRequest &request) override;
+  void chatStream(const LlmRequest &request, OnTokenCallback onToken) override;
 
 private:
   OpenAICompatibleConfig config_;

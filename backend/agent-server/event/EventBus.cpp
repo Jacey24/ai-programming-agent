@@ -41,6 +41,8 @@ std::string EventData::typeToString() const {
     return "task_planning";
   case EventType::AgentMessage:
     return "agent_message";
+  case EventType::AgentMessageChunk:
+    return "agent_message_chunk";
   case EventType::ToolStarted:
     return "tool_started";
   case EventType::ToolOutput:

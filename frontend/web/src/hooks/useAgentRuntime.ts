@@ -245,11 +245,13 @@ export function useAgentRuntime(options: {
         }
 
         const event = parseSseEvent(eventName, message);
-        const eventId = event.id || message.lastEventId || `${event.type || eventName}:${event.created_at || ""}:${event.content || ""}`;
-        if (seenEventIds.current.has(eventId)) {
-          return;
+        const eventId = event.id || message.lastEventId;
+        if (eventId) {
+          if (seenEventIds.current.has(eventId)) {
+            return;
+          }
+          seenEventIds.current.add(eventId);
         }
-        seenEventIds.current.add(eventId);
 
         dispatch({ type: "eventReceived", event: { ...event, id: event.id || eventId } });
 
@@ -463,6 +465,12 @@ export function useAgentRuntime(options: {
     workspaceRef.current = state.workspace;
   }, [state.session, state.workspace]);
 
+  useEffect(() => {
+    seenEventIds.current = new Set(
+      state.events.items.flatMap((event) => event.id ? [event.id] : []),
+    );
+  }, [state.events.items]);
+
   return {
     state,
     refreshHealth,
@@ -481,6 +489,7 @@ const SSE_EVENT_NAMES = [
   "task_created",
   "task_planning",
   "agent_message",
+  "agent_message_chunk",
   "tool_started",
   "tool_output",
   "tool_finished",

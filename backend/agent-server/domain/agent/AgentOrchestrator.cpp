@@ -532,22 +532,33 @@ AgentLoopResult AgentOrchestrator::runDirectAnswer(
       return result;
     }
 
-    const LlmResponse response = LlmClientFacade::getInstance().chat(prompt);
+    std::string answer;
+    std::size_t sequence = 0;
+    const std::string messageId = "agent_message:" + taskId + ":direct_answer";
+    LlmClientFacade::getInstance().chatStream(
+        prompt, [&](const std::string &chunk) {
+          if (chunk.empty() || isCancelled()) {
+            return;
+          }
+          answer += chunk;
+          if (SSEGateway::getInstance().isInitialized()) {
+            SSEGateway::getInstance().pushStream(taskId, messageId, chunk,
+                                                 sequence++);
+          }
+        });
     if (isCancelled()) {
       result.status = "cancelled";
       result.finalOutput = "任务已取消";
       return result;
     }
 
-    if (!response.success) {
+    if (answer.empty()) {
       result.status = "failed";
-      result.finalOutput = "直接回答失败：" +
-                           (response.error.empty() ? "大模型调用失败"
-                                                   : response.error);
+      result.finalOutput = "直接回答失败：大模型调用失败或返回空内容";
       appendExecutionLog("failed", result.finalOutput);
       return result;
     }
-    if (response.content.find_first_not_of(" \t\r\n") == std::string::npos) {
+    if (answer.find_first_not_of(" \t\r\n") == std::string::npos) {
       result.status = "failed";
       result.finalOutput = "直接回答失败：大模型返回空内容";
       appendExecutionLog("failed", result.finalOutput);
@@ -555,11 +566,10 @@ AgentLoopResult AgentOrchestrator::runDirectAnswer(
     }
 
     result.status = "completed";
-    result.finalOutput = response.content;
+    result.finalOutput = answer;
     if (SSEGateway::getInstance().isInitialized()) {
-      SSEGateway::getInstance().pushDialog(
-          taskId, result.finalOutput,
-          json{{"mode", "direct_answer"}}.dump());
+      SSEGateway::getInstance().pushStream(taskId, messageId, "", sequence,
+                                           true, result.finalOutput);
     }
     appendExecutionLog("completed", "直接回答已生成并推送");
   } catch (const std::exception &e) {
