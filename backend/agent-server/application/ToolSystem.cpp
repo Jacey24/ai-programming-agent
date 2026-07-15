@@ -324,9 +324,11 @@ ToolResult ToolSystem::callTool(const std::string &name,
 }
 
 // ============================================================
-// callToolWithPermission() — 带权限检查的工具调用
-// ★ Sprint 2 增强：集成同步等待机制
-//   当工具需要权限确认时，会阻塞等待用户通过 API 同意/拒绝
+// callToolWithPermission() — 带权限检查的工具调用（非阻塞）
+//
+// ★ Sprint 3 改造：不再调用 waitForResolution 阻塞线程。
+//   权限请求创建后立即返回 paused 信号，由 AgentLoop 上层统一处理。
+//   PermissionManager::resolvePermission()（API 不变）仍负责决议。
 // ============================================================
 ToolResult ToolSystem::callToolWithPermission(const std::string &name,
                                               const ToolContext &context,
@@ -358,7 +360,6 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     auto configIt = configOverrides_.find(name);
     if (configIt != configOverrides_.end() &&
         !configIt->second.riskLevelOverride.empty()) {
-      // 用配置中的 risk_level 覆盖工具的默认风险等级
       level = riskLevelFromString(configIt->second.riskLevelOverride);
     }
   }
@@ -403,45 +404,35 @@ ToolResult ToolSystem::callToolWithPermission(const std::string &name,
     return r;
   }
 
-  // 3. 如果需要权限，创建请求并等待用户决策
+  // 3. 如果需要权限，创建请求并返回 paused 信号（不再阻塞！）
   if (permissionManager_->requiresPermission(name, level, arguments)) {
     auto request = permissionManager_->createRequest(context.taskId, name,
                                                      level, arguments);
 
-    // ★ Sprint 2: 阻塞等待用户通过 API 确认
-    //   郑嘉娴的 POST /api/v1/permissions/{id}/approve 端点
-    //   会调用 PermissionManager::resolvePermission() 来唤醒
-    bool approved = permissionManager_->waitForResolution(request.id);
-
-    if (!approved) {
-      // 重新读取请求以获取 waitForResolution 后更新的状态
-      auto finalReq = permissionManager_->getRequestCopy(request.id);
-      bool isExpired =
-          finalReq && finalReq->status == PermissionStatus::Expired;
-
-      json meta;
-      meta["tool_name"] = name;
-      meta["risk_level"] = riskLevelToString(level);
-      meta["request_id"] = request.id;
-      meta["permission_denied"] = true;
-      std::string reason = "用户拒绝了该操作。";
-      std::string tag = "PERMISSION_DENIED";
-      if (isExpired) {
-        reason = "权限请求已超时（120秒内未获得用户响应）。";
-        tag = "PERMISSION_EXPIRED";
-      }
-      meta["failure_reason"] = tag;
-      ToolResult r =
-          ToolResult::Err("[" + tag + "] 工具 \"" + name + "\" (风险等级: " +
-                          riskLevelToString(level) + ") " + reason +
-                          " 请尝试使用不需要该权限的替代方案，或"
-                          "等待用户在权限面板中批准后重试。");
-      r.metadata = meta;
-      return r;
+    // ★ 通过 EventBus 推送权限请求事件（由 SSEGateway 桥接到前端）
+    if (eventBus_) {
+      json permMeta;
+      permMeta["request_id"] = request.id;
+      permMeta["tool_name"] = name;
+      permMeta["task_id"] = context.taskId;
+      permMeta["risk_level"] = riskLevelToString(level);
+      eventBus_->publish(EventData::Create(
+          context.taskId, EventType::PermissionRequired,
+          "需要权限确认: " + name + " (id=" + request.id + ")", permMeta));
     }
+
+    // ★ 返回 paused 信号，AgentLoop 上层捕获后统一暂停
+    ToolResult result;
+    result.success = false;
+    result.error = "Permission pending: " + request.id;
+    result.metadata["paused"] = true;
+    result.metadata["permission_request_id"] = request.id;
+    result.metadata["tool_name"] = name;
+    result.metadata["risk_level"] = riskLevelToString(level);
+    return result;
   }
 
-  // 4. 执行工具（带断点检查）
+  // 4. 无需权限，直接执行
   return callTool(name, context, arguments);
 }
 

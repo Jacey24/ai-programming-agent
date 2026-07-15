@@ -39,10 +39,14 @@ ExpertConfig ResumeUtil::buildResumerExpert() {
   config.canWriteSummary = true;   // 但可以更新 summary
   config.readGlobalActively = false;
 
-  // 路由：done → 回到原 Expert 的下一个路由目标
-  config.nextRules = {{"type", "tag_exists", "value", "done", "route_to",
-                       "_resume_original", "priority", 10}};
-  config.onFail = "_done";
+  // 路由：done → _resume_original（由 prepareResume 接管路由）
+  json ruleJson;
+  ruleJson["type"] = "tag_exists";
+  ruleJson["value"] = "done";
+  ruleJson["route_to"] = "_resume_original";
+  ruleJson["priority"] = 10;
+  config.nextRules.push_back(RouteRule::fromJson(ruleJson));
+  config.onFailRoute = "_done";
 
   config.maxInternalRounds = 1; // 只允许 1 轮
   config.toolTimeoutSeconds = 60;
@@ -162,10 +166,16 @@ ResumeResult ResumeUtil::prepareResume(const TaskSnapshot &snapshot,
   }
 
   // 重置循环状态（_resumer 已消耗 1 轮）
-  result.snapshot.firstRoundInExpert = true;
-  result.snapshot.roundsLeft = (current != nullptr)
-                                   ? current->maxInternalRounds
-                                   : result.snapshot.roundsLeft;
+  // 获取目标 Expert 以获取其 maxInternalRounds
+  {
+    auto &cfg = AgentConfiguration::getInstance();
+    const ExpertConfig *targetExpert =
+        cfg.getExpert(result.snapshot.currentExpert);
+    result.snapshot.firstRoundInExpert = true;
+    result.snapshot.roundsLeft = (targetExpert != nullptr)
+                                     ? targetExpert->maxInternalRounds
+                                     : result.snapshot.roundsLeft;
+  }
 
   result.handled = false;
   return result;

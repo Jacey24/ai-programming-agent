@@ -26,6 +26,44 @@ bool AgentLoop::isReady() const {
   return AgentConfiguration::getInstance().isReady();
 }
 
+AgentLoopResult
+AgentLoop::runFromSnapshot(const TaskSnapshot &snapshot,
+                           std::shared_ptr<std::atomic<bool>> cancelFlag) {
+  AgentLoopResult result;
+  auto &cfg = AgentConfiguration::getInstance();
+
+  if (!cfg.isReady()) {
+    result.status = "config_error";
+    result.finalOutput = "[runFromSnapshot] Expert 配置未加载或加载失败";
+    return result;
+  }
+
+  const ExpertConfig *targetExpert = cfg.getExpert(snapshot.currentExpert);
+  if (!targetExpert) {
+    result.status = "config_error";
+    result.finalOutput = "[runFromSnapshot] 快照中的 Expert [" +
+                         snapshot.currentExpert + "] 不在当前配置中";
+    return result;
+  }
+
+  TaskContext ctx;
+  ctx.taskId = snapshot.taskId;
+  ctx.globalId = snapshot.globalId;
+  ctx.workspaceId = snapshot.workspaceId;
+  ctx.goal = snapshot.goal;
+  ctx.workspacePath = snapshot.workspacePath;
+  ctx.summary = snapshot.summary.empty() ? "" : snapshot.summary;
+  ctx.currentPlan = snapshot.currentPlan;
+  // planHistory is restored via PlanManager::restoreSnapshot inside
+  // runExpertChain
+
+  // 从快照恢复时使用默认选项
+  TaskRunOptions defaultOpts;
+  return runExpertChain(snapshot.taskId, snapshot.globalId,
+                        snapshot.workspaceId, ctx, targetExpert, defaultOpts,
+                        cancelFlag, snapshot.sessionHistory);
+}
+
 AgentLoopResult AgentLoop::run(const std::string &taskId,
                                const std::string &globalId,
                                const std::string &workspaceId,
@@ -86,18 +124,16 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
     }
   }
 
-  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert, options,
-                        cancelFlag);
+  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert,
+                        options, cancelFlag);
 }
 
-AgentLoopResult
-AgentLoop::runExpertChain(const std::string &taskId,
-                          const std::string &globalId,
-                          const std::string &workspaceId, TaskContext &ctx,
-                          const ExpertConfig *entryExpert,
-                          const TaskRunOptions &options,
-                          std::shared_ptr<std::atomic<bool>> cancelFlag,
-                          const std::string &initialSessionHistory) {
+AgentLoopResult AgentLoop::runExpertChain(
+    const std::string &taskId, const std::string &globalId,
+    const std::string &workspaceId, TaskContext &ctx,
+    const ExpertConfig *entryExpert, const TaskRunOptions &options,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const std::string &initialSessionHistory) {
   AgentLoopResult result;
   auto &cfg = AgentConfiguration::getInstance();
 
@@ -375,8 +411,9 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.workspaceId = workspaceId;
           toolCtx.workspacePath = ctx.workspacePath;
           if (!workspaceId.empty()) {
-            toolCtx.workspaceRuntime = WorkspaceManager::getInstance().getOrCreate(
-                workspaceId, toolCtx.workspacePath);
+            toolCtx.workspaceRuntime =
+                WorkspaceManager::getInstance().getOrCreate(
+                    workspaceId, toolCtx.workspacePath);
           }
           toolCtx.options["auto_run_safe_commands"] =
               options.autoRunSafeCommands ? "true" : "false";
@@ -386,13 +423,87 @@ AgentLoop::runExpertChain(const std::string &taskId,
           try {
             ToolResult tr = ToolSystem::getInstance().callToolWithPermission(
                 actualToolName, toolCtx, toolArgsParsed);
-            toolSuccess = tr.success;
-            toolExitCode = tr.exitCode;
-            if (tr.success) {
-              toolResult = "成功: " + tr.output;
+
+            // ★★★ 权限暂停检测 ★★★
+            // 当工具需要用户批准时，callToolWithPermission 返回
+            // metadata["paused"]=true 而非阻塞。
+            // 此处调用 waitForResolution 阻塞等待用户决议，
+            // 批准后重新执行工具，实现无缝继续。
+            if (tr.metadata.contains("paused") &&
+                tr.metadata["paused"].get<bool>()) {
+              std::string permReqId =
+                  tr.metadata.value("permission_request_id", "");
+
+              if (SSEGateway::getInstance().isInitialized()) {
+                json pauseMeta;
+                pauseMeta["stage"] = "permission_wait";
+                pauseMeta["tool_name"] = actualToolName;
+                pauseMeta["request_id"] = permReqId;
+                SSEGateway::getInstance().push(
+                    taskId, EventType::AgentMessage,
+                    "⏸ 等待用户批准: " + actualToolName +
+                        " (request=" + permReqId + ")",
+                    pauseMeta, SSEGateway::Channel::Status,
+                    SSEGateway::Persist::Always);
+              }
+
+              // 阻塞等待用户决议（最多 120 秒）
+              bool approved = ToolSystem::getInstance()
+                                  .permissionManager()
+                                  .waitForResolution(permReqId, 120);
+
+              if (approved) {
+                // 用户批准 → 重新执行工具（跳过权限检查，直接调用 callTool）
+                if (SSEGateway::getInstance().isInitialized()) {
+                  json approvedMeta;
+                  approvedMeta["stage"] = "permission_approved";
+                  approvedMeta["tool_name"] = actualToolName;
+                  approvedMeta["request_id"] = permReqId;
+                  SSEGateway::getInstance().push(
+                      taskId, EventType::AgentMessage,
+                      "✅ 权限已批准，执行 " + actualToolName, approvedMeta,
+                      SSEGateway::Channel::Status, SSEGateway::Persist::Always);
+                }
+
+                tr = ToolSystem::getInstance().callTool(actualToolName, toolCtx,
+                                                        toolArgsParsed);
+                toolSuccess = tr.success;
+                toolExitCode = tr.exitCode;
+                if (tr.success) {
+                  toolResult = "成功: " + tr.output;
+                } else {
+                  toolResult = "[EXECUTION_ERROR] " + tr.error +
+                               " (exit code " + std::to_string(tr.exitCode) +
+                               ")";
+                }
+              } else {
+                // 用户拒绝或超时
+                toolSuccess = false;
+                toolExitCode = -1;
+                toolResult = "[PERMISSION_DENIED] 用户拒绝了工具 [" +
+                             actualToolName + "] 的执行权限，或等待超时。";
+
+                if (SSEGateway::getInstance().isInitialized()) {
+                  json deniedMeta;
+                  deniedMeta["stage"] = "permission_denied";
+                  deniedMeta["tool_name"] = actualToolName;
+                  deniedMeta["request_id"] = permReqId;
+                  SSEGateway::getInstance().push(
+                      taskId, EventType::AgentMessage,
+                      "❌ 权限被拒绝: " + actualToolName, deniedMeta,
+                      SSEGateway::Channel::Status, SSEGateway::Persist::Always);
+                }
+              }
             } else {
-              toolResult = "[EXECUTION_ERROR] " + tr.error + " (exit code " +
-                           std::to_string(tr.exitCode) + ")";
+              // 无需权限暂停，正常处理结果
+              toolSuccess = tr.success;
+              toolExitCode = tr.exitCode;
+              if (tr.success) {
+                toolResult = "成功: " + tr.output;
+              } else {
+                toolResult = "[EXECUTION_ERROR] " + tr.error + " (exit code " +
+                             std::to_string(tr.exitCode) + ")";
+              }
             }
           } catch (const std::exception &e) {
             toolSuccess = false;

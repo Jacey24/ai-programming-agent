@@ -1,5 +1,7 @@
 #include "AgentOrchestrator.h"
 #include "AgentConfiguration.h"
+#include "application/ToolSystem.h"
+#include "domain/security/PermissionManager.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
@@ -311,7 +313,180 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
   }
 }
 
-// ── 内部异步执行 ──
+// ── Pause / Resume ──
+
+bool AgentOrchestrator::pauseTask(const std::string &taskId,
+                                  const std::string &reason,
+                                  const std::string &permissionRequestId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = activeTasks_.find(taskId);
+  if (it == activeTasks_.end())
+    return false;
+
+  it->second.status = "paused";
+  it->second.pauseReason = reason;
+  it->second.permissionRequestId = permissionRequestId;
+
+  LOG_INFO("AgentOrchestrator::pauseTask: task={}, reason={}, permId={}",
+           taskId, reason, permissionRequestId);
+  return true;
+}
+
+bool AgentOrchestrator::resumeTask(const std::string &taskId,
+                                   const std::string &userMessage) {
+  TaskSnapshot snapshot;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = activeTasks_.find(taskId);
+    if (it == activeTasks_.end())
+      return false;
+    if (it->second.status != "paused") {
+      LOG_WARN("resumeTask: task {} status is {}, not paused", taskId,
+               it->second.status);
+      return false;
+    }
+
+    auto snapIt = pausedSnapshots_.find(taskId);
+    if (snapIt == pausedSnapshots_.end()) {
+      LOG_ERROR("resumeTask: no snapshot found for paused task {}", taskId);
+      return false;
+    }
+    snapshot = snapIt->second;
+    pausedSnapshots_.erase(snapIt);
+    it->second.status = "running";
+  }
+
+  // 有用户消息 → 通过 ResumeUtil 黑盒处理
+  if (!userMessage.empty()) {
+    auto resumeResult = ResumeUtil::prepareResume(snapshot, userMessage);
+    if (!resumeResult.errorMessage.empty()) {
+      LOG_ERROR("resumeTask: ResumeUtil failed: {}", resumeResult.errorMessage);
+      // 失败仍用原 snapshot 恢复
+    } else {
+      snapshot = resumeResult.snapshot;
+    }
+  }
+
+  // 启动恢复线程
+  auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cancelFlags_[taskId] = cancelFlag;
+    taskThreads_[taskId] = std::thread(&AgentOrchestrator::runResumeThread,
+                                       this, taskId, snapshot, cancelFlag);
+    taskThreads_[taskId].detach();
+  }
+
+  LOG_INFO("resumeTask: task={}, userMessage_len={}", taskId,
+           userMessage.size());
+  return true;
+}
+
+TaskSnapshot
+AgentOrchestrator::getTaskSnapshot(const std::string &taskId) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = pausedSnapshots_.find(taskId);
+  if (it != pausedSnapshots_.end())
+    return it->second;
+  return TaskSnapshot{};
+}
+
+bool AgentOrchestrator::isPaused(const std::string &taskId) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = activeTasks_.find(taskId);
+  return it != activeTasks_.end() && it->second.status == "paused";
+}
+
+// ── 权限批处理 ──
+
+void AgentOrchestrator::processPermissionBatch(
+    const std::string &taskId,
+    const std::vector<PermissionDecision> &decisions) {
+  auto &pm = ToolSystem::getInstance().permissionManager();
+  for (const auto &d : decisions) {
+    pm.resolvePermission(d.requestId, d.approved);
+  }
+
+  LOG_INFO("processPermissionBatch: task={}, count={}", taskId,
+           decisions.size());
+
+  // 所有权限已处理 → 尝试恢复任务
+  checkAndResumePausedTasks();
+}
+
+void AgentOrchestrator::checkAndResumePausedTasks() {
+  std::vector<std::string> pausedTasks;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto &[id, state] : activeTasks_) {
+      if (state.status == "paused") {
+        pausedTasks.push_back(id);
+      }
+    }
+  }
+
+  auto &pm = ToolSystem::getInstance().permissionManager();
+  for (const auto &taskId : pausedTasks) {
+    auto pending = pm.getPendingRequests(taskId);
+    if (pending.empty()) {
+      LOG_INFO("checkAndResumePausedTasks: auto-resuming task={}", taskId);
+      resumeTask(taskId, "");
+    }
+  }
+}
+
+// ── 恢复执行 ──
+
+void AgentOrchestrator::runResumeThread(
+    const std::string &taskId, const TaskSnapshot &snapshot,
+    std::shared_ptr<std::atomic<bool>> cancelFlag) {
+  LOG_INFO("[ORCH DEBUG] runResumeThread START: taskId={}, expert={}", taskId,
+           snapshot.currentExpert);
+
+  try {
+    AgentLoop agentLoop(expertConfigPath_);
+    if (!agentLoop.isReady()) {
+      LOG_ERROR("[ORCH DEBUG] runResumeThread: AgentLoop NOT READY");
+      AgentLoopResult errorResult;
+      errorResult.status = "config_error";
+      errorResult.finalOutput = "Expert 配置未加载";
+      finalizeTask(taskId, snapshot.globalId, errorResult);
+      return;
+    }
+
+    // ★ 设置 onPause_ 回调 — Resume 过程中也可能再次暂停
+    agentLoop.setOnPause([this, taskId](const TaskSnapshot &snap) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      pausedSnapshots_[taskId] = snap;
+      auto it = activeTasks_.find(taskId);
+      if (it != activeTasks_.end()) {
+        it->second.status = "paused";
+        it->second.pauseReason = snap.pauseReason;
+        it->second.permissionRequestId = snap.permissionRequestId;
+      }
+    });
+
+    AgentLoopResult result = agentLoop.runFromSnapshot(snapshot, cancelFlag);
+
+    LOG_INFO("[ORCH DEBUG] runResumeThread returned: status={}, output_len={}",
+             result.status, result.finalOutput.size());
+    finalizeTask(taskId, snapshot.globalId, result);
+  } catch (const std::exception &e) {
+    LOG_ERROR("[ORCH DEBUG] runResumeThread EXCEPTION: {}", e.what());
+    AgentLoopResult errorResult;
+    errorResult.status = "failed";
+    errorResult.finalOutput = std::string("恢复执行异常: ") + e.what();
+    finalizeTask(taskId, snapshot.globalId, errorResult);
+  } catch (...) {
+    LOG_ERROR("[ORCH DEBUG] runResumeThread UNKNOWN EXCEPTION");
+    AgentLoopResult errorResult;
+    errorResult.status = "failed";
+    errorResult.finalOutput = "恢复执行未知异常";
+    finalizeTask(taskId, snapshot.globalId, errorResult);
+  }
+}
+
+// ── 内部异步执行（新任务） ──
 
 AgentLoopResult AgentOrchestrator::runDirectAnswer(
     const std::string &taskId, const std::string &globalId,

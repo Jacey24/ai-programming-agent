@@ -127,6 +127,7 @@ json ApiClient::createTask(const std::string &goal,
                            const std::string &workspacePath) {
   json body;
   body["input"] = goal;
+  body["session_id"] = "s_default";
   body["workspace_id"] = workspaceId.empty() ? "ws_default" : workspaceId;
   if (!workspacePath.empty())
     body["workspace_path"] = workspacePath;
