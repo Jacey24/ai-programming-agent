@@ -15,6 +15,12 @@ if(MSVC)
     )
 endif()
 
+add_library(cpp-httplib INTERFACE)
+target_include_directories(cpp-httplib INTERFACE
+    ${CMAKE_SOURCE_DIR}/third_party/cpp-httplib
+)
+add_library(httplib::httplib ALIAS cpp-httplib)
+
 add_executable(codepilot-agent-server
     main.cpp
     AppBootstrap.cpp
@@ -88,12 +94,13 @@ target_include_directories(codepilot-agent-server PRIVATE
     ${CMAKE_SOURCE_DIR}/backend/agent-server
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
     ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
-    ${CMAKE_SOURCE_DIR}/third_party/sqlite3
-    ${CMAKE_SOURCE_DIR}/third_party/cpp-httplib
     ${CMAKE_SOURCE_DIR}/modules
 )
 
-target_link_libraries(codepilot-agent-server PRIVATE sqlite3)
+target_link_libraries(codepilot-agent-server PRIVATE
+    sqlite3
+    httplib::httplib
+)
 
 # OpenSSL 强制要求 - LLM HTTPS 客户端必需
 # 当未通过 -DCMAKE_TOOLCHAIN_FILE 指定 vcpkg 时，手动指定路径
@@ -197,13 +204,12 @@ target_include_directories(agent-loop-test PRIVATE
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
     ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
-    ${CMAKE_SOURCE_DIR}/third_party/sqlite3
-    ${CMAKE_SOURCE_DIR}/third_party/cpp-httplib
     ${CMAKE_SOURCE_DIR}/modules
 )
 
 target_link_libraries(agent-loop-test PRIVATE
     sqlite3
+    httplib::httplib
     ${CMAKE_DL_LIBS}
 )
 
