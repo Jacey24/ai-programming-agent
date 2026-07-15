@@ -193,44 +193,54 @@ void SSEGateway::push(const std::string &taskId, EventType eventType,
 // ============================================================
 // pushStream — 流式推送
 // ============================================================
-void SSEGateway::pushStream(const std::string &taskId, const std::string &chunk,
+void SSEGateway::pushStream(const std::string &taskId,
+                            const std::string &messageId,
+                            const std::string &chunk, std::size_t sequence,
                             bool isLast, const std::string &fullContent) {
   if (!initialized_) {
     return;
   }
 
-  const std::string eventId = generateEventId();
   const std::string now = iso8601Now();
 
-  // 发送 agent_message_chunk 片段（永不持久化）
-  json chunkData;
-  chunkData["id"] = eventId;
-  chunkData["task_id"] = taskId;
-  chunkData["type"] = "agent_message_chunk";
-  chunkData["content"] = chunk;
-  chunkData["metadata"] = json{{"channel", "dialog"}, {"streaming", true}};
-  chunkData["created_at"] = now;
-  broadcastFrame(taskId, "agent_message_chunk", dumpJsonForTransport(chunkData));
+  // 当前浏览器 SSE 连接订阅 EventBus，且 directPush=false。流式片段只走
+  // EventBus，避免与 broadcastFrame 形成双发送路径。
+  if (!chunk.empty() && eventBus_) {
+    EventData event = EventData::Create(
+        taskId, EventType::AgentMessageChunk, chunk,
+        json{{"channel", "dialog"},
+             {"message_id", messageId},
+             {"sequence", sequence},
+             {"streaming", true},
+             {"done", false}});
+    event.id = generateEventId();
+    event.createdAt = now;
+    eventBus_->publish(event);
+  }
 
   if (isLast) {
-    // 发送完整的 agent_message（用于前端替换增量内容）
-    json fullData;
-    fullData["id"] = eventId;
-    fullData["task_id"] = taskId;
-    fullData["type"] = "agent_message";
-    fullData["content"] = fullContent.empty() ? chunk : fullContent;
-    fullData["metadata"] =
-        json{{"channel", "dialog"}, {"streaming", false}, {"stream_end", true}};
-    fullData["created_at"] = now;
-    broadcastFrame(taskId, "agent_message", dumpJsonForTransport(fullData));
+    const std::string eventId = generateEventId();
+    const std::string finalContent = fullContent.empty() ? chunk : fullContent;
+    const json finalMeta{{"channel", "dialog"},
+                        {"message_id", messageId},
+                        {"sequence", sequence},
+                        {"streaming", false},
+                        {"done", true},
+                        {"stream_end", true}};
+
+    if (eventBus_) {
+      EventData event =
+          EventData::Create(taskId, EventType::AgentMessage, finalContent,
+                            finalMeta);
+      event.id = eventId;
+      event.createdAt = now;
+      eventBus_->publish(event);
+    }
 
     // 持久化完整内容
     if (dataFacade_ && dataFacade_->isInitialized()) {
-      dataFacade_->saveEvent(
-          eventId, taskId, "agent_message",
-          fullContent.empty() ? chunk : fullContent,
-          dumpJsonForTransport(
-              json{{"channel", "dialog"}, {"stream_end", true}}));
+      dataFacade_->saveEvent(eventId, taskId, "agent_message", finalContent,
+                             dumpJsonForTransport(finalMeta));
     }
   }
 }

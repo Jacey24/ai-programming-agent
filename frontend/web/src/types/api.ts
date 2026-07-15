@@ -151,6 +151,15 @@ export interface TaskEventRecord {
   created_at?: string;
 }
 
+export interface AgentMessageStreamMetadata {
+  channel?: "dialog";
+  message_id: string;
+  sequence?: number;
+  streaming?: boolean;
+  done?: boolean;
+  stream_end?: boolean;
+}
+
 export interface TaskEventHistoryPayload {
   task_id?: string;
   items: TaskEventRecord[];

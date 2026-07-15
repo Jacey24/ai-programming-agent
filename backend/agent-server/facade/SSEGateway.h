@@ -91,7 +91,8 @@ public:
   // 流式推送（第 9 点优化）
   //   自动处理 chunk 不持久化 + isLast 时落库完整内容
   // ============================================================
-  void pushStream(const std::string &taskId, const std::string &chunk,
+  void pushStream(const std::string &taskId, const std::string &messageId,
+                  const std::string &chunk, std::size_t sequence,
                   bool isLast = false, const std::string &fullContent = "");
 
   // ============================================================

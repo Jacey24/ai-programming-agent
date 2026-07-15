@@ -6,6 +6,7 @@ enum class EventType {
     TaskCreated,
     TaskPlanning,
     AgentMessage,
+    AgentMessageChunk,
     ToolStarted,
     ToolOutput,
     ToolFinished,
