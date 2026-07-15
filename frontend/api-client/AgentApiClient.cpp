@@ -178,8 +178,12 @@ ApiResult AgentApiClient::getReplay(const std::string& taskId) {
 
 // --- Permissions -----------------------------------------------------------
 
-ApiResult AgentApiClient::getPendingPermissions() {
-    return get("/permissions/pending");
+ApiResult AgentApiClient::getPendingPermissions(const std::string& taskId) {
+    std::string path = "/permissions?status=pending";
+    if (!taskId.empty()) {
+        path += "&task_id=" + urlEncode(taskId);
+    }
+    return get(path);
 }
 
 ApiResult AgentApiClient::approvePermission(const std::string& permissionId) {

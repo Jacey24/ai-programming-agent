@@ -7,6 +7,28 @@
 #include <sstream>
 #include <thread>
 
+namespace {
+
+std::string urlEncode(const std::string &value) {
+  static constexpr char hex[] = "0123456789ABCDEF";
+  std::string encoded;
+  encoded.reserve(value.size());
+  for (const unsigned char c : value) {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
+        c == '~') {
+      encoded.push_back(static_cast<char>(c));
+    } else {
+      encoded.push_back('%');
+      encoded.push_back(hex[c >> 4]);
+      encoded.push_back(hex[c & 0x0F]);
+    }
+  }
+  return encoded;
+}
+
+} // namespace
+
 ApiClient::ApiClient(const std::string &host, int port)
     : host_(host), port_(port) {}
 
@@ -348,8 +370,11 @@ json ApiClient::deleteTask(const std::string &id) {
 
 // ── 权限管理 ★ v2 ──
 
-json ApiClient::listPermissions() {
-  return parseOrError(doGet("/api/v1/permissions"), "listPermissions");
+json ApiClient::listPermissions(const std::string &taskId) {
+  std::string path = "/api/v1/permissions?status=pending";
+  if (!taskId.empty())
+    path += "&task_id=" + urlEncode(taskId);
+  return parseOrError(doGet(path), "listPermissions");
 }
 
 json ApiClient::approvePermission(const std::string &id) {

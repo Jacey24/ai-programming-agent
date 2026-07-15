@@ -64,7 +64,7 @@ public:
   json deleteTask(const std::string &id);
 
   // ── 权限管理 ★ v2 ──
-  json listPermissions();
+  json listPermissions(const std::string &taskId = "");
   json approvePermission(const std::string &id);
   json rejectPermission(const std::string &id);
   json approveFirstPending();
