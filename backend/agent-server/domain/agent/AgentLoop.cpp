@@ -57,9 +57,11 @@ AgentLoop::runFromSnapshot(const TaskSnapshot &snapshot,
   // planHistory is restored via PlanManager::restoreSnapshot inside
   // runExpertChain
 
+  // 从快照恢复时使用默认选项
+  TaskRunOptions defaultOpts;
   return runExpertChain(snapshot.taskId, snapshot.globalId,
-                        snapshot.workspaceId, ctx, targetExpert, cancelFlag,
-                        snapshot.sessionHistory);
+                        snapshot.workspaceId, ctx, targetExpert, defaultOpts,
+                        cancelFlag, snapshot.sessionHistory);
 }
 
 AgentLoopResult AgentLoop::run(const std::string &taskId,
@@ -122,21 +124,16 @@ AgentLoopResult AgentLoop::run(const std::string &taskId,
     }
   }
 
-  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert, options,
-                        cancelFlag);
+  return runExpertChain(taskId, globalId, workspaceId, ctx, entryExpert,
+                        options, cancelFlag);
 }
 
-AgentLoopResult
-AgentLoop::runExpertChain(const std::string &taskId,
-                          const std::string &globalId,
-                          const std::string &workspaceId, TaskContext &ctx,
-                          const ExpertConfig *entryExpert,
-<<<<<<< HEAD
-                          const TaskRunOptions &options,
-=======
->>>>>>> 9eed7c0 (resume小更新)
-                          std::shared_ptr<std::atomic<bool>> cancelFlag,
-                          const std::string &initialSessionHistory) {
+AgentLoopResult AgentLoop::runExpertChain(
+    const std::string &taskId, const std::string &globalId,
+    const std::string &workspaceId, TaskContext &ctx,
+    const ExpertConfig *entryExpert, const TaskRunOptions &options,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const std::string &initialSessionHistory) {
   AgentLoopResult result;
   auto &cfg = AgentConfiguration::getInstance();
 
@@ -414,8 +411,9 @@ AgentLoop::runExpertChain(const std::string &taskId,
           toolCtx.workspaceId = workspaceId;
           toolCtx.workspacePath = ctx.workspacePath;
           if (!workspaceId.empty()) {
-            toolCtx.workspaceRuntime = WorkspaceManager::getInstance().getOrCreate(
-                workspaceId, toolCtx.workspacePath);
+            toolCtx.workspaceRuntime =
+                WorkspaceManager::getInstance().getOrCreate(
+                    workspaceId, toolCtx.workspacePath);
           }
           toolCtx.options["auto_run_safe_commands"] =
               options.autoRunSafeCommands ? "true" : "false";

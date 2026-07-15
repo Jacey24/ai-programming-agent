@@ -31,7 +31,6 @@ struct ActiveTaskState {
   std::string currentExpert;
   std::string currentStage; // expert_start / waiting / received / tool / ...
   std::vector<std::string> expertChain;
-  std::string status; // running / completed / failed / cancelled
   bool terminalEventSent{false};
   std::string status; // running / paused / completed / failed / cancelled
   std::string pauseReason;

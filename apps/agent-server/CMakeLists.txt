@@ -184,9 +184,14 @@ target_include_directories(agent-loop-test PRIVATE
     ${CMAKE_SOURCE_DIR}/backend/agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent
     ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+    ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
+    ${CMAKE_SOURCE_DIR}/third_party/sqlite3
+    ${CMAKE_SOURCE_DIR}/third_party/cpp-httplib
+    ${CMAKE_SOURCE_DIR}/modules
 )
 
 target_link_libraries(agent-loop-test PRIVATE
+    sqlite3
     ${CMAKE_DL_LIBS}
 )
 
