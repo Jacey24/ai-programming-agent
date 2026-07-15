@@ -44,11 +44,13 @@ public:
   bool isInitialized() const { return initialized_; }
 
   // ============================================================
-  // Session 组（兼容旧 API，内部委托给 Global）
+  // Session 组（独立存储，通过 workspace_id 关联 Workspace）
   // ============================================================
   SessionRecord createSession(const std::string &title);
   std::optional<SessionRecord> getSession(const std::string &id);
   std::vector<SessionRecord> listSessions();
+  bool updateSession(const std::string &id, const std::string &title,
+                     const std::string &alias, const std::string &workspace_id);
   bool deleteSession(const std::string &id);
 
   // ============================================================
@@ -86,12 +88,14 @@ public:
   std::vector<TaskRecord> listRecentTasks(int limit = 20);
 
   // ============================================================
-  // Workspace 组
+  // Workspace 组（独立存储，运行时通过 WorkspaceManager 管理）
   // ============================================================
   WorkspaceRecord createWorkspace(const std::string &name,
                                   const std::string &path);
   std::optional<WorkspaceRecord> getWorkspace(const std::string &id);
   std::vector<WorkspaceRecord> listWorkspaces();
+  bool updateWorkspace(const std::string &id, const std::string &name,
+                       const std::string &description, const std::string &path);
   bool deleteWorkspace(const std::string &id);
 
   // ============================================================

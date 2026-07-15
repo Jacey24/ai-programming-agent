@@ -165,6 +165,55 @@ std::vector<SessionRecord> DataAccessFacade::listSessions() {
   return SessionRepository(db_).listAll();
 }
 
+bool DataAccessFacade::updateSession(const std::string &id,
+                                     const std::string &title,
+                                     const std::string &alias,
+                                     const std::string &workspace_id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<bool>(
+      "updateSession",
+      [&]() {
+        const std::string now = iso8601Now();
+        std::ostringstream sql;
+        sql << "UPDATE sessions SET updated_at = ?";
+        sqlite3_stmt *stmt = nullptr;
+
+        // 收集动态字段
+        std::vector<std::string> bindValues;
+        if (!title.empty()) {
+          sql << ", title = ?";
+          bindValues.push_back(title);
+        }
+        if (!alias.empty()) {
+          sql << ", alias = ?";
+          bindValues.push_back(alias);
+        }
+        if (!workspace_id.empty()) {
+          sql << ", workspace_id = ?";
+          bindValues.push_back(workspace_id);
+        }
+        sql << " WHERE id = ?;";
+
+        if (sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &stmt, nullptr) !=
+            SQLITE_OK) {
+          throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+
+        int paramIdx = 1;
+        sqlite3_bind_text(stmt, paramIdx++, now.c_str(), -1, SQLITE_TRANSIENT);
+        for (const auto &val : bindValues) {
+          sqlite3_bind_text(stmt, paramIdx++, val.c_str(), -1,
+                            SQLITE_TRANSIENT);
+        }
+        sqlite3_bind_text(stmt, paramIdx++, id.c_str(), -1, SQLITE_TRANSIENT);
+
+        const int step_result = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        return step_result == SQLITE_DONE;
+      },
+      false);
+}
+
 bool DataAccessFacade::deleteSession(const std::string &id) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<bool>(
@@ -240,8 +289,8 @@ TaskRecord DataAccessFacade::createTask(const std::string &sessionId,
                                         const std::string &goal) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string now = iso8601Now();
-  return TaskRepository(db_).createTask(generateId("task"), sessionId,
-                                        globalId, workspaceId, goal, now, now);
+  return TaskRepository(db_).createTask(generateId("task"), sessionId, globalId,
+                                        workspaceId, goal, now, now);
 }
 
 std::optional<TaskRecord> DataAccessFacade::getTask(const std::string &id) {
@@ -312,6 +361,60 @@ DataAccessFacade::getWorkspace(const std::string &id) {
 std::vector<WorkspaceRecord> DataAccessFacade::listWorkspaces() {
   std::lock_guard<std::mutex> lock(mutex_);
   return WorkspaceRepository(db_).listAll();
+}
+
+bool DataAccessFacade::updateWorkspace(const std::string &id,
+                                       const std::string &name,
+                                       const std::string &description,
+                                       const std::string &path) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<bool>(
+      "updateWorkspace",
+      [&]() {
+        std::ostringstream sql;
+        sql << "UPDATE workspaces SET ";
+        std::vector<std::string> bindValues;
+        bool first = true;
+
+        if (!name.empty()) {
+          sql << "name = ?";
+          bindValues.push_back(name);
+          first = false;
+        }
+        if (!description.empty()) {
+          if (!first)
+            sql << ", ";
+          sql << "description = ?";
+          bindValues.push_back(description);
+          first = false;
+        }
+        if (!path.empty()) {
+          if (!first)
+            sql << ", ";
+          sql << "path = ?";
+          bindValues.push_back(path);
+          first = false;
+        }
+        sql << " WHERE id = ?;";
+
+        sqlite3_stmt *stmt = nullptr;
+        if (sqlite3_prepare_v2(db_, sql.str().c_str(), -1, &stmt, nullptr) !=
+            SQLITE_OK) {
+          throw std::runtime_error(sqlite3_errmsg(db_));
+        }
+
+        for (size_t i = 0; i < bindValues.size(); ++i) {
+          sqlite3_bind_text(stmt, static_cast<int>(i + 1),
+                            bindValues[i].c_str(), -1, SQLITE_TRANSIENT);
+        }
+        sqlite3_bind_text(stmt, static_cast<int>(bindValues.size() + 1),
+                          id.c_str(), -1, SQLITE_TRANSIENT);
+
+        const int step_result = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        return step_result == SQLITE_DONE;
+      },
+      false);
 }
 
 bool DataAccessFacade::deleteWorkspace(const std::string &id) {

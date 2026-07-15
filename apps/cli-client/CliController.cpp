@@ -270,8 +270,10 @@ void CliController::handleGlobalUse(const std::string &args) {
   std::cout << "  已切换到 Global: " << activeGlobalId_ << std::endl;
   std::cout << "   名称: " << resp["data"].value("name", "?") << std::endl;
   if (!wsId.empty() && wsId != activeWorkspaceId_) {
+    activeSessionId_.clear();
     activeWorkspaceId_ = wsId;
     std::cout << "   关联工作区已自动切换: " << wsId << std::endl;
+    std::cout << "   当前活动 Session 已清除" << std::endl;
   }
 }
 
@@ -333,11 +335,31 @@ void CliController::handleTaskCreate(const std::string &args) {
     std::cout << "  用法: /task create <目标描述>" << std::endl;
     return;
   }
+  if (activeGlobalId_.empty()) {
+    std::cout << "  [错误] 当前没有活动 Global，请先使用 /global use "
+                 "<global_id>"
+              << std::endl;
+    return;
+  }
+  if (activeWorkspaceId_.empty()) {
+    std::cout << "  [错误] 当前没有活动 Workspace，请先使用 /workspace use "
+                 "<workspace_id>"
+              << std::endl;
+    return;
+  }
+  if (activeSessionId_.empty()) {
+    std::cout << "  [错误] 当前没有活动 Session，请先使用 /session create "
+                 "<标题>"
+              << std::endl;
+    return;
+  }
 
   std::cout << "  [创建任务] " << args << std::endl;
-  std::cout << "  Global: " << activeGlobalId_
+  std::cout << "  Session: " << activeSessionId_
+            << "  Global: " << activeGlobalId_
             << "  Workspace: " << activeWorkspaceId_ << std::endl;
-  auto resp = client_.createTask(args, activeWorkspaceId_, workspacePath_);
+  auto resp = client_.createTask(args, activeSessionId_, activeGlobalId_,
+                                 activeWorkspaceId_);
 
   if (!resp.value("success", false)) {
     printError(resp);
@@ -513,10 +535,17 @@ void CliController::handleWorkspaceUse(const std::string &args) {
     printError(resp);
     return;
   }
+  if (activeWorkspaceId_ != args) {
+    activeSessionId_.clear();
+  }
   activeWorkspaceId_ = args;
   workspacePath_ = resp["data"].value("path", "");
   std::cout << "  已切换到工作区: " << activeWorkspaceId_ << std::endl;
   std::cout << "  路径: " << workspacePath_ << std::endl;
+  if (activeSessionId_.empty()) {
+    std::cout << "  当前没有活动 Session，请使用 /session create <标题>"
+              << std::endl;
+  }
 }
 
 void CliController::handleWorkspaceFiles(const std::string &args) {
@@ -541,8 +570,10 @@ void CliController::handleWorkspaceDelete(const std::string &args) {
   if (resp.value("success", false)) {
     std::cout << "  工作区 " << args << " 已删除" << std::endl;
     if (args == activeWorkspaceId_) {
-      activeWorkspaceId_ = "ws_default";
-      std::cout << "  已切换回默认工作区: ws_default" << std::endl;
+      activeWorkspaceId_.clear();
+      activeSessionId_.clear();
+      workspacePath_.clear();
+      std::cout << "  当前 Workspace 和 Session 已清除" << std::endl;
     }
   } else {
     printError(resp);
@@ -556,14 +587,48 @@ void CliController::handleSessionCreate(const std::string &args) {
     std::cout << "  用法: /session create <标题>" << std::endl;
     return;
   }
-  auto resp = client_.createSession(args);
-  if (resp.value("success", false)) {
-    auto data = resp["data"];
-    std::cout << "  对话已创建: " << data.value("id", "?") << " ("
-              << data.value("title", "") << ")" << std::endl;
-  } else {
-    printError(resp);
+  if (activeWorkspaceId_.empty()) {
+    std::cout << "  [错误] 当前没有活动 Workspace，请先使用 /workspace use "
+                 "<workspace_id>"
+              << std::endl;
+    return;
   }
+
+  auto resp = client_.createSession(args);
+  if (!resp.value("success", false)) {
+    printError(resp);
+    return;
+  }
+
+  auto data = resp["data"];
+  const std::string sessionId = data.value("id", "");
+  if (sessionId.empty()) {
+    std::cout << "  [错误] Session 已创建，但后端未返回有效 Session ID"
+              << std::endl;
+    return;
+  }
+
+  auto bindResp =
+      client_.updateSession(sessionId, "", "", activeWorkspaceId_);
+  if (!bindResp.value("success", false)) {
+    std::cout << "  [错误] Session " << sessionId
+              << " 已创建，但绑定当前 Workspace 失败" << std::endl;
+    printError(bindResp);
+    return;
+  }
+
+  const std::string boundWorkspaceId =
+      bindResp["data"].value("workspace_id", "");
+  if (boundWorkspaceId != activeWorkspaceId_) {
+    std::cout << "  [错误] Session " << sessionId
+              << " 未绑定到当前 Workspace，未激活" << std::endl;
+    return;
+  }
+
+  activeSessionId_ = sessionId;
+  std::cout << "  对话已创建: " << activeSessionId_ << " ("
+            << data.value("title", "") << ")" << std::endl;
+  std::cout << "  当前活动 Session: " << activeSessionId_ << std::endl;
 }
 
 void CliController::handleSessionUpdate(const std::string &args) {
@@ -650,6 +715,10 @@ void CliController::handleSessionDelete(const std::string &args) {
   auto resp = client_.deleteSession(args);
   if (resp.value("success", false)) {
     std::cout << "  对话 " << args << " 已删除" << std::endl;
+    if (args == activeSessionId_) {
+      activeSessionId_.clear();
+      std::cout << "  当前活动 Session 已清除" << std::endl;
+    }
   } else {
     printError(resp);
   }

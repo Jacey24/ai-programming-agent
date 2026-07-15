@@ -122,15 +122,15 @@ static json parseOrError(const std::string &resp, const std::string &op) {
   }
 }
 
-json ApiClient::createTask(const std::string &goal,
-                           const std::string &workspaceId,
-                           const std::string &workspacePath) {
+json ApiClient::createTask(const std::string &input,
+                           const std::string &sessionId,
+                           const std::string &globalId,
+                           const std::string &workspaceId) {
   json body;
-  body["input"] = goal;
-  body["session_id"] = "s_default";
-  body["workspace_id"] = workspaceId.empty() ? "ws_default" : workspaceId;
-  if (!workspacePath.empty())
-    body["workspace_path"] = workspacePath;
+  body["session_id"] = sessionId;
+  body["global_id"] = globalId;
+  body["workspace_id"] = workspaceId;
+  body["input"] = input;
   return parseOrError(doPost("/api/v1/tasks", body.dump()), "createTask");
 }
 
