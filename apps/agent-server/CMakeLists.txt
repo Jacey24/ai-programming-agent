@@ -151,6 +151,18 @@ target_link_libraries(tool-tests PRIVATE
 )
 
 if(CODEPILOT_BUILD_TESTS)
+add_executable(process-runner-test
+    ${CMAKE_SOURCE_DIR}/tests/test_process_runner.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
+)
+
+target_include_directories(process-runner-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/backend/agent-server
+    ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+)
+
+add_test(NAME process-runner-test COMMAND process-runner-test)
+
 add_executable(agent-loop-test
     ${CMAKE_SOURCE_DIR}/tests/test_agent_loop.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ToolSystem.cpp

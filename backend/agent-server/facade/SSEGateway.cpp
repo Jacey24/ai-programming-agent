@@ -27,6 +27,14 @@
 
 namespace codepilot {
 
+namespace {
+
+std::string dumpJsonForTransport(const json &value) {
+  return value.dump(-1, ' ', false, json::error_handler_t::replace);
+}
+
+} // namespace
+
 // ============================================================
 // 单例获取
 // ============================================================
@@ -172,12 +180,13 @@ void SSEGateway::push(const std::string &taskId, EventType eventType,
   sseData["content"] = content;
   sseData["metadata"] = meta;
   sseData["created_at"] = now;
-  broadcastFrame(taskId, eventTypeStr, sseData.dump());
+  broadcastFrame(taskId, eventTypeStr, dumpJsonForTransport(sseData));
 
   // ③ 持久化到 SQLite（仅 persist=Always）
   if (persist == Persist::Always && dataFacade_ &&
       dataFacade_->isInitialized()) {
-    dataFacade_->saveEvent(eventId, taskId, eventTypeStr, content, meta.dump());
+    dataFacade_->saveEvent(eventId, taskId, eventTypeStr, content,
+                           dumpJsonForTransport(meta));
   }
 }
 
@@ -201,7 +210,7 @@ void SSEGateway::pushStream(const std::string &taskId, const std::string &chunk,
   chunkData["content"] = chunk;
   chunkData["metadata"] = json{{"channel", "dialog"}, {"streaming", true}};
   chunkData["created_at"] = now;
-  broadcastFrame(taskId, "agent_message_chunk", chunkData.dump());
+  broadcastFrame(taskId, "agent_message_chunk", dumpJsonForTransport(chunkData));
 
   if (isLast) {
     // 发送完整的 agent_message（用于前端替换增量内容）
@@ -213,14 +222,15 @@ void SSEGateway::pushStream(const std::string &taskId, const std::string &chunk,
     fullData["metadata"] =
         json{{"channel", "dialog"}, {"streaming", false}, {"stream_end", true}};
     fullData["created_at"] = now;
-    broadcastFrame(taskId, "agent_message", fullData.dump());
+    broadcastFrame(taskId, "agent_message", dumpJsonForTransport(fullData));
 
     // 持久化完整内容
     if (dataFacade_ && dataFacade_->isInitialized()) {
       dataFacade_->saveEvent(
           eventId, taskId, "agent_message",
           fullContent.empty() ? chunk : fullContent,
-          json{{"channel", "dialog"}, {"stream_end", true}}.dump());
+          dumpJsonForTransport(
+              json{{"channel", "dialog"}, {"stream_end", true}}));
     }
   }
 }
@@ -401,7 +411,7 @@ void SSEGateway::streamTaskEventsImpl(const std::string &taskId,
       data["content"] = ev.content;
       data["metadata"] = ev.metadata;
       data["created_at"] = ev.createdAt;
-      writeFrame(ev.typeToString(), data.dump());
+      writeFrame(ev.typeToString(), dumpJsonForTransport(data));
       if (isTerminal(ev.type)) {
         done.store(true);
       }
@@ -425,7 +435,7 @@ void SSEGateway::streamTaskEventsImpl(const std::string &taskId,
       data["metadata"] = meta;
       data["created_at"] = ev.created_at;
 
-      writeFrame(ev.type, data.dump());
+      writeFrame(ev.type, dumpJsonForTransport(data));
       if (ev.type == "task_completed" || ev.type == "task_failed" ||
           ev.type == "task_cancelled") {
         done.store(true);

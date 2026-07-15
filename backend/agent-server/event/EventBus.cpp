@@ -75,7 +75,7 @@ std::string EventData::serialize() const {
   j["metadata"] = metadata;
 
   j["created_at"] = createdAt;
-  return j.dump(2);
+  return j.dump(2, ' ', false, json::error_handler_t::replace);
 }
 
 EventData EventData::Create(const std::string &taskId, EventType type,

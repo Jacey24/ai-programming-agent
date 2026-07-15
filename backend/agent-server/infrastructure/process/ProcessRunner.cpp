@@ -9,7 +9,12 @@
 #include <string>
 #include <thread>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <cerrno>
 #include <csignal>
 #include <sys/select.h>
@@ -18,6 +23,79 @@
 #endif
 
 namespace codepilot {
+
+namespace {
+
+#ifdef _WIN32
+bool isValidUtf8(const std::string &value) {
+  if (value.empty()) {
+    return true;
+  }
+
+  return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                             static_cast<int>(value.size()), nullptr, 0) > 0;
+}
+
+std::string codePageToUtf8(const std::string &value, UINT codePage) {
+  if (value.empty()) {
+    return {};
+  }
+
+  const int wideSize = MultiByteToWideChar(
+      codePage, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0);
+  if (wideSize <= 0) {
+    return {};
+  }
+
+  std::wstring wide(static_cast<std::size_t>(wideSize), L'\0');
+  if (MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, value.data(),
+                          static_cast<int>(value.size()), wide.data(),
+                          wideSize) <= 0) {
+    return {};
+  }
+
+  const int utf8Size = WideCharToMultiByte(
+      CP_UTF8, 0, wide.data(), wideSize, nullptr, 0, nullptr, nullptr);
+  if (utf8Size <= 0) {
+    return {};
+  }
+
+  std::string utf8(static_cast<std::size_t>(utf8Size), '\0');
+  if (WideCharToMultiByte(CP_UTF8, 0, wide.data(), wideSize, utf8.data(),
+                          utf8Size, nullptr, nullptr) <= 0) {
+    return {};
+  }
+  return utf8;
+}
+
+std::string normalizeProcessOutput(const std::string &output) {
+  if (isValidUtf8(output)) {
+    return output;
+  }
+
+  // Redirected Windows programs commonly use the active ANSI code page
+  // (for example, Python uses GBK/cp936 on a zh-CN system). Convert that
+  // output at the process boundary so every downstream JSON/SSE consumer
+  // receives UTF-8.
+  std::string utf8 = codePageToUtf8(output, GetACP());
+  if (!utf8.empty()) {
+    return utf8;
+  }
+
+  // Some console programs write using the OEM code page instead.
+  if (GetOEMCP() != GetACP()) {
+    utf8 = codePageToUtf8(output, GetOEMCP());
+    if (!utf8.empty()) {
+      return utf8;
+    }
+  }
+
+  return output;
+}
+#endif
+
+} // namespace
 
 ProcessRunner::ProcessRunner() : workingDirectory_("") {}
 
@@ -73,7 +151,7 @@ ProcessResult ProcessRunner::execute(const std::string &command, int timeout) {
   }
 
   int exitCode = _pclose(pipe);
-  result.output = output;
+  result.output = normalizeProcessOutput(output);
   if (timedOut) {
     result.success = false;
     result.exitCode = -1;

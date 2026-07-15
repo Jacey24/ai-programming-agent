@@ -14,13 +14,13 @@ endif()
 option(CODEPILOT_BUILD_TUI "Build the TUI client" ON)
 option(CODEPILOT_BUILD_TESTS "Build tests" ON)
 
+if(CODEPILOT_BUILD_TESTS)
+    enable_testing()
+endif()
+
 add_subdirectory(apps/agent-server)
 add_subdirectory(apps/cli-client)
 
 if(CODEPILOT_BUILD_TUI)
     add_subdirectory(apps/tui-client)
-endif()
-
-if(CODEPILOT_BUILD_TESTS)
-    enable_testing()
 endif()

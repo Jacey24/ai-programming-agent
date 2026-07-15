@@ -347,10 +347,10 @@ int HttpServer::run(const std::atomic_bool &running) {
         getWorkspace, "GET /api/v1/workspaces/" + req.matches[1].str());
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/tree)",
         WorkspaceFileController, getTree,
-        "GET /api/v1/workspaces/" + req.matches[1].str() + "/files/tree");
+        "GET " + req.target);
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/content)",
         WorkspaceFileController, getFileContent,
-        "GET /api/v1/workspaces/" + req.matches[1].str() + "/files/content");
+        "GET " + req.target);
   ROUTE(Put, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,
         updateWorkspace,
         "PUT /api/v1/workspaces/" + req.matches[1].str() + " \r\n\r\n" +
