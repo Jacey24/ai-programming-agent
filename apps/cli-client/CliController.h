@@ -67,7 +67,8 @@ private:
   bool running_{true};
   bool verbose_{false};
   std::string workspacePath_;
-  std::string activeWorkspaceId_{"ws_default"};
+  std::string activeWorkspaceId_;
+  std::string activeSessionId_;
   std::string activeGlobalId_{"g_default"};
 
   std::atomic_bool streamCancelFlag_{false};
