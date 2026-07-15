@@ -5,6 +5,7 @@
 
 #include "application/ToolSystem.h"
 #include "common/logging/Logger.h"
+#include "domain/security/PermissionPolicyEngine.h"
 #include "facade/DataAccessFacade.h"
 #include "facade/LlmClientFacade.h"
 #include "facade/SSEGateway.h"
@@ -421,52 +422,146 @@ AgentLoopResult AgentLoop::runExpertChain(
               options.requireFileWritePermission ? "true" : "false";
 
           try {
-            ToolResult tr = ToolSystem::getInstance().callToolWithPermission(
-                actualToolName, toolCtx, toolArgsParsed);
+            // ★★★ Workspace 权限策略预检 ★★★
+            // 先从 DB 读取当前 workspace 的 permissions_config，
+            // 用 PolicyEngine 评估是否自动批准/拒绝，仅当策略为
+            // "ask" 时才进入标准 PermissionManager 暂停流程。
+            PolicyAction policyAction = PolicyAction::Ask;
+            {
+              std::string permissionsConfig = "{}";
+              if (DataAccessFacade::getInstance().isInitialized()) {
+                auto wsRecord =
+                    DataAccessFacade::getInstance().getWorkspace(workspaceId);
+                if (wsRecord) {
+                  permissionsConfig = wsRecord->permissions_config;
+                }
+              }
+              policyAction = PermissionPolicyEngine::evaluate(permissionsConfig,
+                                                              actualToolName);
+            }
 
-            // ★★★ 权限暂停检测 ★★★
-            // 当工具需要用户批准时，callToolWithPermission 返回
-            // metadata["paused"]=true 而非阻塞。
-            // 此处调用 waitForResolution 阻塞等待用户决议，
-            // 批准后重新执行工具，实现无缝继续。
-            if (tr.metadata.contains("paused") &&
-                tr.metadata["paused"].get<bool>()) {
-              std::string permReqId =
-                  tr.metadata.value("permission_request_id", "");
+            ToolResult tr;
+            if (policyAction == PolicyAction::Deny) {
+              // 策略拒绝 → 构造 [PERMISSION_DENIED] 结果
+              toolSuccess = false;
+              toolExitCode = -1;
+              toolResult = "[PERMISSION_DENIED] Workspace 策略拒绝了工具 [" +
+                           actualToolName + "] 的执行权限。";
 
               if (SSEGateway::getInstance().isInitialized()) {
-                json pauseMeta;
-                pauseMeta["stage"] = "permission_wait";
-                pauseMeta["tool_name"] = actualToolName;
-                pauseMeta["request_id"] = permReqId;
+                json policyMeta;
+                policyMeta["stage"] = "policy_denied";
+                policyMeta["tool_name"] = actualToolName;
+                policyMeta["source"] = "PermissionPolicyEngine";
                 SSEGateway::getInstance().push(
                     taskId, EventType::AgentMessage,
-                    "⏸ 等待用户批准: " + actualToolName +
-                        " (request=" + permReqId + ")",
-                    pauseMeta, SSEGateway::Channel::Status,
-                    SSEGateway::Persist::Always);
+                    "🚫 策略拒绝: " + actualToolName, policyMeta,
+                    SSEGateway::Channel::Status, SSEGateway::Persist::Always);
+              }
+            } else if (policyAction == PolicyAction::AutoApprove) {
+              // 策略自动批准 → 跳过权限检查，直接执行
+              if (SSEGateway::getInstance().isInitialized()) {
+                json policyMeta;
+                policyMeta["stage"] = "policy_auto_approve";
+                policyMeta["tool_name"] = actualToolName;
+                policyMeta["source"] = "PermissionPolicyEngine";
+                SSEGateway::getInstance().push(
+                    taskId, EventType::AgentMessage,
+                    "⚡ 自动批准执行: " + actualToolName, policyMeta,
+                    SSEGateway::Channel::Status, SSEGateway::Persist::Always);
               }
 
-              // 阻塞等待用户决议（最多 120 秒）
-              bool approved = ToolSystem::getInstance()
-                                  .permissionManager()
-                                  .waitForResolution(permReqId, 120);
+              tr = ToolSystem::getInstance().callTool(actualToolName, toolCtx,
+                                                      toolArgsParsed);
+              toolSuccess = tr.success;
+              toolExitCode = tr.exitCode;
+              if (tr.success) {
+                toolResult = "成功: " + tr.output;
+              } else {
+                toolResult = "[EXECUTION_ERROR] " + tr.error + " (exit code " +
+                             std::to_string(tr.exitCode) + ")";
+              }
+            } else {
+              // Ask → 走标准 PermissionManager 暂停/继续流程
+              tr = ToolSystem::getInstance().callToolWithPermission(
+                  actualToolName, toolCtx, toolArgsParsed);
+            }
 
-              if (approved) {
-                // 用户批准 → 重新执行工具（跳过权限检查，直接调用 callTool）
+            // ★★★ 权限暂停检测（仅 Ask 策略会进入） ★★★
+            if (policyAction == PolicyAction::Ask) {
+              // 当工具需要用户批准时，callToolWithPermission 返回
+              // metadata["paused"]=true 而非阻塞。
+              // 此处调用 waitForResolution 阻塞等待用户决议，
+              // 批准后重新执行工具，实现无缝继续。
+              if (tr.metadata.contains("paused") &&
+                  tr.metadata["paused"].get<bool>()) {
+                std::string permReqId =
+                    tr.metadata.value("permission_request_id", "");
+
                 if (SSEGateway::getInstance().isInitialized()) {
-                  json approvedMeta;
-                  approvedMeta["stage"] = "permission_approved";
-                  approvedMeta["tool_name"] = actualToolName;
-                  approvedMeta["request_id"] = permReqId;
+                  json pauseMeta;
+                  pauseMeta["stage"] = "permission_wait";
+                  pauseMeta["tool_name"] = actualToolName;
+                  pauseMeta["request_id"] = permReqId;
                   SSEGateway::getInstance().push(
                       taskId, EventType::AgentMessage,
-                      "✅ 权限已批准，执行 " + actualToolName, approvedMeta,
-                      SSEGateway::Channel::Status, SSEGateway::Persist::Always);
+                      "⏸ 等待用户批准: " + actualToolName +
+                          " (request=" + permReqId + ")",
+                      pauseMeta, SSEGateway::Channel::Status,
+                      SSEGateway::Persist::Always);
                 }
 
-                tr = ToolSystem::getInstance().callTool(actualToolName, toolCtx,
-                                                        toolArgsParsed);
+                // 阻塞等待用户决议（最多 120 秒）
+                bool approved = ToolSystem::getInstance()
+                                    .permissionManager()
+                                    .waitForResolution(permReqId, 120);
+
+                if (approved) {
+                  // 用户批准 → 重新执行工具（跳过权限检查，直接调用 callTool）
+                  if (SSEGateway::getInstance().isInitialized()) {
+                    json approvedMeta;
+                    approvedMeta["stage"] = "permission_approved";
+                    approvedMeta["tool_name"] = actualToolName;
+                    approvedMeta["request_id"] = permReqId;
+                    SSEGateway::getInstance().push(
+                        taskId, EventType::AgentMessage,
+                        "✅ 权限已批准，执行 " + actualToolName, approvedMeta,
+                        SSEGateway::Channel::Status,
+                        SSEGateway::Persist::Always);
+                  }
+
+                  tr = ToolSystem::getInstance().callTool(
+                      actualToolName, toolCtx, toolArgsParsed);
+                  toolSuccess = tr.success;
+                  toolExitCode = tr.exitCode;
+                  if (tr.success) {
+                    toolResult = "成功: " + tr.output;
+                  } else {
+                    toolResult = "[EXECUTION_ERROR] " + tr.error +
+                                 " (exit code " + std::to_string(tr.exitCode) +
+                                 ")";
+                  }
+                } else {
+                  // 用户拒绝或超时
+                  toolSuccess = false;
+                  toolExitCode = -1;
+                  toolResult = "[PERMISSION_DENIED] 用户拒绝了工具 [" +
+                               actualToolName + "] 的执行权限，或等待超时。";
+
+                  if (SSEGateway::getInstance().isInitialized()) {
+                    json deniedMeta;
+                    deniedMeta["stage"] = "permission_denied";
+                    deniedMeta["tool_name"] = actualToolName;
+                    deniedMeta["request_id"] = permReqId;
+                    SSEGateway::getInstance().push(
+                        taskId, EventType::AgentMessage,
+                        "❌ 权限被拒绝: " + actualToolName, deniedMeta,
+                        SSEGateway::Channel::Status,
+                        SSEGateway::Persist::Always);
+                  }
+                }
+              } else {
+                // 无需权限暂停，正常处理结果
                 toolSuccess = tr.success;
                 toolExitCode = tr.exitCode;
                 if (tr.success) {
@@ -476,35 +571,8 @@ AgentLoopResult AgentLoop::runExpertChain(
                                " (exit code " + std::to_string(tr.exitCode) +
                                ")";
                 }
-              } else {
-                // 用户拒绝或超时
-                toolSuccess = false;
-                toolExitCode = -1;
-                toolResult = "[PERMISSION_DENIED] 用户拒绝了工具 [" +
-                             actualToolName + "] 的执行权限，或等待超时。";
-
-                if (SSEGateway::getInstance().isInitialized()) {
-                  json deniedMeta;
-                  deniedMeta["stage"] = "permission_denied";
-                  deniedMeta["tool_name"] = actualToolName;
-                  deniedMeta["request_id"] = permReqId;
-                  SSEGateway::getInstance().push(
-                      taskId, EventType::AgentMessage,
-                      "❌ 权限被拒绝: " + actualToolName, deniedMeta,
-                      SSEGateway::Channel::Status, SSEGateway::Persist::Always);
-                }
               }
-            } else {
-              // 无需权限暂停，正常处理结果
-              toolSuccess = tr.success;
-              toolExitCode = tr.exitCode;
-              if (tr.success) {
-                toolResult = "成功: " + tr.output;
-              } else {
-                toolResult = "[EXECUTION_ERROR] " + tr.error + " (exit code " +
-                             std::to_string(tr.exitCode) + ")";
-              }
-            }
+            } // end of Ask policy block
           } catch (const std::exception &e) {
             toolSuccess = false;
             toolResult = std::string("异常: ") + e.what();

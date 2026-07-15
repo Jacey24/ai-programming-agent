@@ -27,14 +27,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
   }
 }
 
-WorkspaceRecord WorkspaceRepository::create(const std::string &id,
-                                            const std::string &name,
-                                            const std::string &path,
-                                            const std::string &created_at) {
+WorkspaceRecord WorkspaceRepository::create(
+    const std::string &id, const std::string &name, const std::string &path,
+    const std::string &created_at, const std::string &permissions_config) {
   sqlite3_stmt *stmt = nullptr;
   const char *sql =
-      "INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, "
-      "?);";
+      "INSERT INTO workspaces (id, name, path, created_at, permissions_config) "
+      "VALUES (?, ?, ?, ?, ?);";
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     throw std::runtime_error(lastError());
   }
@@ -43,6 +42,7 @@ WorkspaceRecord WorkspaceRepository::create(const std::string &id,
   sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 3, path.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 4, created_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, permissions_config.c_str(), -1, SQLITE_TRANSIENT);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     const std::string error = lastError();
@@ -51,7 +51,8 @@ WorkspaceRecord WorkspaceRepository::create(const std::string &id,
   }
 
   sqlite3_finalize(stmt);
-  return WorkspaceRecord{id, name, path, "", "", "{}", created_at};
+  return WorkspaceRecord{id,        name, path, "", "", permissions_config,
+                         created_at};
 }
 
 std::optional<WorkspaceRecord>

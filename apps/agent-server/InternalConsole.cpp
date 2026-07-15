@@ -7,10 +7,6 @@
 #include <sstream>
 #include <thread>
 
-// ============================================================
-// 构造 / 析构
-// ============================================================
-
 InternalConsole::InternalConsole(const std::string &host, int port)
     : host_(host), port_(port) {}
 
@@ -20,10 +16,6 @@ std::string InternalConsole::baseUrl() const {
   return host_ + ":" + std::to_string(port_);
 }
 
-// ============================================================
-// HTTP 传输（内部 httplib::Client → 自己）
-// ============================================================
-
 std::string InternalConsole::doGet(const std::string &path) {
   if (verbose_) {
     std::cout << "  [HTTP] GET " << path << std::endl;
@@ -32,11 +24,8 @@ std::string InternalConsole::doGet(const std::string &path) {
   cli.set_connection_timeout(3);
   cli.set_read_timeout(10);
   auto res = cli.Get(path);
-  if (!res) {
-    if (verbose_)
-      std::cerr << "  [HTTP] GET FAILED" << std::endl;
+  if (!res)
     return "";
-  }
   return res->body;
 }
 
@@ -50,11 +39,8 @@ std::string InternalConsole::doPost(const std::string &path,
   cli.set_connection_timeout(3);
   cli.set_read_timeout(10);
   auto res = cli.Post(path, body, "application/json");
-  if (!res) {
-    if (verbose_)
-      std::cerr << "  [HTTP] POST FAILED" << std::endl;
+  if (!res)
     return "";
-  }
   return res->body;
 }
 
@@ -85,10 +71,6 @@ std::string InternalConsole::doDelete(const std::string &path) {
     return "";
   return res->body;
 }
-
-// ============================================================
-// JSON 辅助
-// ============================================================
 
 json InternalConsole::parseOrError(const std::string &resp,
                                    const std::string &op) {
@@ -123,10 +105,6 @@ void InternalConsole::printError(const json &resp) {
   }
 }
 
-// ============================================================
-// REPL 主循环
-// ============================================================
-
 void InternalConsole::start() {
   replThread_ = std::thread(&InternalConsole::replLoop, this);
 }
@@ -134,9 +112,8 @@ void InternalConsole::start() {
 void InternalConsole::stop() {
   running_.store(false);
   stopStreamListener();
-  if (replThread_.joinable()) {
+  if (replThread_.joinable())
     replThread_.join();
-  }
 }
 
 std::string InternalConsole::readLine() {
@@ -150,27 +127,46 @@ void InternalConsole::printBanner() {
   std::cout << "\n"
             << "  [InternalConsole] Server 内建调试控制台\n"
             << "  Server: http://" << baseUrl() << "\n"
-            << "  Global: " << activeGlobalId_
+            << "  Global: " << activeGlobalId_ << " (锁定默认)"
             << "  Workspace: " << activeWorkspaceId_ << "\n"
+            << "  Session: "
+            << (activeSessionId_.empty() ? "(无)" : activeSessionId_) << "\n"
             << "  输入 /help 查看命令，/quit 退出\n"
             << std::endl;
 }
 
 void InternalConsole::printHelp() {
-  std::cout << "\n  === 上下文 ===" << std::endl;
-  std::cout << "    /global list                  列出所有 Global" << std::endl;
-  std::cout << "    /global create <name>         创建新 Global" << std::endl;
-  std::cout << "    /global use <id>              切换当前 Global" << std::endl;
+  std::cout << "\n  === 上下文 (Global 暂不可用) ===" << std::endl;
   std::cout << "    /global show [id]             查看 Global 详情"
             << std::endl;
-  std::cout << "    /global delete <id>           删除 Global" << std::endl;
+  std::cout << "    /global list                  列出所有 Global" << std::endl;
+  std::cout << "    ⚠ Global 切换暂不可用；始终使用默认 Global g_default"
+            << std::endl;
   std::cout << "\n  === 工作区 ===" << std::endl;
   std::cout << "    /workspace create <name> <path>  创建工作区" << std::endl;
   std::cout << "    /workspace list                  列出工作区" << std::endl;
-  std::cout << "    /workspace show [id]             查看工作区" << std::endl;
-  std::cout << "    /workspace use <id>              切换工作区" << std::endl;
+  std::cout
+      << "    /workspace show [id]             查看工作区详情 (含权限策略)"
+      << std::endl;
+  std::cout << "    /workspace use <id>              切换工作区 (自动恢复上次 "
+               "Session)"
+            << std::endl;
+  std::cout << "    /workspace update [id] k=v...    更新工作区 "
+               "(name/path/permissions_config)"
+            << std::endl;
   std::cout << "    /workspace delete <id>           删除工作区" << std::endl;
-  std::cout << "    /workspace files [id]           罗列文件树" << std::endl;
+  std::cout << "    /workspace files [id]            罗列文件树" << std::endl;
+  std::cout << "    /workspace sessions [id]         列出该工作区下的 Session"
+            << std::endl;
+  std::cout << "\n  === 会话 ===" << std::endl;
+  std::cout << "    /session create <title>          创建会话 (自动绑定当前 "
+               "Workspace)"
+            << std::endl;
+  std::cout << "    /session list                    列出所有会话" << std::endl;
+  std::cout << "    /session use <id>                切换到指定会话"
+            << std::endl;
+  std::cout << "    /session update <id> k=v..       更新会话" << std::endl;
+  std::cout << "    /session delete <id>             删除会话" << std::endl;
   std::cout << "\n  === 任务 ===" << std::endl;
   std::cout
       << "    /task create <goal>          创建并执行任务（进入 SSE 监听）"
@@ -182,11 +178,6 @@ void InternalConsole::printHelp() {
   std::cout << "    /task active                 查看活跃任务" << std::endl;
   std::cout << "    /task delete <id>            删除已完成/失败的任务"
             << std::endl;
-  std::cout << "\n  === 对话 ===" << std::endl;
-  std::cout << "    /session create <title>      创建对话" << std::endl;
-  std::cout << "    /session list                列出对话" << std::endl;
-  std::cout << "    /session update <id> k=v..   更新对话" << std::endl;
-  std::cout << "    /session delete <id>         删除对话" << std::endl;
   std::cout << "\n  === 权限 ===" << std::endl;
   std::cout << "    /perm list                   列出待处理权限" << std::endl;
   std::cout << "    /perm approve [id]           批准权限" << std::endl;
@@ -202,7 +193,6 @@ void InternalConsole::printHelp() {
 }
 
 void InternalConsole::replLoop() {
-  // 等待 HTTP Server 就绪
   bool serverReady = false;
   for (int retry = 0; retry < 30; ++retry) {
     std::string resp = doGet("/health");
@@ -213,35 +203,33 @@ void InternalConsole::replLoop() {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
-
   if (!serverReady) {
     std::cout << "  [警告] HTTP Server 未就绪，命令可能失败" << std::endl;
   }
-
   printBanner();
 
   while (running_) {
     std::string input = readLine();
     if (input.empty())
       continue;
-
     if (input == "/quit") {
       stopStreamListener();
       running_ = false;
       break;
     }
 
-    // ── 命令分发 ──
-
-    // Global
+    // ── Global (暂不可用 - 仅保留查询) ──
     if (input == "/global list") {
-      handleGlobalList();
+      std::cout << "  ⚠ Global 切换暂不可用，当前使用默认 Global: g_default"
+                << std::endl;
     } else if (input.rfind("/global create ", 0) == 0) {
-      handleGlobalCreate(input.substr(15));
+      std::cout << "  ⚠ Global 创建暂不可用，当前使用默认 Global: g_default"
+                << std::endl;
     } else if (input.rfind("/global use ", 0) == 0) {
-      handleGlobalUse(input.substr(12));
+      std::cout << "  ⚠ Global 切换暂不可用，当前使用默认 Global: g_default"
+                << std::endl;
     } else if (input.rfind("/global delete ", 0) == 0) {
-      handleGlobalDelete(input.substr(15));
+      std::cout << "  ⚠ Global 删除暂不可用" << std::endl;
     } else if (input.rfind("/global show ", 0) == 0) {
       handleGlobalShow(input.substr(13));
     } else if (input == "/global show") {
@@ -274,18 +262,26 @@ void InternalConsole::replLoop() {
       handleWorkspaceShow("");
     } else if (input.rfind("/workspace use ", 0) == 0) {
       handleWorkspaceUse(input.substr(15));
+    } else if (input.rfind("/workspace update ", 0) == 0) {
+      handleWorkspaceUpdate(input.substr(18));
     } else if (input.rfind("/workspace delete ", 0) == 0) {
       handleWorkspaceDelete(input.substr(18));
     } else if (input.rfind("/workspace files ", 0) == 0) {
       handleWorkspaceFiles(input.substr(17));
     } else if (input == "/workspace files") {
       handleWorkspaceFiles("");
+    } else if (input.rfind("/workspace sessions ", 0) == 0) {
+      handleWorkspaceSessions(input.substr(20));
+    } else if (input == "/workspace sessions") {
+      handleWorkspaceSessions("");
     }
     // Session
     else if (input.rfind("/session create ", 0) == 0) {
       handleSessionCreate(input.substr(16));
     } else if (input == "/session list") {
       handleSessionList();
+    } else if (input.rfind("/session use ", 0) == 0) {
+      handleSessionUse(input.substr(13));
     } else if (input.rfind("/session update ", 0) == 0) {
       handleSessionUpdate(input.substr(16));
     } else if (input.rfind("/session delete ", 0) == 0) {
@@ -316,64 +312,23 @@ void InternalConsole::replLoop() {
       std::cout << "  未知命令。输入 /help 查看命令列表" << std::endl;
     }
   }
-
   std::cout << "  控制台已退出" << std::endl;
 }
 
 // ============================================================
-// Global 命令
+// Global 命令（暂不可用）
 // ============================================================
 
 void InternalConsole::handleGlobalList() {
-  auto resp = parseOrError(doGet("/api/v1/globals"), "listGlobals");
-  if (!resp.value("success", false)) {
-    printError(resp);
-    return;
-  }
-  auto items = resp["data"]["items"];
-  if (items.empty()) {
-    std::cout << "  (暂无 Global)" << std::endl;
-    return;
-  }
-  for (const auto &g : items) {
-    std::string marker =
-        (g.value("id", "") == activeGlobalId_) ? " ← 当前" : "";
-    std::cout << "  " << g.value("id", "?") << marker << "  "
-              << g.value("name", "?") << std::endl;
-  }
+  std::cout << "  ⚠ Global 切换暂不可用，当前使用默认 Global: g_default"
+            << std::endl;
 }
-
 void InternalConsole::handleGlobalCreate(const std::string &args) {
-  if (args.empty()) {
-    std::cout << "  用法: /global create <名称>" << std::endl;
-    return;
-  }
-  json body;
-  body["name"] = args;
-  auto resp =
-      parseOrError(doPost("/api/v1/globals", body.dump()), "createGlobal");
-  if (resp.value("success", false)) {
-    std::cout << "  Global 已创建: " << resp["data"].value("id", "")
-              << std::endl;
-  } else {
-    printError(resp);
-  }
+  std::cout << "  ⚠ Global 创建暂不可用" << std::endl;
 }
-
 void InternalConsole::handleGlobalUse(const std::string &args) {
-  if (args.empty()) {
-    std::cout << "  用法: /global use <global_id>" << std::endl;
-    return;
-  }
-  auto resp = parseOrError(doGet("/api/v1/globals/" + args), "getGlobal");
-  if (!resp.value("success", false)) {
-    printError(resp);
-    return;
-  }
-  activeGlobalId_ = args;
-  std::cout << "  已切换到 Global: " << activeGlobalId_ << std::endl;
+  std::cout << "  ⚠ Global 切换暂不可用" << std::endl;
 }
-
 void InternalConsole::handleGlobalShow(const std::string &args) {
   std::string id = args.empty() ? activeGlobalId_ : args;
   auto resp = parseOrError(doGet("/api/v1/globals/" + id), "getGlobal");
@@ -386,20 +341,8 @@ void InternalConsole::handleGlobalShow(const std::string &args) {
   std::cout << "  名称: " << data.value("name", "") << std::endl;
   std::cout << "  创建时间: " << data.value("created_at", "") << std::endl;
 }
-
 void InternalConsole::handleGlobalDelete(const std::string &args) {
-  if (args.empty()) {
-    std::cout << "  用法: /global delete <global_id>" << std::endl;
-    return;
-  }
-  auto resp = parseOrError(doDelete("/api/v1/globals/" + args), "deleteGlobal");
-  if (resp.value("success", false)) {
-    std::cout << "  Global " << args << " 已删除" << std::endl;
-    if (args == activeGlobalId_)
-      activeGlobalId_ = "g_default";
-  } else {
-    printError(resp);
-  }
+  std::cout << "  ⚠ Global 删除暂不可用" << std::endl;
 }
 
 // ============================================================
@@ -416,6 +359,9 @@ void InternalConsole::handleTaskCreate(const std::string &args) {
   body["input"] = args;
   body["global_id"] = activeGlobalId_;
   body["workspace_id"] = activeWorkspaceId_;
+  if (!activeSessionId_.empty()) {
+    body["session_id"] = activeSessionId_;
+  }
   auto resp = parseOrError(doPost("/api/v1/tasks", body.dump()), "createTask");
   if (!resp.value("success", false)) {
     printError(resp);
@@ -581,6 +527,9 @@ void InternalConsole::handleWorkspaceShow(const std::string &args) {
   std::cout << "  Workspace: " << data.value("id", "") << std::endl;
   std::cout << "  名称: " << data.value("name", "") << std::endl;
   std::cout << "  路径: " << data.value("path", "") << std::endl;
+  std::cout << "  权限策略: " << data.value("permissions_config", "{}")
+            << std::endl;
+  std::cout << "  创建时间: " << data.value("created_at", "") << std::endl;
 }
 
 void InternalConsole::handleWorkspaceUse(const std::string &args) {
@@ -596,6 +545,82 @@ void InternalConsole::handleWorkspaceUse(const std::string &args) {
   activeWorkspaceId_ = args;
   workspacePath_ = resp["data"].value("path", "");
   std::cout << "  已切换到工作区: " << activeWorkspaceId_ << std::endl;
+
+  // 自动恢复该 Workspace 下最近创建的 Session
+  auto sessResp =
+      parseOrError(doGet("/api/v1/workspaces/" + args + "/sessions"),
+                   "listWorkspaceSessions");
+  if (sessResp.value("success", false)) {
+    auto items = sessResp["data"]["items"];
+    if (!items.empty()) {
+      auto &lastSess = items[0];
+      activeSessionId_ = lastSess.value("id", "");
+      std::cout << "  自动恢复上次 Session: " << activeSessionId_ << " ("
+                << lastSess.value("title", "") << ")" << std::endl;
+    } else {
+      std::cout << "  该工作区暂无 Session，请使用 /session create 创建"
+                << std::endl;
+    }
+  }
+}
+
+void InternalConsole::handleWorkspaceUpdate(const std::string &args) {
+  if (args.empty()) {
+    std::cout << "  用法: /workspace update [id] name=xxx path=xxx "
+                 "permissions_config=auto_approve"
+              << std::endl;
+    return;
+  }
+  auto spacePos = args.find(' ');
+  std::string id = (spacePos == std::string::npos) ? activeWorkspaceId_
+                                                   : args.substr(0, spacePos);
+  std::string kvArgs =
+      (spacePos == std::string::npos) ? args : args.substr(spacePos + 1);
+
+  json body;
+  // Parse k=v pairs
+  std::istringstream kvStream(kvArgs);
+  std::string kvPair;
+  while (kvStream >> kvPair) {
+    auto eqPos = kvPair.find('=');
+    if (eqPos == std::string::npos)
+      continue;
+    std::string key = kvPair.substr(0, eqPos);
+    std::string val = kvPair.substr(eqPos + 1);
+    if (key == "name") {
+      body["name"] = val;
+    } else if (key == "path") {
+      body["path"] = val;
+    } else if (key == "permissions_config") {
+      // Support shorthand: "auto_approve" → {"*": "auto_approve"}
+      if (val == "auto_approve" || val == "deny" || val == "ask") {
+        json cfg;
+        cfg["*"] = val;
+        body["permissions_config"] = cfg;
+      } else {
+        // Try to parse as JSON
+        try {
+          body["permissions_config"] = json::parse(val);
+        } catch (...) {
+          std::cout << "  permissions_config 格式无效: " << val << std::endl;
+          return;
+        }
+      }
+    }
+  }
+  if (body.empty()) {
+    std::cout << "  用法: /workspace update [id] name=xxx 或 path=xxx 或 "
+                 "permissions_config=xxx"
+              << std::endl;
+    return;
+  }
+  auto resp = parseOrError(doPut("/api/v1/workspaces/" + id, body.dump()),
+                           "updateWorkspace");
+  if (resp.value("success", false)) {
+    std::cout << "  工作区已更新" << std::endl;
+  } else {
+    printError(resp);
+  }
 }
 
 void InternalConsole::handleWorkspaceDelete(const std::string &args) {
@@ -627,6 +652,28 @@ void InternalConsole::handleWorkspaceFiles(const std::string &args) {
   std::cout << "  文件树:\n" << tree << std::endl;
 }
 
+void InternalConsole::handleWorkspaceSessions(const std::string &args) {
+  std::string id = args.empty() ? activeWorkspaceId_ : args;
+  auto resp = parseOrError(doGet("/api/v1/workspaces/" + id + "/sessions"),
+                           "listWorkspaceSessions");
+  if (!resp.value("success", false)) {
+    printError(resp);
+    return;
+  }
+  auto items = resp["data"]["items"];
+  std::cout << "  Workspace " << id << " 下的 Sessions:" << std::endl;
+  if (items.empty()) {
+    std::cout << "    (暂无)" << std::endl;
+    return;
+  }
+  for (const auto &s : items) {
+    std::string marker =
+        (s.value("id", "") == activeSessionId_) ? " ← 当前" : "";
+    std::cout << "    " << s.value("id", "?") << marker << "  "
+              << s.value("title", "?") << std::endl;
+  }
+}
+
 // ============================================================
 // 对话命令
 // ============================================================
@@ -638,10 +685,22 @@ void InternalConsole::handleSessionCreate(const std::string &args) {
   }
   json body;
   body["title"] = args;
+  // 自动绑定当前 Workspace
+  if (!activeWorkspaceId_.empty() && activeWorkspaceId_ != "ws_default") {
+    body["workspace_id"] = activeWorkspaceId_;
+  }
   auto resp =
       parseOrError(doPost("/api/v1/sessions", body.dump()), "createSession");
   if (resp.value("success", false)) {
-    std::cout << "  对话已创建: " << resp["data"].value("id", "?") << std::endl;
+    std::string newId = resp["data"].value("id", "?");
+    activeSessionId_ = newId;
+    std::cout << "  对话已创建: " << newId << std::endl;
+    // 记录 workspace_id 绑定
+    if (!activeWorkspaceId_.empty() && activeWorkspaceId_ != "ws_default") {
+      json upBody;
+      upBody["workspace_id"] = activeWorkspaceId_;
+      doPut("/api/v1/sessions/" + newId, upBody.dump());
+    }
   } else {
     printError(resp);
   }
@@ -659,14 +718,33 @@ void InternalConsole::handleSessionList() {
     return;
   }
   for (const auto &s : items) {
-    std::cout << "  " << s.value("id", "?") << "  " << s.value("title", "?")
+    std::string marker =
+        (s.value("id", "") == activeSessionId_) ? " ← 当前" : "";
+    std::cout << "  " << s.value("id", "?") << marker << "  "
+              << s.value("title", "?") << "  ws=" << s.value("workspace_id", "")
               << std::endl;
   }
 }
 
+void InternalConsole::handleSessionUse(const std::string &args) {
+  if (args.empty()) {
+    std::cout << "  用法: /session use <session_id>" << std::endl;
+    return;
+  }
+  auto resp = parseOrError(doGet("/api/v1/sessions/" + args), "getSession");
+  if (!resp.value("success", false)) {
+    printError(resp);
+    return;
+  }
+  activeSessionId_ = args;
+  std::cout << "  已切换到 Session: " << activeSessionId_ << " ("
+            << resp["data"].value("title", "") << ")" << std::endl;
+}
+
 void InternalConsole::handleSessionUpdate(const std::string &args) {
   if (args.empty()) {
-    std::cout << "  用法: /session update <id> title=xxx" << std::endl;
+    std::cout << "  用法: /session update <id> title=xxx [workspace_id=xxx]"
+              << std::endl;
     return;
   }
   auto spacePos = args.find(' ');
@@ -675,12 +753,20 @@ void InternalConsole::handleSessionUpdate(const std::string &args) {
   std::string kvArgs =
       (spacePos == std::string::npos) ? "" : args.substr(spacePos + 1);
   json body;
-  auto eqPos = kvArgs.find('=');
-  if (eqPos != std::string::npos) {
-    std::string key = kvArgs.substr(0, eqPos);
-    std::string val = kvArgs.substr(eqPos + 1);
+  std::istringstream kvStream(kvArgs);
+  std::string kvPair;
+  while (kvStream >> kvPair) {
+    auto eqPos = kvPair.find('=');
+    if (eqPos == std::string::npos)
+      continue;
+    std::string key = kvPair.substr(0, eqPos);
+    std::string val = kvPair.substr(eqPos + 1);
     if (key == "title")
       body["title"] = val;
+    else if (key == "workspace_id")
+      body["workspace_id"] = val;
+    else if (key == "alias")
+      body["alias"] = val;
   }
   auto resp = parseOrError(doPut("/api/v1/sessions/" + id, body.dump()),
                            "updateSession");
@@ -700,6 +786,8 @@ void InternalConsole::handleSessionDelete(const std::string &args) {
       parseOrError(doDelete("/api/v1/sessions/" + args), "deleteSession");
   if (resp.value("success", false)) {
     std::cout << "  对话 " << args << " 已删除" << std::endl;
+    if (args == activeSessionId_)
+      activeSessionId_.clear();
   } else {
     printError(resp);
   }
@@ -844,18 +932,14 @@ void InternalConsole::startStreamListener(const std::string &taskId) {
       if (streamCancelFlag_.load())
         return false;
       lineBuffer.append(data, len);
-
       size_t pos;
       while ((pos = lineBuffer.find('\n')) != std::string::npos) {
         std::string line = lineBuffer.substr(0, pos);
         lineBuffer.erase(0, pos + 1);
-
-        // 去掉末尾的 \r
         if (!line.empty() && line.back() == '\r')
           line.pop_back();
-
         if (line.empty())
-          continue; // 空行（SSE 边界）
+          continue;
         if (line.rfind("data: ", 0) == 0) {
           std::string content = line.substr(6);
           try {
@@ -890,9 +974,8 @@ void InternalConsole::startStreamListener(const std::string &taskId) {
 
 void InternalConsole::stopStreamListener() {
   streamCancelFlag_.store(true);
-  if (streamThread_.joinable()) {
+  if (streamThread_.joinable())
     streamThread_.join();
-  }
 }
 
 void InternalConsole::onSseEvent(const json &event) {
@@ -904,7 +987,6 @@ void InternalConsole::onSseEvent(const json &event) {
     channel = event["metadata"]["channel"].get<std::string>();
   }
 
-  // 精简 SSE 输出
   if (channel == "dialog" && !content.empty()) {
     std::cout << "\n  💬 " << content.substr(0, 200) << std::endl
               << "> " << std::flush;

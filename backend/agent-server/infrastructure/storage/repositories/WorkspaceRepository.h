@@ -22,8 +22,8 @@ public:
 
   void initTable();
   WorkspaceRecord create(const std::string &id, const std::string &name,
-                         const std::string &path,
-                         const std::string &created_at);
+                         const std::string &path, const std::string &created_at,
+                         const std::string &permissions_config = "{}");
   std::optional<WorkspaceRecord> findById(const std::string &workspace_id);
   std::vector<WorkspaceRecord> listAll();
   bool deleteById(const std::string &workspace_id);

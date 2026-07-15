@@ -14,6 +14,7 @@ public:
   std::string listWorkspaces(const std::string &request);
   std::string getWorkspace(const std::string &request);
   std::string deleteWorkspace(const std::string &request);
+  std::string listSessions(const std::string &request);
 
 private:
   std::string databasePath_;
