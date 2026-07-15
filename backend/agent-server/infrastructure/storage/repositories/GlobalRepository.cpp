@@ -287,7 +287,7 @@ GlobalRepository::getContextByGlobalId(const std::string &global_id) {
   return records;
 }
 
-// ★ 确保默认 Global 存在
+// ★ 确保默认 Global 存在（防御性实现：count>0 返回第一个，否则创建）
 std::string GlobalRepository::ensureDefaultGlobal() {
   if (count() > 0) {
     // 已经存在 Global，返回第一个
@@ -297,8 +297,8 @@ std::string GlobalRepository::ensureDefaultGlobal() {
     }
   }
 
-  // 创建默认 Global
-  const std::string now = "1970-01-01T00:00:00Z"; // 占位，由调用方传入
-  // 实际时间由 facade 层提供
-  return "";
+  // count == 0 时在这里兜底创建
+  const std::string now = "1970-01-01T00:00:00Z"; // 占位时间戳
+  auto rec = createGlobal("g_default", "默认工作区", "", now, now, "");
+  return rec.id;
 }
