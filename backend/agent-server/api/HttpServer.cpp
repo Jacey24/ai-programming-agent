@@ -204,13 +204,13 @@ int HttpServer::run(const std::atomic_bool &running) {
       std::condition_variable cv;
       std::deque<std::string> frames;
       bool streamDone{false};
-      httplib::DataSink *sink{nullptr};
+      std::shared_ptr<SSEGateway::ConnectionSignal> connectionSignal{
+          std::make_shared<SSEGateway::ConnectionSignal>()};
     };
     auto ctx = std::make_shared<SseContext>();
     res.set_chunked_content_provider(
         "text/event-stream",
         [ctx](size_t, httplib::DataSink &sink) -> bool {
-          ctx->sink = &sink;
           while (true) {
             std::string frame;
             {
@@ -231,26 +231,45 @@ int HttpServer::run(const std::atomic_bool &running) {
                   break;
               }
             }
-            if (!frame.empty())
-              sink.write(frame.data(), frame.size());
+            if (!frame.empty()) {
+              const bool writable =
+                  !sink.is_writable || sink.is_writable();
+              if (!writable || !sink.write(frame.data(), frame.size())) {
+                {
+                  std::lock_guard<std::mutex> lock(ctx->mtx);
+                  ctx->streamDone = true;
+                  ctx->frames.clear();
+                }
+                ctx->connectionSignal->close();
+                ctx->cv.notify_all();
+                return false;
+              }
+            }
           }
           sink.done();
           return true;
         },
         [ctx](bool) {
-          std::lock_guard<std::mutex> lock(ctx->mtx);
-          ctx->streamDone = true;
+          {
+            std::lock_guard<std::mutex> lock(ctx->mtx);
+            ctx->streamDone = true;
+            ctx->frames.clear();
+          }
+          ctx->connectionSignal->close();
           ctx->cv.notify_all();
         });
-    auto sendFn = [ctx](const std::string &frame) {
+    auto sendFn = [ctx](const std::string &frame) -> bool {
       std::lock_guard<std::mutex> lock(ctx->mtx);
-      if (!ctx->streamDone) {
-        ctx->frames.push_back(frame);
-        ctx->cv.notify_one();
+      if (ctx->streamDone) {
+        return false;
       }
+      ctx->frames.push_back(frame);
+      ctx->cv.notify_one();
+      return true;
     };
     std::thread([sendFn, taskId, ctx]() {
-      SSEGateway::getInstance().streamTaskEvents(sendFn, taskId);
+      SSEGateway::getInstance().streamTaskEvents(sendFn, taskId,
+                                                 ctx->connectionSignal);
 
       {
         std::lock_guard<std::mutex> lock(ctx->mtx);

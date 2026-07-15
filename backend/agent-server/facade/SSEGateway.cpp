@@ -16,7 +16,6 @@
 #include <chrono>
 #include <cstring>
 #include <ctime>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -106,8 +105,9 @@ EventBus &SSEGateway::eventBus() {
 int SSEGateway::getConnectionCount(const std::string &taskId) const {
   std::lock_guard<std::mutex> lock(clientsMutex_);
   int count = 0;
-  for (const auto &c : liveClients_) {
-    if (c.taskId == taskId && c.alive) {
+  for (const auto &[id, connection] : liveClients_) {
+    (void)id;
+    if (connection->taskId == taskId && connection->signal->connected.load()) {
       ++count;
     }
   }
@@ -122,22 +122,31 @@ void SSEGateway::broadcastFrame(const std::string &taskId,
                                 const std::string &data) {
   std::string frame = "event: " + eventName + "\ndata: " + data + "\n\n";
 
-  std::lock_guard<std::mutex> lock(clientsMutex_);
-  int matched = 0;
-  for (auto &client : liveClients_) {
-    if (client.taskId == taskId && client.alive && client.directPush) {
-      ++matched;
-      try {
-        client.sendFn(frame);
-      } catch (...) {
-        client.alive = false;
+  std::vector<std::shared_ptr<ClientConnection>> clients;
+  {
+    std::lock_guard<std::mutex> lock(clientsMutex_);
+    for (const auto &[id, connection] : liveClients_) {
+      (void)id;
+      if (connection->taskId == taskId && connection->directPush &&
+          connection->signal->connected.load()) {
+        clients.push_back(connection);
       }
     }
   }
-  liveClients_.erase(
-      std::remove_if(liveClients_.begin(), liveClients_.end(),
-                     [](const SseClient &c) { return !c.alive; }),
-      liveClients_.end());
+
+  for (const auto &connection : clients) {
+    std::lock_guard<std::mutex> writeLock(connection->writeMutex);
+    if (!connection->signal->connected.load()) {
+      continue;
+    }
+    try {
+      if (!connection->sendFn || !connection->sendFn(frame)) {
+        connection->signal->close();
+      }
+    } catch (...) {
+      connection->signal->close();
+    }
+  }
 }
 
 // ============================================================
@@ -352,155 +361,200 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
       "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
       "Access-Control-Allow-Headers: Content-Type\r\n"
       "Connection: keep-alive\r\n\r\n";
-  send(clientFd, headers.data(), static_cast<int>(headers.size()),
-       MSG_NOSIGNAL);
+  const int headerBytes =
+      send(clientFd, headers.data(), static_cast<int>(headers.size()),
+           MSG_NOSIGNAL);
+  if (headerBytes != static_cast<int>(headers.size())) {
+    close_socket(clientFd);
+    return;
+  }
 
   auto sendFn = [clientFd](const std::string &frame) {
-    send(clientFd, frame.data(), static_cast<int>(frame.size()), MSG_NOSIGNAL);
+    const int sent = send(clientFd, frame.data(),
+                          static_cast<int>(frame.size()), MSG_NOSIGNAL);
+    return sent == static_cast<int>(frame.size());
   };
   streamTaskEvents(sendFn, taskId);
+  close_socket(clientFd);
 }
 
 // ============================================================
 // 新接口：通过回调（不发送 HTTP 头 —— 由 httplib 等上层处理）
 // ============================================================
-void SSEGateway::streamTaskEvents(SendCallback sendFn,
-                                  const std::string &taskId) {
+void SSEGateway::streamTaskEvents(
+    SendCallback sendFn, const std::string &taskId,
+    std::shared_ptr<ConnectionSignal> connectionSignal) {
   if (!initialized_) {
     const std::string errFrame =
         "event: error\ndata: "
         "{\"type\":\"error\",\"content\":\"SSEGateway not initialized\"}\n\n";
     sendFn(errFrame);
+    if (connectionSignal) {
+      connectionSignal->close();
+    }
     return;
   }
 
-  streamTaskEventsImpl(taskId, sendFn);
+  streamTaskEventsImpl(taskId, std::move(sendFn),
+                       std::move(connectionSignal));
 }
 
 // ============================================================
 // streamTaskEvents 内部实现
 // ============================================================
-void SSEGateway::streamTaskEventsImpl(const std::string &taskId,
-                                      const SendCallback &sendFn) {
+void SSEGateway::streamTaskEventsImpl(
+    const std::string &taskId, SendCallback sendFn,
+    std::shared_ptr<ConnectionSignal> connectionSignal) {
   if (!initialized_) {
     return;
   }
 
-  // 注册客户端
+  if (!connectionSignal) {
+    connectionSignal = std::make_shared<ConnectionSignal>();
+  }
+  const auto connectionId =
+      nextConnectionId_.fetch_add(1, std::memory_order_relaxed);
+  auto connection = std::make_shared<ClientConnection>();
+  connection->connectionId = connectionId;
+  connection->taskId = taskId;
+  connection->directPush = false;
+  connection->sendFn = std::move(sendFn);
+  connection->signal = std::move(connectionSignal);
+
   {
     std::lock_guard<std::mutex> lock(clientsMutex_);
-    liveClients_.push_back({taskId, true, false, sendFn});
+    liveClients_.emplace(connectionId, connection);
   }
-
-  // 订阅 EventBus 实时事件
-  std::mutex writeMutex;
-  std::atomic_bool alive{true};
-  std::atomic_bool done{false};
-
-  auto writeFrame = [&](const std::string &eventName, const std::string &data) {
-    std::lock_guard<std::mutex> lock(writeMutex);
-    if (!alive.load()) {
-      return;
-    }
-    std::string frame = "event: " + eventName + "\ndata: " + data + "\n\n";
-    try {
-      sendFn(frame);
-    } catch (...) {
-      alive.store(false);
-    }
-  };
 
   ListenerId listenerId = 0;
   bool subscribed = false;
-  if (eventBus_) {
-    listenerId = eventBus_->subscribeByTaskId(taskId, [&](const EventData &ev) {
-      json data;
-      data["id"] = ev.id;
-      data["task_id"] = ev.taskId;
-      data["type"] = ev.typeToString();
-      data["content"] = ev.content;
-      data["metadata"] = ev.metadata;
-      data["created_at"] = ev.createdAt;
-      writeFrame(ev.typeToString(), dumpJsonForTransport(data));
-      if (isTerminal(ev.type)) {
-        done.store(true);
-      }
-    });
-    subscribed = true;
-  }
-
-  // 回放历史事件
-  if (dataFacade_ && dataFacade_->isInitialized()) {
-    for (const auto &ev : dataFacade_->getEventsByTaskId(taskId)) {
-      json data;
-      data["id"] = ev.id;
-      data["task_id"] = ev.task_id;
-      data["type"] = ev.type;
-      data["content"] = ev.content;
-
-      json meta = json::parse(ev.metadata, nullptr, false);
-      if (meta.is_discarded()) {
-        meta = json::object();
-      }
-      data["metadata"] = meta;
-      data["created_at"] = ev.created_at;
-
-      writeFrame(ev.type, dumpJsonForTransport(data));
-      if (ev.type == "task_completed" || ev.type == "task_failed" ||
-          ev.type == "task_cancelled") {
-        done.store(true);
+  auto cleanup = [&] {
+    if (connection->cleanupStarted.exchange(true)) {
+      return;
+    }
+    connection->signal->close();
+    if (subscribed && eventBus_) {
+      eventBus_->unsubscribe(listenerId);
+      subscribed = false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(clientsMutex_);
+      auto it = liveClients_.find(connectionId);
+      if (it != liveClients_.end() && it->second == connection) {
+        liveClients_.erase(it);
       }
     }
-  }
+    std::lock_guard<std::mutex> writeLock(connection->writeMutex);
+    connection->sendFn = nullptr;
+  };
 
-  // 心跳保活 + 结束检测
-  int ticks = 0;
-  while (alive.load() && !done.load()) {
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    {
-      std::lock_guard<std::mutex> lock(writeMutex);
-      const std::string ping = ": ping\n\n";
-      try {
-        sendFn(ping);
-      } catch (...) {
-        alive.store(false);
+  auto sendFrame = [connection](const std::string &frame) {
+    std::lock_guard<std::mutex> lock(connection->writeMutex);
+    if (!connection->signal->connected.load()) {
+      return false;
+    }
+    try {
+      if (!connection->sendFn || !connection->sendFn(frame)) {
+        connection->signal->close();
+        return false;
+      }
+      return true;
+    } catch (...) {
+      connection->signal->close();
+      return false;
+    }
+  };
+  auto writeFrame = [sendFrame](const std::string &eventName,
+                                const std::string &data) {
+    return sendFrame("event: " + eventName + "\ndata: " + data + "\n\n");
+  };
+
+  try {
+    if (eventBus_) {
+      listenerId = eventBus_->subscribeByTaskId(
+          taskId, [connection, writeFrame](const EventData &ev) {
+            json data;
+            data["id"] = ev.id;
+            data["task_id"] = ev.taskId;
+            data["type"] = ev.typeToString();
+            data["content"] = ev.content;
+            data["metadata"] = ev.metadata;
+            data["created_at"] = ev.createdAt;
+            writeFrame(ev.typeToString(), dumpJsonForTransport(data));
+            if (isTerminal(ev.type)) {
+              connection->done.store(true);
+              connection->signal->cv.notify_all();
+            }
+          });
+      subscribed = true;
+    }
+
+    // 回放历史事件
+    if (dataFacade_ && dataFacade_->isInitialized()) {
+      for (const auto &ev : dataFacade_->getEventsByTaskId(taskId)) {
+        if (!connection->signal->connected.load()) {
+          break;
+        }
+        json data;
+        data["id"] = ev.id;
+        data["task_id"] = ev.task_id;
+        data["type"] = ev.type;
+        data["content"] = ev.content;
+
+        json meta = json::parse(ev.metadata, nullptr, false);
+        if (meta.is_discarded()) {
+          meta = json::object();
+        }
+        data["metadata"] = meta;
+        data["created_at"] = ev.created_at;
+
+        writeFrame(ev.type, dumpJsonForTransport(data));
+        if (ev.type == "task_completed" || ev.type == "task_failed" ||
+            ev.type == "task_cancelled") {
+          connection->done.store(true);
+          connection->signal->cv.notify_all();
+        }
+      }
+    }
+
+    // 心跳保活 + 结束检测
+    int ticks = 0;
+    while (connection->signal->connected.load() &&
+           !connection->done.load()) {
+      std::unique_lock<std::mutex> stateLock(connection->signal->mutex);
+      connection->signal->cv.wait_for(
+          stateLock, std::chrono::seconds(3), [&] {
+            return !connection->signal->connected.load() ||
+                   connection->done.load();
+          });
+      stateLock.unlock();
+      if (!connection->signal->connected.load() || connection->done.load()) {
         break;
       }
-    }
-    if (++ticks % 3 == 0 && dataFacade_ && dataFacade_->isInitialized()) {
-      auto task = dataFacade_->getTask(taskId);
-      if (task && (task->status == "completed" || task->status == "failed" ||
-                   task->status == "cancelled")) {
-        done.store(true);
+      sendFrame(": ping\n\n");
+      if (!connection->signal->connected.load()) {
+        break;
+      }
+      if (++ticks % 3 == 0 && dataFacade_ && dataFacade_->isInitialized()) {
+        auto task = dataFacade_->getTask(taskId);
+        if (task &&
+            (task->status == "completed" || task->status == "failed" ||
+             task->status == "cancelled")) {
+          connection->done.store(true);
+          connection->signal->cv.notify_all();
+        }
       }
     }
-  }
 
-  // 发送 stream_end 并清理
-  {
-    std::lock_guard<std::mutex> lock(writeMutex);
-    const std::string endFrame =
-        "event: stream_end\ndata: {\"type\":\"stream_end\"}\n\n";
-    try {
-      sendFn(endFrame);
-    } catch (...) {
+    if (connection->signal->connected.load() && connection->done.load()) {
+      writeFrame("stream_end", "{\"type\":\"stream_end\"}");
     }
+  } catch (...) {
+    cleanup();
+    return;
   }
 
-  if (subscribed && eventBus_) {
-    eventBus_->unsubscribe(listenerId);
-  }
-
-  // 注销客户端
-  {
-    std::lock_guard<std::mutex> lock(clientsMutex_);
-    liveClients_.erase(std::remove_if(liveClients_.begin(), liveClients_.end(),
-                                      [&sendFn](const SseClient &c) {
-                                        return c.sendFn.target_type() ==
-                                               sendFn.target_type();
-                                      }),
-                       liveClients_.end());
-  }
+  cleanup();
 }
 
 } // namespace codepilot
