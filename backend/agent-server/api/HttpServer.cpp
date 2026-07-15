@@ -103,16 +103,15 @@ bool parse_http_status(const std::string &httpResp, int &status) {
   }
   const auto codeEnd = statusLine.find(' ', codeStart + 1);
   const std::string code = statusLine.substr(
-      codeStart + 1, codeEnd == std::string::npos
-                         ? std::string::npos
-                         : codeEnd - codeStart - 1);
-  if (code.size() != 3 || code[0] < '0' || code[0] > '9' ||
-      code[1] < '0' || code[1] > '9' || code[2] < '0' || code[2] > '9') {
+      codeStart + 1, codeEnd == std::string::npos ? std::string::npos
+                                                  : codeEnd - codeStart - 1);
+  if (code.size() != 3 || code[0] < '0' || code[0] > '9' || code[1] < '0' ||
+      code[1] > '9' || code[2] < '0' || code[2] > '9') {
     return false;
   }
 
-  const int parsed = (code[0] - '0') * 100 + (code[1] - '0') * 10 +
-                     (code[2] - '0');
+  const int parsed =
+      (code[0] - '0') * 100 + (code[1] - '0') * 10 + (code[2] - '0');
   if (parsed < 100 || parsed > 599) {
     return false;
   }
@@ -346,17 +345,17 @@ int HttpServer::run(const std::atomic_bool &running) {
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,
         getWorkspace, "GET /api/v1/workspaces/" + req.matches[1].str());
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/tree)",
-        WorkspaceFileController, getTree,
-        "GET " + req.target);
+        WorkspaceFileController, getTree, "GET " + req.target);
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/content)",
-        WorkspaceFileController, getFileContent,
-        "GET " + req.target);
+        WorkspaceFileController, getFileContent, "GET " + req.target);
   ROUTE(Put, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,
         updateWorkspace,
         "PUT /api/v1/workspaces/" + req.matches[1].str() + " \r\n\r\n" +
             req.body);
   ROUTE(Delete, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,
         deleteWorkspace, "DELETE /api/v1/workspaces/" + req.matches[1].str());
+  ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/sessions)",
+        WorkspaceController, listSessions, "GET " + req.target);
 
   // Task
   ROUTE(Post, "/api/v1/tasks", TaskController, createTask,

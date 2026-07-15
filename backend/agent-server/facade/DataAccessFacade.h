@@ -49,6 +49,8 @@ public:
   SessionRecord createSession(const std::string &title);
   std::optional<SessionRecord> getSession(const std::string &id);
   std::vector<SessionRecord> listSessions();
+  std::vector<SessionRecord>
+  listSessionsByWorkspace(const std::string &workspace_id, int limit = -1);
   bool updateSession(const std::string &id, const std::string &title,
                      const std::string &alias, const std::string &workspace_id);
   bool deleteSession(const std::string &id);
@@ -91,11 +93,13 @@ public:
   // Workspace 组（独立存储，运行时通过 WorkspaceManager 管理）
   // ============================================================
   WorkspaceRecord createWorkspace(const std::string &name,
-                                  const std::string &path);
+                                  const std::string &path,
+                                  const std::string &permissions_config = "{}");
   std::optional<WorkspaceRecord> getWorkspace(const std::string &id);
   std::vector<WorkspaceRecord> listWorkspaces();
   bool updateWorkspace(const std::string &id, const std::string &name,
-                       const std::string &description, const std::string &path);
+                       const std::string &description, const std::string &path,
+                       const std::string &permissions_config = "");
   bool deleteWorkspace(const std::string &id);
 
   // ============================================================

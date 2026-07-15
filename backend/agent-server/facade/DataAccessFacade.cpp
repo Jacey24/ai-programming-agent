@@ -214,6 +214,19 @@ bool DataAccessFacade::updateSession(const std::string &id,
       false);
 }
 
+std::vector<SessionRecord>
+DataAccessFacade::listSessionsByWorkspace(const std::string &workspace_id,
+                                          int limit) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return safeCall<std::vector<SessionRecord>>(
+      "listSessionsByWorkspace",
+      [&]() {
+        return SessionRepository(db_).findByWorkspaceId(
+            workspace_id, "created_at DESC", limit);
+      },
+      std::vector<SessionRecord>{});
+}
+
 bool DataAccessFacade::deleteSession(const std::string &id) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<bool>(
@@ -339,15 +352,17 @@ std::vector<TaskRecord> DataAccessFacade::listRecentTasks(int limit) {
 // ============================================================
 // Workspace 组
 // ============================================================
-WorkspaceRecord DataAccessFacade::createWorkspace(const std::string &name,
-                                                  const std::string &path) {
+WorkspaceRecord
+DataAccessFacade::createWorkspace(const std::string &name,
+                                  const std::string &path,
+                                  const std::string &permissions_config) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string now = iso8601Now();
   return safeCall<WorkspaceRecord>(
       "createWorkspace",
       [&]() {
         return WorkspaceRepository(db_).create(generateId("ws"), name, path,
-                                               now);
+                                               now, permissions_config);
       },
       WorkspaceRecord{});
 }
@@ -366,7 +381,8 @@ std::vector<WorkspaceRecord> DataAccessFacade::listWorkspaces() {
 bool DataAccessFacade::updateWorkspace(const std::string &id,
                                        const std::string &name,
                                        const std::string &description,
-                                       const std::string &path) {
+                                       const std::string &path,
+                                       const std::string &permissions_config) {
   std::lock_guard<std::mutex> lock(mutex_);
   return safeCall<bool>(
       "updateWorkspace",
@@ -393,6 +409,13 @@ bool DataAccessFacade::updateWorkspace(const std::string &id,
             sql << ", ";
           sql << "path = ?";
           bindValues.push_back(path);
+          first = false;
+        }
+        if (!permissions_config.empty()) {
+          if (!first)
+            sql << ", ";
+          sql << "permissions_config = ?";
+          bindValues.push_back(permissions_config);
           first = false;
         }
         sql << " WHERE id = ?;";

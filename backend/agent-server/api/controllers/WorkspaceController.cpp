@@ -4,6 +4,7 @@
 #include "infrastructure/filesystem/WorkspaceManager.h"
 
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -155,8 +156,20 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
         "500 Internal Server Error");
   }
 
+  // Extract permissions_config as raw JSON string
+  std::string permissions_config = "{}";
   try {
-    auto rec = facade.createWorkspace(name, path);
+    auto bodyJson = nlohmann::json::parse(req_body, nullptr, false);
+    if (!bodyJson.is_discarded() && bodyJson.is_object() &&
+        bodyJson.contains("permissions_config")) {
+      permissions_config = bodyJson["permissions_config"].dump();
+    }
+  } catch (...) {
+    // 使用空默认值
+  }
+
+  try {
+    auto rec = facade.createWorkspace(name, path, permissions_config);
 
     // Create the per-workspace runtime immediately
     WorkspaceManager::getInstance().getOrCreate(rec.id, rec.path);
@@ -164,7 +177,8 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
     std::ostringstream response_body;
     response_body << R"({"success":true,"data":{"id":")" << json_escape(rec.id)
                   << R"(","name":")" << json_escape(rec.name) << R"(","path":")"
-                  << json_escape(rec.path) << R"(","created_at":")"
+                  << json_escape(rec.path) << R"(","permissions_config":)"
+                  << rec.permissions_config << R"(,"created_at":")"
                   << json_escape(rec.created_at) << R"("}})";
     return http_response(response_body.str());
   } catch (const std::exception &error) {
@@ -207,8 +221,21 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
         "500 Internal Server Error");
   }
 
+  // Extract permissions_config as raw JSON string
+  std::string permissions_config;
   try {
-    bool ok = facade.updateWorkspace(workspace_id, name, description, path);
+    auto bodyJson = nlohmann::json::parse(req_body, nullptr, false);
+    if (!bodyJson.is_discarded() && bodyJson.is_object() &&
+        bodyJson.contains("permissions_config")) {
+      permissions_config = bodyJson["permissions_config"].dump();
+    }
+  } catch (...) {
+    // 保持空
+  }
+
+  try {
+    bool ok = facade.updateWorkspace(workspace_id, name, description, path,
+                                     permissions_config);
     if (!ok) {
       return http_response(
           R"({"success":false,"error":{"code":"NOT_FOUND","message":"workspace not found or could not be updated"}})",
@@ -230,8 +257,10 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
                   << json_escape(updated->id) << R"(","name":")"
                   << json_escape(updated->name) << R"(","path":")"
                   << json_escape(updated->path) << R"(","description":")"
-                  << json_escape(updated->description) << R"(","created_at":")"
-                  << json_escape(updated->created_at) << R"("}})";
+                  << json_escape(updated->description)
+                  << R"(","permissions_config":)" << updated->permissions_config
+                  << R"(,"created_at":")" << json_escape(updated->created_at)
+                  << R"("}})";
     return http_response(response_body.str());
   } catch (const std::exception &error) {
     return http_response(
@@ -261,7 +290,8 @@ WorkspaceController::listWorkspaces(const std::string & /*request*/) {
       }
       body << R"({"id":")" << json_escape(ws.id) << R"(","name":")"
            << json_escape(ws.name) << R"(","path":")" << json_escape(ws.path)
-           << R"(","created_at":")" << json_escape(ws.created_at) << R"("})";
+           << R"(","permissions_config":)" << ws.permissions_config
+           << R"(,"created_at":")" << json_escape(ws.created_at) << R"("})";
     }
     body << "]}}";
     return http_response(body.str());
@@ -300,8 +330,59 @@ std::string WorkspaceController::getWorkspace(const std::string &request) {
     std::ostringstream body;
     body << R"({"success":true,"data":{"id":")" << json_escape(ws->id)
          << R"(","name":")" << json_escape(ws->name) << R"(","path":")"
-         << json_escape(ws->path) << R"(","created_at":")"
+         << json_escape(ws->path) << R"(","permissions_config":)"
+         << ws->permissions_config << R"(,"created_at":")"
          << json_escape(ws->created_at) << R"("}})";
+    return http_response(body.str());
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+}
+
+std::string WorkspaceController::listSessions(const std::string &request) {
+  const std::string workspace_id =
+      extract_path_segment(request, "/api/v1/workspaces/");
+  // strip trailing /sessions
+  std::string clean_id = workspace_id;
+  const std::string suffix = "/sessions";
+  if (clean_id.size() > suffix.size() &&
+      clean_id.compare(clean_id.size() - suffix.size(), suffix.size(),
+                       suffix) == 0) {
+    clean_id = clean_id.substr(0, clean_id.size() - suffix.size());
+  }
+  if (clean_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id is required"}})",
+        "400 Bad Request");
+  }
+
+  auto &facade = DataAccessFacade::getInstance();
+  if (!facade.isInitialized()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+        "500 Internal Server Error");
+  }
+
+  try {
+    auto sessions = facade.listSessionsByWorkspace(clean_id);
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"workspace_id":")"
+         << json_escape(clean_id) << R"(","items":[)";
+    for (std::size_t i = 0; i < sessions.size(); ++i) {
+      const auto &s = sessions[i];
+      if (i > 0) {
+        body << ",";
+      }
+      body << R"({"id":")" << json_escape(s.id) << R"(","title":")"
+           << json_escape(s.title) << R"(","alias":")" << json_escape(s.alias)
+           << R"(","workspace_id":")" << json_escape(s.workspace_id)
+           << R"(","created_at":")" << json_escape(s.created_at)
+           << R"(","updated_at":")" << json_escape(s.updated_at) << R"("})";
+    }
+    body << "]}}";
     return http_response(body.str());
   } catch (const std::exception &error) {
     return http_response(

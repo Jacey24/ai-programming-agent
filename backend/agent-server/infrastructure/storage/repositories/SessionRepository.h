@@ -28,6 +28,10 @@ public:
                               const std::string &updated_at);
   std::optional<SessionRecord> findById(const std::string &session_id);
   std::vector<SessionRecord> listAll();
+  std::vector<SessionRecord>
+  findByWorkspaceId(const std::string &workspace_id,
+                    const std::string &orderBy = "created_at DESC",
+                    int limit = -1);
   bool deleteById(const std::string &session_id);
 
 private:

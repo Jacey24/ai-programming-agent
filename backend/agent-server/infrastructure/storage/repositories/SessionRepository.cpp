@@ -99,6 +99,49 @@ SessionRepository::findById(const std::string &session_id) {
   return session;
 }
 
+std::vector<SessionRecord>
+SessionRepository::findByWorkspaceId(const std::string &workspace_id,
+                                     const std::string &orderBy, int limit) {
+  sqlite3_stmt *stmt = nullptr;
+  std::string sql =
+      "SELECT id, title, alias, workspace_id, summary, summary_updated_at, "
+      "last_active_at, created_at, updated_at FROM sessions WHERE "
+      "workspace_id = ? ORDER BY " +
+      orderBy;
+  if (limit > 0) {
+    sql += " LIMIT " + std::to_string(limit);
+  }
+  sql += ";";
+
+  if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    throw std::runtime_error(lastError());
+  }
+
+  sqlite3_bind_text(stmt, 1, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
+
+  auto col = [&](int idx) -> std::string {
+    const auto *t =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, idx));
+    return t ? t : "";
+  };
+
+  std::vector<SessionRecord> sessions;
+  int step_result = SQLITE_ROW;
+  while ((step_result = sqlite3_step(stmt)) == SQLITE_ROW) {
+    sessions.push_back(SessionRecord{col(0), col(1), col(2), col(3), col(4),
+                                     col(5), col(6), col(7), col(8)});
+  }
+
+  if (step_result != SQLITE_DONE) {
+    const std::string error = lastError();
+    sqlite3_finalize(stmt);
+    throw std::runtime_error(error);
+  }
+
+  sqlite3_finalize(stmt);
+  return sessions;
+}
+
 bool SessionRepository::deleteById(const std::string &session_id) {
   sqlite3_stmt *stmt = nullptr;
   const char *sql = "DELETE FROM sessions WHERE id = ?;";
