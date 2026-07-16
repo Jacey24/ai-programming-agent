@@ -82,9 +82,8 @@ void DataAccessFacade::init(const std::string &dbPath) {
     throw std::runtime_error(error);
   }
 
-  configureSqliteDatabase(db_);
-
   try {
+    configureSqliteDatabase(db_);
     createAllTables();
   } catch (...) {
     sqlite3_close(db_);
@@ -141,55 +140,10 @@ void DataAccessFacade::createAllTables() {
       "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
       "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;");
 
-  // 版本化数据库迁移（幂等，自动处理 ALTER TABLE 等增量变更）
-  // Older databases may already contain Repository-managed columns while
-  // schema_migrations is empty. In that case ALTER TABLE reports a duplicate
-  // column and migrate() returns false even though the database is usable.
-  // Do not treat every such result as corruption, but do require an intact
-  // database and every table used by the current backend.
-  if (!MigrationRunner(db_).migrate()) {
-    sqlite3_stmt *check = nullptr;
-    if (sqlite3_prepare_v2(db_, "PRAGMA quick_check(1);", -1, &check,
-                           nullptr) != SQLITE_OK) {
-      throw std::runtime_error("migration compatibility check failed: " +
-                               std::string(sqlite3_errmsg(db_)));
-    }
-    const bool integrityOk =
-        sqlite3_step(check) == SQLITE_ROW &&
-        std::string(reinterpret_cast<const char *>(sqlite3_column_text(check, 0))) ==
-            "ok";
-    sqlite3_finalize(check);
-    if (!integrityOk) {
-      throw std::runtime_error(
-          "migration failed and database integrity check did not return ok");
-    }
-
-    static const char *requiredTables[] = {
-        "globals",          "global_context", "sessions",
-        "workspaces",       "tasks",          "task_events",
-        "tool_calls",       "permission_requests",
-        "file_changes",     "execution_logs", "task_contexts",
-        "system_health",    "schema_migrations"};
-    if (sqlite3_prepare_v2(
-            db_,
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;",
-            -1, &check, nullptr) != SQLITE_OK) {
-      throw std::runtime_error("migration schema check failed: " +
-                               std::string(sqlite3_errmsg(db_)));
-    }
-    for (const char *table : requiredTables) {
-      sqlite3_reset(check);
-      sqlite3_clear_bindings(check);
-      sqlite3_bind_text(check, 1, table, -1, SQLITE_STATIC);
-      if (sqlite3_step(check) != SQLITE_ROW) {
-        sqlite3_finalize(check);
-        throw std::runtime_error(
-            std::string("migration failed and required table is missing: ") +
-            table);
-      }
-    }
-    sqlite3_finalize(check);
-  }
+  // Repositories create current tables first. The migration runner then
+  // reconciles historical steps against the actual schema and records only
+  // migrations whose complete target structure is satisfied.
+  MigrationRunner(db_).migrate();
 }
 
 // ============================================================

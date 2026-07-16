@@ -27,6 +27,11 @@ if(WIN32)
     )
     target_link_libraries(sqlite-integrity-check PRIVATE sqlite3)
 
+    add_executable(sqlite-migration-test-helper
+        integration/sqlite_migration_test_helper.cpp
+    )
+    target_link_libraries(sqlite-migration-test-helper PRIVATE sqlite3)
+
     find_program(CODEPILOT_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
 
     add_test(NAME backend-health-test
@@ -113,6 +118,24 @@ if(WIN32)
         LABELS "integration"
         RUN_SERIAL TRUE
         TIMEOUT 240
+    )
+
+    add_test(NAME backend-sqlite-migration-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-sqlite-migration.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -SqliteTestExe "$<TARGET_FILE:sqlite-migration-test-helper>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-sqlite-migration-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 300
     )
 
     add_test(NAME backend-llm-failure-regression-test
