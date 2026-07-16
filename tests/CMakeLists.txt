@@ -97,4 +97,21 @@ if(WIN32)
         RUN_SERIAL TRUE
         TIMEOUT 420
     )
+
+    add_test(NAME backend-startup-validation-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-startup.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-startup-validation-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 240
+    )
 endif()

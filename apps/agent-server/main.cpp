@@ -1,6 +1,8 @@
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -11,33 +13,57 @@
 
 int run_agent_server(const std::string &config_path, bool enableConsole);
 
-// 从 exe 路径向上查找项目根目录（包含 CMakeLists.txt 或 config/agent.json）
-static std::string findProjectRoot() {
+// Resolve the runtime root from the executable, never from the caller's CWD.
+static std::filesystem::path findRuntimeRoot() {
   std::filesystem::path exeDir;
 #ifdef _WIN32
-  wchar_t buf[MAX_PATH];
-  if (GetModuleFileNameW(nullptr, buf, MAX_PATH) > 0) {
-    exeDir = std::filesystem::path(buf).parent_path();
-  } else {
-    // 降级：尝试 CWD
-    exeDir = std::filesystem::current_path();
+  std::array<wchar_t, 32768> buffer{};
+  const DWORD length = GetModuleFileNameW(
+      nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+  if (length == 0 || length >= buffer.size()) {
+    throw std::runtime_error("GetModuleFileNameW failed (Win32 error " +
+                             std::to_string(GetLastError()) + ")");
   }
+  exeDir = std::filesystem::path(buffer.data()).parent_path();
 #else
   // Linux: 读取 /proc/self/exe
   exeDir = std::filesystem::canonical("/proc/self/exe").parent_path();
 #endif
 
-  // 向上最多搜索 6 级，寻找包含 config/agent.json 的目录
-  auto current = std::filesystem::absolute(exeDir);
-  for (int i = 0; i < 6; ++i) {
-    if (std::filesystem::exists(current / "CMakeLists.txt") ||
-        std::filesystem::exists(current / "config" / "agent.json")) {
-      return current.string();
-    }
-    current = current.parent_path();
+  std::error_code error;
+  auto current = std::filesystem::absolute(exeDir, error);
+  if (error) {
+    throw std::runtime_error("cannot resolve executable directory '" +
+                             exeDir.string() + "': " + error.message());
   }
-  // 降级：返回 CWD
-  return std::filesystem::current_path().string();
+
+  // Portable packages keep config next to the executable. Test and build
+  // layouts may keep the executable in a bin/configuration subdirectory.
+  for (int i = 0; i < 8; ++i) {
+    error.clear();
+    if (std::filesystem::is_regular_file(current / "config" / "agent.json",
+                                         error)) {
+      return current;
+    }
+    if (error) {
+      if (error == std::errc::no_such_file_or_directory ||
+          error == std::errc::not_a_directory) {
+        error.clear();
+      } else {
+        throw std::runtime_error("cannot inspect runtime directory '" +
+                                 current.string() + "': " + error.message());
+      }
+    }
+    const auto parent = current.parent_path();
+    if (parent.empty() || parent == current) {
+      break;
+    }
+    current = parent;
+  }
+
+  // A custom --config may still be supplied, but all relative runtime paths
+  // remain anchored to the executable directory.
+  return std::filesystem::absolute(exeDir);
 }
 
 int main(int argc, char **argv) {
@@ -46,22 +72,32 @@ int main(int argc, char **argv) {
   SetConsoleCP(CP_UTF8);
 #endif
 
-  // 自动定位项目根目录并切换工作目录
-  std::string projectRoot = findProjectRoot();
-  std::filesystem::current_path(projectRoot);
-  std::cout << "[INFO] Project root: " << projectRoot << std::endl;
+  try {
+    const auto runtimeRoot = findRuntimeRoot();
+    std::filesystem::current_path(runtimeRoot);
+    std::cout << "[INFO] Runtime root: " << runtimeRoot.string() << std::endl;
 
-  std::string config_path = "config/agent.json";
-
-  bool enableConsole = false;
-  for (int i = 1; i < argc; ++i) {
-    const std::string arg = argv[i];
-    if (arg == "--config" && i + 1 < argc) {
-      config_path = argv[++i];
-    } else if (arg == "--console") {
-      enableConsole = true;
+    std::string config_path = "config/agent.json";
+    bool enableConsole = false;
+    for (int i = 1; i < argc; ++i) {
+      const std::string arg = argv[i];
+      if (arg == "--config") {
+        if (i + 1 >= argc) {
+          std::cerr << "[FATAL][Configuration] --config requires a path"
+                    << std::endl;
+          return 2;
+        }
+        config_path = argv[++i];
+      } else if (arg == "--console") {
+        enableConsole = true;
+      }
     }
-  }
 
-  return run_agent_server(config_path, enableConsole);
+    return run_agent_server(config_path, enableConsole);
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][Runtime] Unable to determine or enter the runtime "
+                 "directory: "
+              << error.what() << std::endl;
+    return 1;
+  }
 }
