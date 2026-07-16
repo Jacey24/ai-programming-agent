@@ -46,7 +46,8 @@ public:
   // ============================================================
   // Session 组（独立存储，通过 workspace_id 关联 Workspace）
   // ============================================================
-  SessionRecord createSession(const std::string &title);
+  SessionRecord createSession(const std::string &title,
+                              const std::string &workspace_id = "");
   std::optional<SessionRecord> getSession(const std::string &id);
   std::vector<SessionRecord> listSessions();
   std::vector<SessionRecord>

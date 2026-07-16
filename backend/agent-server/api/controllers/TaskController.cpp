@@ -469,12 +469,45 @@ std::string TaskController::continueTask(const std::string &request) {
   return http_response(response_body.str());
 }
 
+std::string extract_query_string(const std::string &request,
+                                 const std::string &key) {
+  const std::size_t request_line_end = request.find("\r\n");
+  const std::string request_line = request.substr(0, request_line_end);
+  const std::string marker = key + "=";
+  const std::size_t marker_pos = request_line.find(marker);
+  if (marker_pos == std::string::npos) {
+    return "";
+  }
+  const std::size_t value_start = marker_pos + marker.size();
+  const std::size_t value_end = request_line.find_first_of("& ", value_start);
+  const std::string raw =
+      request_line.substr(value_start, value_end - value_start);
+  // 简单 URL decode
+  std::ostringstream decoded;
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    if (raw[i] == '%' && i + 2 < raw.size()) {
+      const std::string hex = raw.substr(i + 1, 2);
+      decoded << static_cast<char>(std::stoi(hex, nullptr, 16));
+      i += 2;
+    } else {
+      decoded << raw[i];
+    }
+  }
+  return decoded.str();
+}
+
 std::string TaskController::listTasks(const std::string &request) {
   std::vector<TaskRecord> tasks;
   try {
     if (DataAccessFacade::getInstance().isInitialized()) {
-      tasks = DataAccessFacade::getInstance().listRecentTasks(
-          extract_query_int(request, "page_size", 20));
+      const std::string session_id =
+          extract_query_string(request, "session_id");
+      if (!session_id.empty()) {
+        tasks = DataAccessFacade::getInstance().listTasksBySession(session_id);
+      } else {
+        tasks = DataAccessFacade::getInstance().listRecentTasks(
+            extract_query_int(request, "page_size", 20));
+      }
     }
   } catch (const std::exception &error) {
     return http_response(
