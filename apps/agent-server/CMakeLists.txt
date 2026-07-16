@@ -104,10 +104,6 @@ target_link_libraries(codepilot-agent-server PRIVATE
 )
 
 # OpenSSL 强制要求 - LLM HTTPS 客户端必需
-# 当未通过 -DCMAKE_TOOLCHAIN_FILE 指定 vcpkg 时，手动指定路径
-if(NOT DEFINED OPENSSL_ROOT_DIR AND EXISTS "D:/DevTools/vcpkg/installed/x64-windows")
-    set(OPENSSL_ROOT_DIR "D:/DevTools/vcpkg/installed/x64-windows")
-endif()
 find_package(OpenSSL REQUIRED)
 target_link_libraries(codepilot-agent-server PRIVATE
     OpenSSL::SSL
@@ -120,6 +116,21 @@ message(STATUS "OpenSSL found: ${OPENSSL_VERSION} - LLM HTTPS Client enabled")
 
 if(WIN32)
     target_link_libraries(codepilot-agent-server PRIVATE ws2_32)
+
+    if(CMAKE_VERSION VERSION_LESS 3.21)
+        message(FATAL_ERROR
+            "Windows runtime DLL deployment requires CMake 3.21 or newer"
+        )
+    endif()
+
+    add_custom_command(TARGET codepilot-agent-server POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E
+            $<IF:$<BOOL:$<TARGET_RUNTIME_DLLS:codepilot-agent-server>>,copy_if_different,true>
+            $<TARGET_RUNTIME_DLLS:codepilot-agent-server>
+            $<$<BOOL:$<TARGET_RUNTIME_DLLS:codepilot-agent-server>>:$<TARGET_FILE_DIR:codepilot-agent-server>>
+        COMMAND_EXPAND_LISTS
+        COMMENT "Deploying codepilot-agent-server runtime DLLs"
+    )
 endif()
 
 install(TARGETS codepilot-agent-server RUNTIME DESTINATION bin)
