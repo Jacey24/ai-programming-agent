@@ -182,6 +182,7 @@ bool AgentOrchestrator::cancelTask(const std::string &taskId) {
     }
 
     flagIt->second->store(true);
+    LlmClientFacade::getInstance().cancelRequests(flagIt->second);
     stateIt->second.status = "cancelled";
     stateIt->second.terminalEventSent = false;
 
@@ -602,7 +603,7 @@ AgentLoopResult AgentOrchestrator::runDirectAnswer(
             SSEGateway::getInstance().pushStream(taskId, messageId, chunk,
                                                  sequence++);
           }
-        });
+        }, "auto", "", 0, cancelFlag);
     if (isCancelled()) {
       result.status = "cancelled";
       result.finalOutput = "任务已取消";

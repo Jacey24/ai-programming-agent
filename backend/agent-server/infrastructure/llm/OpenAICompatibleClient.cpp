@@ -1,12 +1,17 @@
 #include "infrastructure/llm/OpenAICompatibleClient.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 // CPPHTTPLIB_OPENSSL_SUPPORT is defined via CMake target_compile_definitions
 #include <httplib.h>
@@ -154,12 +159,82 @@ ParsedUrl parseBaseUrl(const std::string &baseUrl) {
   return result;
 }
 
+using HttpClient = httplib::Client;
+
+std::mutex activeRequestsMutex;
+std::unordered_map<const std::atomic<bool> *,
+                   std::vector<std::weak_ptr<HttpClient>>>
+    activeRequests;
+
+class ActiveRequestGuard {
+public:
+  ActiveRequestGuard(const std::shared_ptr<std::atomic<bool>> &cancelFlag,
+                     std::shared_ptr<HttpClient> client)
+      : cancelFlag_(cancelFlag), client_(std::move(client)) {
+    if (!cancelFlag_) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(activeRequestsMutex);
+    activeRequests[cancelFlag_.get()].push_back(client_);
+  }
+
+  ~ActiveRequestGuard() {
+    if (!cancelFlag_) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(activeRequestsMutex);
+    const auto it = activeRequests.find(cancelFlag_.get());
+    if (it == activeRequests.end()) {
+      return;
+    }
+    auto &clients = it->second;
+    clients.erase(
+        std::remove_if(clients.begin(), clients.end(),
+                       [this](const std::weak_ptr<HttpClient> &weak) {
+                         const auto client = weak.lock();
+                         return !client || client.get() == client_.get();
+                       }),
+        clients.end());
+    if (clients.empty()) {
+      activeRequests.erase(it);
+    }
+  }
+
+private:
+  std::shared_ptr<std::atomic<bool>> cancelFlag_;
+  std::shared_ptr<HttpClient> client_;
+};
+
 } // namespace
 
 // ── 构造 ──
 
 OpenAICompatibleClient::OpenAICompatibleClient(OpenAICompatibleConfig config)
     : config_(std::move(config)) {}
+
+void OpenAICompatibleClient::cancelRequests(
+    const std::shared_ptr<std::atomic<bool>> &cancelFlag) {
+  if (!cancelFlag) {
+    return;
+  }
+
+  std::vector<std::shared_ptr<HttpClient>> clients;
+  {
+    std::lock_guard<std::mutex> lock(activeRequestsMutex);
+    const auto it = activeRequests.find(cancelFlag.get());
+    if (it != activeRequests.end()) {
+      for (const auto &weak : it->second) {
+        if (auto client = weak.lock()) {
+          clients.push_back(std::move(client));
+        }
+      }
+    }
+  }
+
+  for (const auto &client : clients) {
+    client->stop();
+  }
+}
 
 // ── 静态工厂 / 检测 (保留) ──
 
@@ -212,6 +287,15 @@ OpenAICompatibleClient::resolveApiKey(const OpenAICompatibleConfig &config) {
 
 LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   LlmResponse result;
+  const auto isCancelled = [&request]() {
+    return request.cancelFlag && request.cancelFlag->load();
+  };
+
+  if (isCancelled()) {
+    result.errorKind = LlmErrorKind::Cancelled;
+    result.error = "LLM request cancelled";
+    return result;
+  }
 
   LOG_INFO("[LLM DEBUG] chat() called, model={}, prompt_len={}",
            request.model.empty() ? config_.model : request.model,
@@ -256,18 +340,19 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
            parsed.schemeHost, endpoint);
 
   // ── 创建 httplib::Client ──
-  httplib::Client cli(parsed.schemeHost);
+  auto cli = std::make_shared<HttpClient>(parsed.schemeHost);
+  ActiveRequestGuard activeRequest(request.cancelFlag, cli);
 
   const int timeout = request.timeoutSeconds > 0 ? request.timeoutSeconds
                                                  : config_.timeoutSeconds;
   LOG_INFO("[LLM DEBUG] Timeout: {}s (request={}, config={})", timeout,
            request.timeoutSeconds, config_.timeoutSeconds);
-  cli.set_connection_timeout(timeout, 0);
-  cli.set_read_timeout(timeout, 0);
-  cli.set_write_timeout(timeout, 0);
+  cli->set_connection_timeout(timeout, 0);
+  cli->set_read_timeout(timeout, 0);
+  cli->set_write_timeout(timeout, 0);
 
   // 跟随重定向（最多 3 次）
-  cli.set_follow_location(true);
+  cli->set_follow_location(true);
 
   // ── 设置请求头 ──
   httplib::Headers headers{
@@ -276,9 +361,31 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   };
 
   // ── 发送 POST 请求 ──
+  if (isCancelled()) {
+    result.errorKind = LlmErrorKind::Cancelled;
+    result.error = "LLM request cancelled";
+    return result;
+  }
   LOG_INFO("[LLM DEBUG] Sending POST to {}...", endpoint);
-  auto res = cli.Post(endpoint, headers, body, "application/json");
+  std::string responseBody;
+  auto res = cli->Post(
+      endpoint, headers, body, "application/json",
+      [&responseBody, &isCancelled](const char *data, size_t length) {
+        if (isCancelled()) {
+          return false;
+        }
+        responseBody.append(data, length);
+        return true;
+      },
+      [&isCancelled](size_t, size_t) { return !isCancelled(); });
   LOG_INFO("[LLM DEBUG] POST returned, res_ptr={}", res ? "valid" : "null");
+
+  if (isCancelled()) {
+    result.errorKind = LlmErrorKind::Cancelled;
+    result.error = "LLM request cancelled";
+    LOG_INFO("[LLM DEBUG] chat() cancelled");
+    return result;
+  }
 
   if (!res) {
     result.errorKind = LlmErrorKind::Transport;
@@ -293,7 +400,6 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   }
 
   const int status = res->status;
-  const std::string &responseBody = res->body;
   LOG_INFO("[LLM DEBUG] HTTP status={}, body_len={}", status,
            responseBody.size());
 
@@ -352,6 +458,12 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
 
 void OpenAICompatibleClient::chatStream(const LlmRequest &request,
                                         OnTokenCallback onToken) {
+  const auto isCancelled = [&request]() {
+    return request.cancelFlag && request.cancelFlag->load();
+  };
+  if (isCancelled()) {
+    return;
+  }
   if (!isConfigured(config_)) {
     return;
   }
@@ -370,13 +482,14 @@ void OpenAICompatibleClient::chatStream(const LlmRequest &request,
 
   const auto parsed = parseBaseUrl(config_.baseUrl);
   const std::string endpoint = parsed.pathPrefix + "/chat/completions";
-  httplib::Client cli(parsed.schemeHost);
+  auto cli = std::make_shared<HttpClient>(parsed.schemeHost);
+  ActiveRequestGuard activeRequest(request.cancelFlag, cli);
   const int timeout = request.timeoutSeconds > 0 ? request.timeoutSeconds
                                                  : config_.timeoutSeconds;
-  cli.set_connection_timeout(timeout, 0);
-  cli.set_read_timeout(timeout, 0);
-  cli.set_write_timeout(timeout, 0);
-  cli.set_follow_location(true);
+  cli->set_connection_timeout(timeout, 0);
+  cli->set_read_timeout(timeout, 0);
+  cli->set_write_timeout(timeout, 0);
+  cli->set_follow_location(true);
 
   const httplib::Headers headers{
       {"Content-Type", "application/json"},
@@ -418,9 +531,15 @@ void OpenAICompatibleClient::chatStream(const LlmRequest &request,
     }
   };
 
-  auto response = cli.Post(
+  if (isCancelled()) {
+    return;
+  }
+  auto response = cli->Post(
       endpoint, headers, payload.dump(), "application/json",
-      [&pending, &processLine](const char *data, size_t length) {
+      [&pending, &processLine, &isCancelled](const char *data, size_t length) {
+        if (isCancelled()) {
+          return false;
+        }
         pending.append(data, length);
         std::size_t newline = 0;
         while ((newline = pending.find('\n')) != std::string::npos) {
@@ -428,8 +547,13 @@ void OpenAICompatibleClient::chatStream(const LlmRequest &request,
           pending.erase(0, newline + 1);
         }
         return true;
-      });
+      },
+      [&isCancelled](size_t, size_t) { return !isCancelled(); });
 
+  if (isCancelled()) {
+    LOG_INFO("[LLM STREAM] request cancelled");
+    return;
+  }
   if (!pending.empty()) {
     processLine(std::move(pending));
   }

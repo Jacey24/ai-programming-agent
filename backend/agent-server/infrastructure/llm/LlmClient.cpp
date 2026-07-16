@@ -4,6 +4,11 @@ namespace codepilot {
 
 LlmResponse MockLlmClient::chat(const LlmRequest &request) {
   LlmResponse response;
+  if (request.cancelFlag && request.cancelFlag->load()) {
+    response.errorKind = LlmErrorKind::Cancelled;
+    response.error = "LLM request cancelled";
+    return response;
+  }
   response.success = true;
   response.usedFallback = true;
 
