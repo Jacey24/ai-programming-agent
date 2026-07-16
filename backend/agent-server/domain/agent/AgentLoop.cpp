@@ -140,6 +140,15 @@ AgentLoopResult AgentLoop::runExpertChain(
 
   PlanManager planMgr;
 
+  const auto cancelledResult = [&]() {
+    AgentLoopResult cancelled;
+    cancelled.status = "cancelled";
+    cancelled.finalOutput = "任务已被用户取消";
+    cancelled.finalPlan = planMgr.snapshot();
+    cancelled.summary = ctx.summary;
+    return cancelled;
+  };
+
   const ExpertConfig *currentExpert = entryExpert;
   std::string sessionHistory = initialSessionHistory;
 
@@ -281,6 +290,10 @@ AgentLoopResult AgentLoop::runExpertChain(
         break;
       }
 
+      if (cancelFlag && cancelFlag->load()) {
+        return cancelledResult();
+      }
+
       if (!llmResp.success || llmResp.content.empty()) {
         sessionHistory += "\n[system] LLM 调用失败: " +
                           (llmResp.error.empty() ? "未知错误" : llmResp.error) +
@@ -352,6 +365,9 @@ AgentLoopResult AgentLoop::runExpertChain(
       // ── <cmd> ──
       int acceptedCmdCount = 0;
       for (const auto &cmd : tags.get("cmd")) {
+        if (cancelFlag && cancelFlag->load()) {
+          return cancelledResult();
+        }
         std::string actualToolName;
         std::string argsStr;
 
@@ -471,6 +487,9 @@ AgentLoopResult AgentLoop::runExpertChain(
                     SSEGateway::Channel::Status, SSEGateway::Persist::Always);
               }
 
+              if (cancelFlag && cancelFlag->load()) {
+                return cancelledResult();
+              }
               tr = ToolSystem::getInstance().callTool(actualToolName, toolCtx,
                                                       toolArgsParsed);
               toolSuccess = tr.success;
@@ -515,6 +534,10 @@ AgentLoopResult AgentLoop::runExpertChain(
                 bool approved = ToolSystem::getInstance()
                                     .permissionManager()
                                     .waitForResolution(permReqId, 120);
+
+                if (cancelFlag && cancelFlag->load()) {
+                  return cancelledResult();
+                }
 
                 if (approved) {
                   // 用户批准 → 重新执行工具（跳过权限检查，直接调用 callTool）
@@ -823,6 +846,10 @@ AgentLoopResult AgentLoop::runExpertChain(
 
     std::string next =
         RouteEngine::resolve(*currentExpert, finalTags, currentPlan);
+
+    if (cancelFlag && cancelFlag->load()) {
+      return cancelledResult();
+    }
 
     if (SSEGateway::getInstance().isInitialized()) {
       json routeMeta;
