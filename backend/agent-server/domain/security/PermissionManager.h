@@ -5,6 +5,7 @@
 #include "event/EventBus.h"
 
 #include <chrono>
+#include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -73,7 +74,8 @@ public:
   // 返回: true = 用户同意, false = 用户拒绝/超时/请求不存在
   // 线程安全：内部使用 condition_variable
   bool waitForResolution(const std::string &requestId,
-                         int timeoutSeconds = 120);
+                         int timeoutSeconds = 120,
+                         std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
 
   // --- ★ 新增：外部解析权限请求（API 层回调入口） ---
   // 郑嘉娴的 POST /api/v1/permissions/{id}/approve 调用此方法

@@ -26,6 +26,11 @@ public:
   LlmResponse chat(const LlmRequest &request) override;
   void chatStream(const LlmRequest &request, OnTokenCallback onToken) override;
 
+  // Close sockets belonging to an in-flight request for this task. Safe to
+  // call from the task cancellation thread while chat()/chatStream() blocks.
+  static void cancelRequests(
+      const std::shared_ptr<std::atomic<bool>> &cancelFlag);
+
 private:
   OpenAICompatibleConfig config_;
 };

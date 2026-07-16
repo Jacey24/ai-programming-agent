@@ -118,7 +118,12 @@ public static class CodePilotSseTestProcess
                         string body = "{\"choices\":[{\"message\":{\"content\":\"<done>local cancellation stub</done>\"}}]}";
                         byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
                         byte[] headers = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + bodyBytes.Length + "\r\nConnection: close\r\n\r\n");
-                        stream.Write(headers, 0, headers.Length); stream.Write(bodyBytes, 0, bodyBytes.Length); stream.Flush();
+                        try {
+                            stream.Write(headers, 0, headers.Length); stream.Write(bodyBytes, 0, bodyBytes.Length); stream.Flush();
+                        } catch (IOException) {
+                            // Expected when task cancellation actively closes
+                            // the in-flight LLM connection before this delay ends.
+                        }
                     }
                 } catch (SocketException) { if (!stopLlm) throw; }
                 catch (ObjectDisposedException) { }

@@ -105,7 +105,8 @@ PermissionRequest PermissionManager::createRequest(const std::string &taskId,
 // ★ 新增：waitForResolution — 同步等待用户决策
 // ============================================================
 bool PermissionManager::waitForResolution(const std::string &requestId,
-                                          int timeoutSeconds) {
+                                          int timeoutSeconds,
+                                          std::shared_ptr<std::atomic<bool>> cancelFlag) {
   std::shared_ptr<PendingWaiter> waiter;
 
   // 获取等待器
@@ -118,13 +119,21 @@ bool PermissionManager::waitForResolution(const std::string &requestId,
     waiter = it->second;
   }
 
-  // 阻塞等待条件变量，直到被 resolvePermission 唤醒或超时
+  // Use short condition-variable waits so task cancellation does not remain
+  // blocked for the full permission timeout. Resolution still wakes instantly.
   std::unique_lock<std::mutex> lock(waiter->mtx);
-  bool notified =
-      waiter->cv.wait_for(lock, std::chrono::seconds(timeoutSeconds),
-                          [waiter]() { return waiter->resolved; });
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+  while (!waiter->resolved &&
+         !(cancelFlag && cancelFlag->load()) &&
+         std::chrono::steady_clock::now() < deadline) {
+    waiter->cv.wait_for(lock, std::chrono::milliseconds(100));
+  }
+  const bool cancelled = cancelFlag && cancelFlag->load();
+  const bool notified = waiter->resolved;
+  lock.unlock();
 
-  if (!notified) {
+  if (cancelled || !notified) {
     // 超时：标记请求为过期
     expire(requestId);
     // 移除等待器

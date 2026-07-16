@@ -296,7 +296,7 @@ AgentLoopResult AgentLoop::runExpertChain(
 
         ++llmAttempts;
         llmResp = LlmClientFacade::getInstance().chat(prompt, provider, model,
-                                                      timeout);
+                                                      timeout, cancelFlag);
       } else {
         return finalizeWithCriticalSummary(
             taskId, "LLM 未配置，无法执行任务", "failed", sessionHistory,
@@ -516,6 +516,9 @@ AgentLoopResult AgentLoop::runExpertChain(
               }
               tr = ToolSystem::getInstance().callTool(actualToolName, toolCtx,
                                                       toolArgsParsed);
+              if (cancelFlag && cancelFlag->load()) {
+                return cancelledResult();
+              }
               toolSuccess = tr.success;
               toolExitCode = tr.exitCode;
               if (tr.success) {
@@ -526,8 +529,14 @@ AgentLoopResult AgentLoop::runExpertChain(
               }
             } else {
               // Ask → 走标准 PermissionManager 暂停/继续流程
+              if (cancelFlag && cancelFlag->load()) {
+                return cancelledResult();
+              }
               tr = ToolSystem::getInstance().callToolWithPermission(
                   actualToolName, toolCtx, toolArgsParsed);
+              if (cancelFlag && cancelFlag->load()) {
+                return cancelledResult();
+              }
             }
 
             // ★★★ 权限暂停检测（仅 Ask 策略会进入） ★★★
@@ -557,7 +566,8 @@ AgentLoopResult AgentLoop::runExpertChain(
                 // 阻塞等待用户决议（最多 120 秒）
                 bool approved = ToolSystem::getInstance()
                                     .permissionManager()
-                                    .waitForResolution(permReqId, 120);
+                                    .waitForResolution(permReqId, 120,
+                                                       cancelFlag);
 
                 if (cancelFlag && cancelFlag->load()) {
                   return cancelledResult();
@@ -577,8 +587,14 @@ AgentLoopResult AgentLoop::runExpertChain(
                         SSEGateway::Persist::Always);
                   }
 
+                  if (cancelFlag && cancelFlag->load()) {
+                    return cancelledResult();
+                  }
                   tr = ToolSystem::getInstance().callTool(
                       actualToolName, toolCtx, toolArgsParsed);
+                  if (cancelFlag && cancelFlag->load()) {
+                    return cancelledResult();
+                  }
                   toolSuccess = tr.success;
                   toolExitCode = tr.exitCode;
                   if (tr.success) {
@@ -810,7 +826,11 @@ AgentLoopResult AgentLoop::runExpertChain(
           currentExpert->llmTimeout > 0 ? currentExpert->llmTimeout : 60;
 
       LlmResponse checkResp = LlmClientFacade::getInstance().chat(
-          checkPrompt, provider, model, timeout);
+          checkPrompt, provider, model, timeout, cancelFlag);
+
+      if (cancelFlag && cancelFlag->load()) {
+        return cancelledResult();
+      }
 
       if (checkResp.success && !checkResp.content.empty()) {
         TagCollection checkTags = MessageBus::parse(checkResp.content);
