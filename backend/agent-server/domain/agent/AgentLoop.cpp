@@ -340,7 +340,10 @@ AgentLoopResult AgentLoop::runExpertChain(
           else if (!inTag)
             dialogContent += lastOutput[i];
         }
-        if (!dialogContent.empty() &&
+        // Summarizer output is only final after parsing and routing confirms
+        // _done. Do not publish its raw candidate through the generic dialog
+        // path; parse/call failures must be handled by the critical fallback.
+        if (currentExpert->name != "summarizer" && !dialogContent.empty() &&
             dialogContent.find_first_not_of(" \t\n\r") != std::string::npos) {
           if (SSEGateway::getInstance().isInitialized()) {
             SSEGateway::getInstance().pushDialog(taskId, dialogContent);
