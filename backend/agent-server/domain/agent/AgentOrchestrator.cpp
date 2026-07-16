@@ -147,34 +147,62 @@ void AgentOrchestrator::startTask(const std::string &taskId,
   }
 }
 
+namespace {
+
+bool isTerminalStatus(const std::string &status) {
+  return status == "completed" || status == "failed" ||
+         status == "cancelled";
+}
+
+} // namespace
+
 bool AgentOrchestrator::cancelTask(const std::string &taskId) {
-  bool shouldSendTerminalEvent = false;
+  bool cancelled = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto it = cancelFlags_.find(taskId);
-    if (it == cancelFlags_.end())
-      return false;
-    it->second->store(true);
-
     auto stateIt = activeTasks_.find(taskId);
-    if (stateIt != activeTasks_.end()) {
-      stateIt->second.status = "cancelled";
-      if (!stateIt->second.terminalEventSent) {
-        stateIt->second.terminalEventSent = true;
-        shouldSendTerminalEvent = true;
-      }
+    if (stateIt == activeTasks_.end()) {
+      LOG_INFO("AgentOrchestrator::cancelTask: task={} is no longer active",
+               taskId);
+      return false;
+    }
+
+    if (isTerminalStatus(stateIt->second.status)) {
+      LOG_INFO(
+          "AgentOrchestrator::cancelTask: task={} already terminal, status={}",
+          taskId, stateIt->second.status);
+      return false;
+    }
+
+    auto flagIt = cancelFlags_.find(taskId);
+    if (flagIt == cancelFlags_.end()) {
+      LOG_WARN("AgentOrchestrator::cancelTask: task={} has no cancel flag",
+               taskId);
+      return false;
+    }
+
+    flagIt->second->store(true);
+    stateIt->second.status = "cancelled";
+    stateIt->second.terminalEventSent = false;
+
+    // Claiming and persisting the terminal state are one critical section.
+    // finalizeTask() cannot claim completed/failed until cancelled is durable.
+    if (DataAccessFacade::getInstance().isInitialized()) {
+      cancelled = DataAccessFacade::getInstance().updateTaskStatus(
+          taskId, "cancelled", "", "");
+    }
+    if (!cancelled) {
+      flagIt->second->store(false);
+      stateIt->second.status = "running";
+      stateIt->second.terminalEventSent = false;
+      LOG_ERROR("AgentOrchestrator::cancelTask: failed to persist task={}",
+                taskId);
+      return false;
     }
   }
 
-  if (shouldSendTerminalEvent && SSEGateway::getInstance().isInitialized()) {
-    json meta;
-    meta["status"] = "cancelled";
-    meta["reason"] = "用户请求取消";
-    SSEGateway::getInstance().push(
-        taskId, EventType::TaskCancelled, "任务已被用户取消", meta,
-        SSEGateway::Channel::Status, SSEGateway::Persist::Always);
-  }
-  return true;
+  LOG_INFO("AgentOrchestrator::cancelTask: task={} result=cancelled", taskId);
+  return cancelled;
 }
 
 // ── 状态快照 ──
@@ -212,8 +240,7 @@ EventType statusToTerminalEvent(const std::string &status) {
 }
 
 std::string statusToDbString(const std::string &status) {
-  if (status == "completed" || status == "failed" || status == "cancelled" ||
-      status == "config_error")
+  if (status == "completed" || status == "failed" || status == "cancelled")
     return status;
   return "failed";
 }
@@ -226,24 +253,74 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
   const std::string dbStatus = statusToDbString(result.status);
   const EventType terminalEvent = statusToTerminalEvent(result.status);
 
-  bool shouldSendTerminalEvent = true;
+  std::string planJson;
+  if (!result.finalPlan.steps.empty()) {
+    json planDoc;
+    planDoc["version"] = result.finalPlan.version;
+    json stepsArr = json::array();
+    for (const auto &s : result.finalPlan.steps) {
+      json step;
+      step["index"] = s.index;
+      step["description"] = s.description;
+      std::string stateStr;
+      switch (s.state) {
+      case Plan::Step::Done:
+        stateStr = "done";
+        break;
+      case Plan::Step::InProgress:
+        stateStr = "in_progress";
+        break;
+      case Plan::Step::Failed:
+        stateStr = "failed";
+        break;
+      default:
+        stateStr = "pending";
+        break;
+      }
+      step["status"] = stateStr;
+      stepsArr.push_back(step);
+    }
+    planDoc["steps"] = stepsArr;
+    planJson = planDoc.dump();
+  }
+
+  bool ownsTerminalState = false;
+  bool shouldSendCancellation = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     auto stateIt = activeTasks_.find(taskId);
-    if (stateIt != activeTasks_.end()) {
-      if (result.status == "cancelled" &&
-          stateIt->second.terminalEventSent) {
-        shouldSendTerminalEvent = false;
-      } else {
-        stateIt->second.terminalEventSent = true;
+    if (stateIt != activeTasks_.end() &&
+        !isTerminalStatus(stateIt->second.status)) {
+      stateIt->second.status = dbStatus;
+      stateIt->second.terminalEventSent = true;
+      if (DataAccessFacade::getInstance().isInitialized()) {
+        ownsTerminalState =
+            DataAccessFacade::getInstance().updateTaskStatus(
+                taskId, dbStatus, planJson, result.finalOutput);
       }
+      if (!ownsTerminalState) {
+        LOG_ERROR("finalizeTask: failed to persist task={}, status={}", taskId,
+                  dbStatus);
+      }
+    } else if (stateIt != activeTasks_.end() &&
+               stateIt->second.status == "cancelled" &&
+               !stateIt->second.terminalEventSent) {
+      // cancelTask() owns and persists cancelled. The worker emits the event
+      // only after it has stopped, so stream_end cannot precede business data.
+      stateIt->second.terminalEventSent = true;
+      shouldSendCancellation = true;
+      LOG_INFO("finalizeTask: task={} acknowledging cancelled terminal state",
+               taskId);
+    } else if (stateIt != activeTasks_.end()) {
+      LOG_INFO("finalizeTask: task={} terminal state already owned by {}",
+               taskId, stateIt->second.status);
     }
   }
 
-  // 1. 推送 SSE 终端事件
-  if (shouldSendTerminalEvent && SSEGateway::getInstance().isInitialized()) {
+  // Only the thread that claimed and persisted the terminal state emits it.
+  if (ownsTerminalState && SSEGateway::getInstance().isInitialized()) {
     json meta;
-    meta["status"] = result.status;
+    meta["status"] = dbStatus;
     meta["global_id"] = globalId;
     meta["final_output_size"] = static_cast<int>(result.finalOutput.size());
     meta["expert_chain"] = result.expertChain;
@@ -256,41 +333,18 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
                                    SSEGateway::Persist::Always);
   }
 
-  // 2. 更新 DB 任务状态
-  if (DataAccessFacade::getInstance().isInitialized()) {
-    std::string planJson;
-    if (!result.finalPlan.steps.empty()) {
-      json planDoc;
-      planDoc["version"] = result.finalPlan.version;
-      json stepsArr = json::array();
-      for (const auto &s : result.finalPlan.steps) {
-        json step;
-        step["index"] = s.index;
-        step["description"] = s.description;
-        std::string stateStr;
-        switch (s.state) {
-        case Plan::Step::Done:
-          stateStr = "done";
-          break;
-        case Plan::Step::InProgress:
-          stateStr = "in_progress";
-          break;
-        case Plan::Step::Failed:
-          stateStr = "failed";
-          break;
-        default:
-          stateStr = "pending";
-          break;
-        }
-        step["status"] = stateStr;
-        stepsArr.push_back(step);
-      }
-      planDoc["steps"] = stepsArr;
-      planJson = planDoc.dump();
-    }
-    DataAccessFacade::getInstance().updateTaskStatus(taskId, dbStatus, planJson,
-                                                     result.finalOutput);
+  if (shouldSendCancellation && SSEGateway::getInstance().isInitialized()) {
+    json meta;
+    meta["status"] = "cancelled";
+    meta["reason"] = "用户请求取消";
+    SSEGateway::getInstance().push(
+        taskId, EventType::TaskCancelled, "任务已被用户取消", meta,
+        SSEGateway::Channel::Status, SSEGateway::Persist::Always);
+  }
 
+  // Archive only the winning completion/failure result. A cancelled task must
+  // not receive writes from a losing worker after cancellation.
+  if (ownsTerminalState && DataAccessFacade::getInstance().isInitialized()) {
     // ★ v2: 任务完成时归档到 global_context
     auto &facade = DataAccessFacade::getInstance();
     if (!result.summary.empty()) {

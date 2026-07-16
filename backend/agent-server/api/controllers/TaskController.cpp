@@ -1,6 +1,7 @@
 #include "TaskController.h"
 
 #include "application/ToolSystem.h"
+#include "common/logging/Logger.h"
 
 #include "domain/agent/AgentOrchestrator.h"
 #include "domain/agent/TaskRunOptions.h"
@@ -606,33 +607,46 @@ std::string TaskController::cancelTask(const std::string &request) {
           R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
           "500 Internal Server Error");
     }
-    const auto task = DataAccessFacade::getInstance().getTask(task_id);
+    auto &facade = DataAccessFacade::getInstance();
+    const auto task = facade.getTask(task_id);
     if (!task) {
       return http_response(
           R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
           "404 Not Found");
     }
 
-    AgentOrchestrator::getInstance().cancelTask(task_id);
-    DataAccessFacade::getInstance().updateTaskStatus(task_id, "cancelled", "",
-                                                     "");
+    const bool cancelled =
+        AgentOrchestrator::getInstance().cancelTask(task_id);
+    const auto currentTask = facade.getTask(task_id);
+    if (!currentTask) {
+      return http_response(
+          R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
+          "404 Not Found");
+    }
+
+    LOG_INFO("TaskController::cancelTask: task={}, orchestrator_result={}, "
+             "status={}",
+             task_id, cancelled, currentTask->status);
 
     std::ostringstream body;
-    body << R"({"success":true,"data":{"id":")" << json_escape(task->id)
-         << R"(","session_id":")" << json_escape(task->session_id)
-         << R"(","global_id":")" << json_escape(task->global_id)
-         << R"(","workspace_id":")" << json_escape(task->workspace_id)
-         << R"(","goal":")" << json_escape(task->goal) << R"(","status":")"
-         << json_escape("cancelled") << R"(")";
-    if (!task->plan.empty()) {
-      body << R"(,"plan":)" << task->plan;
+    body << R"({"success":true,"data":{"id":")"
+         << json_escape(currentTask->id) << R"(","session_id":")"
+         << json_escape(currentTask->session_id) << R"(","global_id":")"
+         << json_escape(currentTask->global_id) << R"(","workspace_id":")"
+         << json_escape(currentTask->workspace_id) << R"(","goal":")"
+         << json_escape(currentTask->goal) << R"(","status":")"
+         << json_escape(currentTask->status) << R"(")";
+    if (!currentTask->plan.empty()) {
+      body << R"(,"plan":)" << currentTask->plan;
     }
-    if (!task->current_step.empty()) {
-      body << R"(,"current_step":")" << json_escape(task->current_step)
+    if (!currentTask->current_step.empty()) {
+      body << R"(,"current_step":")"
+           << json_escape(currentTask->current_step)
            << R"(")";
     }
-    body << R"(,"created_at":")" << json_escape(task->created_at)
-         << R"(","updated_at":")" << json_escape(task->updated_at) << R"("}})";
+    body << R"(,"created_at":")" << json_escape(currentTask->created_at)
+         << R"(","updated_at":")" << json_escape(currentTask->updated_at)
+         << R"("}})";
     return http_response(body.str());
   } catch (const std::exception &error) {
     return http_response(
