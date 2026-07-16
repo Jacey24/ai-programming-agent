@@ -218,6 +218,7 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
            request.prompt.size());
 
   if (!isConfigured(config_)) {
+    result.errorKind = LlmErrorKind::NotConfigured;
     result.error = "LLM is not configured; using mock fallback";
     LOG_ERROR("[LLM DEBUG] chat() FAILED: isConfigured returned false. "
               "baseUrl={}, model={}",
@@ -227,6 +228,7 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
 
   const std::string apiKey = resolveApiKey(config_);
   if (apiKey.empty()) {
+    result.errorKind = LlmErrorKind::NotConfigured;
     result.error = "LLM API key is empty; using mock fallback";
     LOG_ERROR("[LLM DEBUG] chat() FAILED: resolveApiKey returned empty. "
               "apiKeyEnv={}, apiKey_from_local={}",
@@ -279,6 +281,7 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   LOG_INFO("[LLM DEBUG] POST returned, res_ptr={}", res ? "valid" : "null");
 
   if (!res) {
+    result.errorKind = LlmErrorKind::Transport;
     result.error = "HTTP request to LLM failed: ";
     auto err = res.error();
     // httplib::Error 支持转换为字符串消息
@@ -295,14 +298,15 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
            responseBody.size());
 
   if (status < 200 || status >= 300) {
-    result.error =
-        "LLM API returned HTTP " + std::to_string(status) + ": " + responseBody;
-    LOG_ERROR("[LLM DEBUG] chat() FAILED: HTTP status={}, body={}", status,
-              responseBody.substr(0, 300));
+    result.errorKind = LlmErrorKind::Http;
+    result.httpStatus = status;
+    result.error = "LLM API returned HTTP " + std::to_string(status);
+    LOG_ERROR("[LLM DEBUG] chat() FAILED: HTTP status={}", status);
     return result;
   }
 
   if (responseBody.empty()) {
+    result.errorKind = LlmErrorKind::EmptyResponse;
     result.error = "LLM returned an empty response";
     LOG_ERROR("[LLM DEBUG] chat() FAILED: empty response body");
     return result;
@@ -312,7 +316,8 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   try {
     const json parsedResp = json::parse(responseBody);
     if (parsedResp.contains("error")) {
-      result.error = parsedResp["error"].dump();
+      result.errorKind = LlmErrorKind::Http;
+      result.error = "LLM API returned an error response";
       LOG_ERROR("[LLM DEBUG] chat() FAILED: API error in response: {}",
                 result.error);
       return result;
@@ -320,6 +325,7 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
 
     const auto &choices = parsedResp.at("choices");
     if (!choices.is_array() || choices.empty()) {
+      result.errorKind = LlmErrorKind::InvalidResponse;
       result.error = "LLM response has no choices";
       LOG_ERROR("[LLM DEBUG] chat() FAILED: no choices in response");
       return result;
@@ -330,11 +336,13 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
     LOG_INFO("[LLM DEBUG] chat() SUCCESS: content_len={}",
              result.content.size());
     if (!result.success) {
+      result.errorKind = LlmErrorKind::EmptyResponse;
       result.error = "LLM response content is empty";
       LOG_ERROR(
           "[LLM DEBUG] chat() WARN: content is empty despite valid response");
     }
   } catch (const std::exception &e) {
+    result.errorKind = LlmErrorKind::InvalidResponse;
     result.error = std::string("failed to parse LLM response: ") + e.what();
     LOG_ERROR("[LLM DEBUG] chat() FAILED: JSON parse error: {}", e.what());
   }

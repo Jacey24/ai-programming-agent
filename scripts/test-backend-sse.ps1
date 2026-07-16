@@ -460,16 +460,16 @@ try {
         Add-ScenarioResult $script:currentScenario "$unknownTask->$reuseTask" $reuseResult $true $false 'The first connection was intentionally terminated; backend then created, queried, and streamed a new task.'
     }
 
-    Invoke-Scenario 'normal completion termination' {
-        $task = New-Task 'SSE safe workspace completion without an LLM or tools' 'workspace'; $terminal = Wait-TaskTerminal $task 20
-        Assert-True ($terminal.Json.data.status -eq 'completed') "Expected a completed workspace task, got $($terminal.Json.data.status)."
-        $client = Start-SseClient 'completed-terminal' $task; Wait-SseClient $client
+    Invoke-Scenario 'provider-free failure termination' {
+        $task = New-Task 'SSE workspace task without an LLM' 'workspace'; $terminal = Wait-TaskTerminal $task 20
+        Assert-True ($terminal.Json.data.status -eq 'failed') "Expected a failed provider-free workspace task, got $($terminal.Json.data.status)."
+        $client = Start-SseClient 'failed-terminal' $task; Wait-SseClient $client
         $result = Read-SseResult $client; Assert-SseContract $result $task
-        Assert-True (@($result.Events | ForEach-Object Event) -contains 'task_completed') 'Completed workspace task did not emit task_completed.'
+        Assert-True (@($result.Events | ForEach-Object Event) -contains 'task_failed') 'Provider-free workspace task did not emit task_failed.'
         $cancelAfterCompletion = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
-        Assert-True ($cancelAfterCompletion.StatusCode -eq 200 -and $cancelAfterCompletion.Json.data.status -eq 'completed') 'Cancellation overwrote a task that completed first.'
+        Assert-True ($cancelAfterCompletion.StatusCode -eq 200 -and $cancelAfterCompletion.Json.data.status -eq 'failed') 'Cancellation overwrote a task that failed first.'
         $afterCancel = Get-Task $task
-        Assert-True ($afterCancel.Json.data.status -eq 'completed') 'Completed task database status changed after cancellation.'
+        Assert-True ($afterCancel.Json.data.status -eq 'failed') 'Failed task database status changed after cancellation.'
         Add-ScenarioResult $script:currentScenario $task $result $true
     }
 

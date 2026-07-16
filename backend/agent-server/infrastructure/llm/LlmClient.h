@@ -5,6 +5,15 @@
 
 namespace codepilot {
 
+enum class LlmErrorKind {
+  None,
+  NotConfigured,
+  Transport,
+  Http,
+  EmptyResponse,
+  InvalidResponse,
+};
+
 struct LlmRequest {
   std::string prompt;
   std::string model;
@@ -15,6 +24,8 @@ struct LlmResponse {
   bool success{false};
   std::string content;
   std::string error;
+  LlmErrorKind errorKind{LlmErrorKind::None};
+  int httpStatus{0};
   bool usedFallback{false};
 };
 

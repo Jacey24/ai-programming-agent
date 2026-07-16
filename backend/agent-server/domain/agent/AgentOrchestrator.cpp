@@ -319,6 +319,9 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
 
   // Only the thread that claimed and persisted the terminal state emits it.
   if (ownsTerminalState && SSEGateway::getInstance().isInitialized()) {
+    if (!result.finalOutputSent && !result.finalOutput.empty()) {
+      SSEGateway::getInstance().pushDialog(taskId, result.finalOutput);
+    }
     json meta;
     meta["status"] = dbStatus;
     meta["global_id"] = globalId;
@@ -624,11 +627,12 @@ AgentLoopResult AgentOrchestrator::runDirectAnswer(
     if (SSEGateway::getInstance().isInitialized()) {
       SSEGateway::getInstance().pushStream(taskId, messageId, "", sequence,
                                            true, result.finalOutput);
+      result.finalOutputSent = true;
     }
     appendExecutionLog("completed", "直接回答已生成并推送");
   } catch (const std::exception &e) {
     result.status = "failed";
-    result.finalOutput = std::string("直接回答失败：") + e.what();
+    result.finalOutput = "直接回答失败：大模型请求异常";
     appendExecutionLog("failed", result.finalOutput);
   } catch (...) {
     result.status = "failed";
