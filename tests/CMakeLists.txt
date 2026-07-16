@@ -57,4 +57,21 @@ if(WIN32)
         RUN_SERIAL TRUE
         TIMEOUT 120
     )
+
+    add_test(NAME backend-sse-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-sse.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-sse-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 180
+    )
 endif()
