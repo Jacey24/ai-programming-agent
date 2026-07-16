@@ -17,12 +17,20 @@ if (-not $SourceConfigDirectory) { $SourceConfigDirectory = Join-Path $PSScriptR
 Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
 public static class CodePilotSseTestProcess
 {
+    private static TcpListener llmListener;
+    private static Thread llmThread;
+    private static volatile bool stopLlm;
+    private static readonly ManualResetEvent llmRequestReceived = new ManualResetEvent(false);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct STARTUPINFO
     {
@@ -92,6 +100,44 @@ public static class CodePilotSseTestProcess
         FreeConsole(); AttachConsole(ATTACH_PARENT_PROCESS);
         SetConsoleCtrlHandler(IntPtr.Zero, false);
         return sent;
+    }
+
+    public static void StartLocalLlmStub(int port, int delayMilliseconds)
+    {
+        llmRequestReceived.Reset(); stopLlm = false;
+        llmListener = new TcpListener(IPAddress.Loopback, port); llmListener.Start();
+        llmThread = new Thread(() => {
+            while (!stopLlm) {
+                try {
+                    using (TcpClient client = llmListener.AcceptTcpClient())
+                    using (NetworkStream stream = client.GetStream()) {
+                        StreamReader reader = new StreamReader(stream, Encoding.UTF8, false, 4096, true);
+                        string line;
+                        while (!String.IsNullOrEmpty(line = reader.ReadLine())) { }
+                        llmRequestReceived.Set(); Thread.Sleep(delayMilliseconds);
+                        string body = "{\"choices\":[{\"message\":{\"content\":\"<done>local cancellation stub</done>\"}}]}";
+                        byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+                        byte[] headers = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + bodyBytes.Length + "\r\nConnection: close\r\n\r\n");
+                        stream.Write(headers, 0, headers.Length); stream.Write(bodyBytes, 0, bodyBytes.Length); stream.Flush();
+                    }
+                } catch (SocketException) { if (!stopLlm) throw; }
+                catch (ObjectDisposedException) { }
+            }
+        });
+        llmThread.IsBackground = true; llmThread.Start();
+    }
+
+    public static bool WaitForLocalLlmRequest(int timeoutMilliseconds)
+    {
+        return llmRequestReceived.WaitOne(timeoutMilliseconds);
+    }
+
+    public static void StopLocalLlmStub()
+    {
+        stopLlm = true;
+        if (llmListener != null) llmListener.Stop();
+        if (llmThread != null) llmThread.Join(3000);
+        llmListener = null; llmThread = null;
     }
 }
 '@
@@ -173,7 +219,7 @@ function Wait-TaskTerminal {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $response = Get-Task $TaskId
-        if ($response.StatusCode -eq 200 -and @('completed', 'failed', 'cancelled', 'config_error') -contains $response.Json.data.status) { return $response }
+        if ($response.StatusCode -eq 200 -and @('completed', 'failed', 'cancelled') -contains $response.Json.data.status) { return $response }
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     throw "Task $TaskId did not reach a terminal state within $TimeoutSeconds seconds."
@@ -272,6 +318,25 @@ function Assert-SseContract {
     if ($endIndex -ge 0) { Assert-True ($endIndex -eq ($Result.Events.Count - 1)) 'A business event appeared after stream_end.' }
 }
 
+function Assert-TerminalConsistency {
+    param($CancelResponse, $TaskResponse, $SseResult, [string]$TaskId)
+    Assert-True ($CancelResponse.StatusCode -eq 200 -and $CancelResponse.Json.success -eq $true) "Cancel failed for $TaskId`: $($CancelResponse.Body)"
+    Assert-True ($TaskResponse.StatusCode -eq 200 -and $TaskResponse.Json.success -eq $true) "Final query failed for $TaskId`: $($TaskResponse.Body)"
+    $responseStatus = [string]$CancelResponse.Json.data.status
+    $databaseStatus = [string]$TaskResponse.Json.data.status
+    Assert-True ($responseStatus -eq $databaseStatus) "Cancel response status '$responseStatus' disagreed with final database status '$databaseStatus' for $TaskId."
+    $expectedEvent = switch ($databaseStatus) {
+        'completed' { 'task_completed' }
+        'failed' { 'task_failed' }
+        'cancelled' { 'task_cancelled' }
+        default { throw "Task $TaskId had non-terminal status '$databaseStatus' after cancellation." }
+    }
+    $terminalEvents = @($SseResult.Events | Where-Object { $_.Event -in @('task_completed', 'task_failed', 'task_cancelled') })
+    Assert-True ($terminalEvents.Count -eq 1) "Expected exactly one terminal event for $TaskId; got $($terminalEvents.Count)."
+    Assert-True ($terminalEvents[0].Event -eq $expectedEvent) "Database status '$databaseStatus' expected '$expectedEvent', got '$($terminalEvents[0].Event)' for $TaskId."
+    return $databaseStatus
+}
+
 function Add-ScenarioResult {
     param([string]$Name, [string]$TaskId, $Result, [bool]$Passed, [bool]$TimedOut = $false, [string]$Note = '')
     $names = @(); $counts = [ordered]@{}
@@ -302,7 +367,7 @@ $runDirectory = Join-Path $RuntimeRoot (('{0}-sse-{1}' -f $BuildType, [Guid]::Ne
 $binDirectory = Join-Path $runDirectory 'bin'; $configDirectory = Join-Path $runDirectory 'config'
 $workspaceDirectory = Join-Path $runDirectory 'workspace'; $requestDirectory = Join-Path $runDirectory 'test-results\requests'
 $streamDirectory = Join-Path $runDirectory 'test-results\streams'; $contractFile = Join-Path $runDirectory 'test-results\backend-sse-contract.json'
-$baseUri = 'http://127.0.0.1:8080'; $backendProcessId = $null; $failure = $null; $gracefulStopRequested = $false
+$baseUri = 'http://127.0.0.1:8080'; $backendProcessId = $null; $failure = $null; $gracefulStopRequested = $false; $localLlmStubStarted = $false
 $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
 $sseClients = [System.Collections.Generic.List[object]]::new(); $contractResults = [System.Collections.Generic.List[object]]::new()
 
@@ -335,7 +400,7 @@ try {
 
     Invoke-Scenario 'basic connection, history replay, failure termination, and fast completion' {
         $task = New-Task 'SSE regression safe direct answer' 'answer'; $terminal = Wait-TaskTerminal $task
-        Assert-True (@('failed', 'config_error') -contains $terminal.Json.data.status) "Expected provider-free task failure, got $($terminal.Json.data.status)."
+        Assert-True ($terminal.Json.data.status -eq 'failed') "Expected provider-free task failure, got $($terminal.Json.data.status)."
         $client = Start-SseClient 'normal-late-connect' $task; Wait-SseClient $client
         $result = Read-SseResult $client; Assert-SseContract $result $task
         $names = @($result.Events | ForEach-Object Event)
@@ -401,32 +466,64 @@ try {
         $client = Start-SseClient 'completed-terminal' $task; Wait-SseClient $client
         $result = Read-SseResult $client; Assert-SseContract $result $task
         Assert-True (@($result.Events | ForEach-Object Event) -contains 'task_completed') 'Completed workspace task did not emit task_completed.'
+        $cancelAfterCompletion = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+        Assert-True ($cancelAfterCompletion.StatusCode -eq 200 -and $cancelAfterCompletion.Json.data.status -eq 'completed') 'Cancellation overwrote a task that completed first.'
+        $afterCancel = Get-Task $task
+        Assert-True ($afterCancel.Json.data.status -eq 'completed') 'Completed task database status changed after cancellation.'
         Add-ScenarioResult $script:currentScenario $task $result $true
     }
 
-    Invoke-Scenario 'cancel flow characterization (known production defect)' {
-        $task = New-Task 'SSE immediate cancellation without tools' 'workspace'
-        $client = Start-SseClient 'cancel-flow' $task
-        $cancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
-        if ($cancel.StatusCode -eq 200 -and $cancel.Json.data.status -eq 'cancelled') {
-            Wait-SseClient $client; $result = Read-SseResult $client; Assert-SseContract $result $task
-            $eventNames = @($result.Events | ForEach-Object Event)
+    Invoke-Scenario 'cancel-complete race repeated 20 times with duplicate cancellation' {
+        $cancelledCount = 0; $completedCount = 0
+        for ($iteration = 1; $iteration -le 20; $iteration++) {
+            $task = New-Task "SSE immediate cancellation race $iteration without tools" 'workspace'
+            $client = Start-SseClient "cancel-race-$iteration" $task
+            $cancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+            Wait-SseClient $client
+            $result = Read-SseResult $client; Assert-SseContract $result $task
             $terminal = Get-Task $task
-            if ($eventNames -contains 'task_cancelled') {
-                Assert-True ($terminal.Json.data.status -eq 'cancelled') 'Cancelled task query did not report cancelled.'
-                Add-ScenarioResult $script:currentScenario $task $result $true
-            } else {
-                Assert-True ($eventNames -contains 'task_completed') 'Cancellation produced neither task_cancelled nor the observed fast task_completed race.'
-                Add-ScenarioResult $script:currentScenario $task $result $false $false ("Known production defect: cancel returned cancelled, SSE ended with task_completed, final query status={0}; this is not treated as correct cancellation behavior." -f $terminal.Json.data.status)
-            }
-        } else {
-            Stop-SseClient $client
-            Add-ScenarioResult $script:currentScenario $task $null $false $false 'Test limitation: provider-free workspace task reached a terminal state before cancellation could be observed; task_cancelled was not claimed.'
+            $status = Assert-TerminalConsistency $cancel $terminal $result $task
+            if ($status -eq 'cancelled') { $cancelledCount++ } elseif ($status -eq 'completed') { $completedCount++ }
+
+            $repeatCancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+            Assert-True ($repeatCancel.StatusCode -eq 200 -and $repeatCancel.Json.data.status -eq $status) "Repeated cancellation changed status for $task."
+            $replay = Start-SseClient "cancel-race-$iteration-replay" $task; Wait-SseClient $replay
+            $replayResult = Read-SseResult $replay; Assert-SseContract $replayResult $task
+            $afterRepeat = Get-Task $task
+            Assert-TerminalConsistency $repeatCancel $afterRepeat $replayResult $task | Out-Null
+            Add-ScenarioResult "$script:currentScenario iteration $iteration" $task $result $true $false "cancel_status=$status; repeat_status=$($repeatCancel.Json.data.status)"
         }
+        Write-Host "[SSE] 20-race summary: cancelled=$cancelledCount; completed=$completedCount"
+    }
+
+    Invoke-Scenario 'successful cancellation with local delayed LLM stub' {
+        [CodePilotSseTestProcess]::StartLocalLlmStub(18081, 1500); $localLlmStubStarted = $true
+        $llmConfig = [ordered]@{ default = 'localstub'; providers = [ordered]@{ localstub = [ordered]@{ name = 'Local test stub'; base_url = 'http://127.0.0.1:18081/v1'; model = 'local-test'; api_key_env = ''; timeout_seconds = 10 } } } | ConvertTo-Json -Depth 5 -Compress
+        $setLlm = Invoke-JsonRequest PUT '/api/v1/config/llm' $llmConfig $true
+        Assert-True ($setLlm.StatusCode -eq 200 -and $setLlm.Json.success -eq $true) 'Unable to install isolated local LLM test configuration.'
+        $setLocalKey = Invoke-JsonRequest PUT '/api/v1/config/llm/local' '{"providers":{"localstub":{"api_key":"local-test-key"}}}' $true
+        Assert-True ($setLocalKey.StatusCode -eq 200 -and $setLocalKey.Json.success -eq $true) 'Unable to install isolated local LLM test key.'
+
+        $task = New-Task 'SSE deterministic successful cancellation' 'workspace'
+        Assert-True ([CodePilotSseTestProcess]::WaitForLocalLlmRequest(5000)) 'Local LLM stub did not receive the task request.'
+        $client = Start-SseClient 'successful-cancel' $task
+        $cancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+        Assert-True ($cancel.Json.data.status -eq 'cancelled') "Expected successful cancellation, got '$($cancel.Json.data.status)'."
+        Wait-SseClient $client; $result = Read-SseResult $client; Assert-SseContract $result $task
+        $terminal = Get-Task $task
+        $status = Assert-TerminalConsistency $cancel $terminal $result $task
+        Assert-True ($status -eq 'cancelled') 'Deterministic cancellation did not remain cancelled.'
+        $repeatCancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+        Assert-True ($repeatCancel.Json.data.status -eq 'cancelled') 'Repeated successful cancellation changed terminal status.'
+        $replay = Start-SseClient 'successful-cancel-replay' $task; Wait-SseClient $replay
+        $replayResult = Read-SseResult $replay; Assert-SseContract $replayResult $task
+        Assert-TerminalConsistency $repeatCancel (Get-Task $task) $replayResult $task | Out-Null
+        Add-ScenarioResult $script:currentScenario $task $result $true $false 'Local-only delayed provider; no external LLM request; repeated cancellation remained idempotent.'
+        [CodePilotSseTestProcess]::StopLocalLlmStub(); $localLlmStubStarted = $false
     }
 
     Assert-True (-not (Test-ProcessExited $backendProcessId)) 'Backend exited before SSE regression scenarios completed.'
-    [ordered]@{ generated_at_utc = [DateTime]::UtcNow.ToString('o'); build_type = $BuildType; external_llm_enabled = $false; limitations = @('The dual-client case validates concurrent terminal replay; a safely controllable long-running task is unavailable.'); known_production_defects = @([ordered]@{ name = 'cancel_terminal_state_conflict'; description = 'TaskController cancellation can report and persist cancelled after AgentOrchestrator has already emitted task_completed. The cancellation scenario records passed=false unless task_cancelled and final cancelled are both observed.' }); results = $contractResults } |
+    [ordered]@{ generated_at_utc = [DateTime]::UtcNow.ToString('o'); build_type = $BuildType; external_llm_enabled = $false; limitations = @('Provider-free tasks complete quickly, so the 20-run race accepts either cancelled or completed only when HTTP, database, and SSE agree.'); known_production_defects = @(); results = $contractResults } |
         ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $contractFile -Encoding UTF8
     Write-Host "Protocol result summary: $contractFile"
 
@@ -440,6 +537,7 @@ try {
             ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $contractFile -Encoding UTF8
     } catch {}
 } finally {
+    if ($localLlmStubStarted) { [CodePilotSseTestProcess]::StopLocalLlmStub(); $localLlmStubStarted = $false }
     foreach ($client in $sseClients) { Stop-SseClient $client }
     if ($null -ne $backendProcessId -and -not (Test-ProcessExited $backendProcessId)) {
         Stop-Process -Id $backendProcessId -Force -ErrorAction SilentlyContinue
@@ -474,5 +572,5 @@ if ($null -ne $failure) {
 
 Remove-Item -LiteralPath $runDirectory -Recurse -Force
 if ((Test-Path -LiteralPath $RuntimeRoot) -and -not (Get-ChildItem -LiteralPath $RuntimeRoot -Force | Select-Object -First 1)) { Remove-Item -LiteralPath $RuntimeRoot -Force }
-Write-Host 'Backend SSE regression test passed; isolated runtime removed, no LLM provider was enabled, clients and backend exited, and TCP port 8080 was released.'
+Write-Host 'Backend SSE regression test passed; isolated runtime removed, no external LLM request was made, clients and backend exited, and TCP port 8080 was released.'
 exit 0

@@ -433,12 +433,22 @@ try {
     Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'TASK_NOT_FOUND'
     Add-ContractResult $response @('error.code:string', 'error.message:string')
 
+    $cancelStatus = $null
     foreach ($name in @('cancel task', 'cancel task again')) {
         $response = Invoke-JsonRequest -Name $name -Method POST -Path "/api/v1/tasks/$taskId/cancel" -Body '{}' -SendBody $true
         Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
-        Assert-JsonField $response.Json 'data.id' $taskId; Assert-JsonField $response.Json 'data.status' 'cancelled'
+        Assert-JsonField $response.Json 'data.id' $taskId
+        if (@('completed', 'failed', 'cancelled') -notcontains $response.Json.data.status) {
+            Fail-Assertion "Cancel returned non-terminal status '$($response.Json.data.status)'."
+        }
+        if ($null -eq $cancelStatus) { $cancelStatus = [string]$response.Json.data.status }
+        else { Assert-JsonField $response.Json 'data.status' $cancelStatus }
         Add-ContractResult $response @('data.id:string', 'data.status:string')
     }
+    $afterCancel = Invoke-JsonRequest -Name 'get task after cancellation' -Method GET -Path "/api/v1/tasks/$taskId"
+    Assert-StatusCode $afterCancel 200; Assert-ContentType $afterCancel; Assert-Success $afterCancel $true
+    Assert-JsonField $afterCancel.Json 'data.status' $cancelStatus
+    Add-ContractResult $afterCancel @('data.id:string', 'data.status:string')
 
     $response = Invoke-JsonRequest -Name 'pending permissions' -Method GET -Path '/api/v1/permissions?status=pending'
     Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
