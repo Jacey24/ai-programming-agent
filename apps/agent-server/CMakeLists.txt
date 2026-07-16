@@ -104,10 +104,6 @@ target_link_libraries(codepilot-agent-server PRIVATE
 )
 
 # OpenSSL 强制要求 - LLM HTTPS 客户端必需
-# 当未通过 -DCMAKE_TOOLCHAIN_FILE 指定 vcpkg 时，手动指定路径
-if(NOT DEFINED OPENSSL_ROOT_DIR AND EXISTS "D:/DevTools/vcpkg/installed/x64-windows")
-    set(OPENSSL_ROOT_DIR "D:/DevTools/vcpkg/installed/x64-windows")
-endif()
 find_package(OpenSSL REQUIRED)
 target_link_libraries(codepilot-agent-server PRIVATE
     OpenSSL::SSL
@@ -120,9 +116,55 @@ message(STATUS "OpenSSL found: ${OPENSSL_VERSION} - LLM HTTPS Client enabled")
 
 if(WIN32)
     target_link_libraries(codepilot-agent-server PRIVATE ws2_32)
+
+    if(CMAKE_VERSION VERSION_LESS 3.21)
+        message(FATAL_ERROR
+            "Windows runtime DLL deployment requires CMake 3.21 or newer"
+        )
+    endif()
+
+    add_custom_command(TARGET codepilot-agent-server POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E
+            $<IF:$<BOOL:$<TARGET_RUNTIME_DLLS:codepilot-agent-server>>,copy_if_different,true>
+            $<TARGET_RUNTIME_DLLS:codepilot-agent-server>
+            $<$<BOOL:$<TARGET_RUNTIME_DLLS:codepilot-agent-server>>:$<TARGET_FILE_DIR:codepilot-agent-server>>
+        COMMAND_EXPAND_LISTS
+        COMMENT "Deploying codepilot-agent-server runtime DLLs"
+    )
 endif()
 
-install(TARGETS codepilot-agent-server RUNTIME DESTINATION bin)
+install(TARGETS codepilot-agent-server
+    RUNTIME DESTINATION .
+    COMPONENT agent-server
+)
+
+if(WIN32)
+    # POST_BUILD has already collected every linked non-system runtime DLL in
+    # the configuration-specific output directory. Install those exact DLLs.
+    install(DIRECTORY $<TARGET_FILE_DIR:codepilot-agent-server>/
+        DESTINATION .
+        COMPONENT agent-server
+        FILES_MATCHING PATTERN "*.dll"
+    )
+
+    if(MSVC)
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+        include(InstallRequiredSystemLibraries)
+        install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+            DESTINATION .
+            COMPONENT agent-server
+        )
+    endif()
+endif()
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/config/
+    DESTINATION config
+    COMPONENT agent-server
+    PATTERN "llm.local.json" EXCLUDE
+)
+install(DIRECTORY DESTINATION storage COMPONENT agent-server)
+install(DIRECTORY DESTINATION workspace COMPONENT agent-server)
+install(DIRECTORY DESTINATION logs COMPONENT agent-server)
 
 # ============================================================
 # 工具测试可执行文件（独立于 agent-server）
@@ -157,19 +199,3 @@ target_include_directories(tool-tests PRIVATE
 target_link_libraries(tool-tests PRIVATE
     ${CMAKE_DL_LIBS}
 )
-
-if(CODEPILOT_BUILD_TESTS)
-add_executable(process-runner-test
-    ${CMAKE_SOURCE_DIR}/tests/test_process_runner.cpp
-    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/process/ProcessRunner.cpp
-)
-
-target_include_directories(process-runner-test PRIVATE
-    ${CMAKE_SOURCE_DIR}/backend/agent-server
-    ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
-)
-
-add_test(NAME process-runner-test COMMAND process-runner-test)
-
-# agent-loop-test 已移除 - Agent.cpp 等文件已废弃，由 AgentLoop/AgentOrchestrator 替代
-endif()

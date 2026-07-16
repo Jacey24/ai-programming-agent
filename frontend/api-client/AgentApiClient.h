@@ -55,7 +55,7 @@ public:
     ApiResult getReplay(const std::string& taskId);
 
     // --- Permissions --------------------------------------------------
-    ApiResult getPendingPermissions();
+    ApiResult getPendingPermissions(const std::string& taskId = "");
     ApiResult approvePermission(const std::string& permissionId);
     ApiResult rejectPermission(const std::string& permissionId,
                                const std::string& reason = "");

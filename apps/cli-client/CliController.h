@@ -54,7 +54,7 @@ private:
   void handleGlobalDelete(const std::string &args);
 
   // 权限管理
-  void handlePermList();
+  void handlePermList(const std::string &taskId = "");
   void handlePermApprove(const std::string &args);
   void handlePermReject(const std::string &args);
 

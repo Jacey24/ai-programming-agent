@@ -5,7 +5,7 @@ export const endpoints = {
   sessions: `${API_BASE}/sessions`,
   workspaces: `${API_BASE}/workspaces`,
   tasks: `${API_BASE}/tasks`,
-  permissionsPending: `${API_BASE}/permissions/pending`,
+  permissionsPending: `${API_BASE}/permissions`,
   chat: `${API_BASE}/chat`,
   chatHistory: `${API_BASE}/chat/history`,
   task(taskId: string) {

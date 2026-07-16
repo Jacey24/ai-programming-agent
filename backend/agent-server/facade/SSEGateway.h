@@ -4,6 +4,8 @@
 #include "facade/DataAccessFacade.h"
 
 #include <atomic>
+#include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -91,7 +93,8 @@ public:
   // 流式推送（第 9 点优化）
   //   自动处理 chunk 不持久化 + isLast 时落库完整内容
   // ============================================================
-  void pushStream(const std::string &taskId, const std::string &chunk,
+  void pushStream(const std::string &taskId, const std::string &messageId,
+                  const std::string &chunk, std::size_t sequence,
                   bool isLast = false, const std::string &fullContent = "");
 
   // ============================================================
@@ -127,8 +130,20 @@ public:
   // ============================================================
   // SSE 长连接入口
   // ============================================================
-  using SendCallback = std::function<void(const std::string &frame)>;
-  void streamTaskEvents(SendCallback sendFn, const std::string &taskId);
+  using SendCallback = std::function<bool(const std::string &frame)>;
+  struct ConnectionSignal {
+    std::atomic_bool connected{true};
+    std::mutex mutex;
+    std::condition_variable cv;
+
+    void close() {
+      connected.store(false);
+      cv.notify_all();
+    }
+  };
+  void streamTaskEvents(
+      SendCallback sendFn, const std::string &taskId,
+      std::shared_ptr<ConnectionSignal> connectionSignal = nullptr);
   [[deprecated("Use streamTaskEvents(SendCallback, taskId) instead")]]
   void streamTaskEvents(int clientFd, const std::string &taskId);
 
@@ -154,8 +169,9 @@ private:
   static std::string iso8601Now();
   static std::string generateEventId();
   static bool isTerminal(EventType type);
-  void streamTaskEventsImpl(const std::string &taskId,
-                            const SendCallback &sendFn);
+  void streamTaskEventsImpl(
+      const std::string &taskId, SendCallback sendFn,
+      std::shared_ptr<ConnectionSignal> connectionSignal);
 
   EventBus *eventBus_ = nullptr;
   DataAccessFacade *dataFacade_ = nullptr;
@@ -163,14 +179,20 @@ private:
 
   // SSE 客户端管理
   mutable std::mutex clientsMutex_;
-  struct SseClient {
+  struct ClientConnection {
+    std::uint64_t connectionId;
     std::string taskId;
-    bool alive{true};
     bool directPush{
         true}; // false = only EventBus callback, skip broadcastFrame
     SendCallback sendFn;
+    std::shared_ptr<ConnectionSignal> signal;
+    std::atomic_bool done{false};
+    std::atomic_bool cleanupStarted{false};
+    std::mutex writeMutex;
   };
-  std::vector<SseClient> liveClients_;
+  std::atomic<std::uint64_t> nextConnectionId_{1};
+  std::unordered_map<std::uint64_t, std::shared_ptr<ClientConnection>>
+      liveClients_;
 };
 
 } // namespace codepilot

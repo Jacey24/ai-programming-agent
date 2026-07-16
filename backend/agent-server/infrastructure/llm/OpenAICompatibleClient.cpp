@@ -342,4 +342,95 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
   return result;
 }
 
+void OpenAICompatibleClient::chatStream(const LlmRequest &request,
+                                        OnTokenCallback onToken) {
+  if (!isConfigured(config_)) {
+    return;
+  }
+
+  const std::string apiKey = resolveApiKey(config_);
+  if (apiKey.empty()) {
+    return;
+  }
+
+  json payload;
+  payload["model"] = request.model.empty() ? config_.model : request.model;
+  payload["messages"] = json::array(
+      {{{"role", "user"}, {"content", sanitizeUtf8(request.prompt)}}});
+  payload["temperature"] = 0.2;
+  payload["stream"] = true;
+
+  const auto parsed = parseBaseUrl(config_.baseUrl);
+  const std::string endpoint = parsed.pathPrefix + "/chat/completions";
+  httplib::Client cli(parsed.schemeHost);
+  const int timeout = request.timeoutSeconds > 0 ? request.timeoutSeconds
+                                                 : config_.timeoutSeconds;
+  cli.set_connection_timeout(timeout, 0);
+  cli.set_read_timeout(timeout, 0);
+  cli.set_write_timeout(timeout, 0);
+  cli.set_follow_location(true);
+
+  const httplib::Headers headers{
+      {"Content-Type", "application/json"},
+      {"Authorization", "Bearer " + apiKey},
+  };
+
+  std::string pending;
+  const auto processLine = [&onToken](std::string line) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (line.rfind("data:", 0) != 0) {
+      return;
+    }
+    std::string data = line.substr(5);
+    if (!data.empty() && data.front() == ' ') {
+      data.erase(data.begin());
+    }
+    if (data.empty() || data == "[DONE]") {
+      return;
+    }
+
+    const json frame = json::parse(data, nullptr, false);
+    if (frame.is_discarded() || !frame.contains("choices") ||
+        !frame["choices"].is_array() || frame["choices"].empty()) {
+      return;
+    }
+    const json &choice = frame["choices"][0];
+    if (!choice.is_object() || !choice.contains("delta") ||
+        !choice["delta"].is_object()) {
+      return;
+    }
+    const json &delta = choice["delta"];
+    if (delta.contains("content") && delta["content"].is_string()) {
+      const std::string content = delta["content"].get<std::string>();
+      if (!content.empty()) {
+        onToken(content);
+      }
+    }
+  };
+
+  auto response = cli.Post(
+      endpoint, headers, payload.dump(), "application/json",
+      [&pending, &processLine](const char *data, size_t length) {
+        pending.append(data, length);
+        std::size_t newline = 0;
+        while ((newline = pending.find('\n')) != std::string::npos) {
+          processLine(pending.substr(0, newline));
+          pending.erase(0, newline + 1);
+        }
+        return true;
+      });
+
+  if (!pending.empty()) {
+    processLine(std::move(pending));
+  }
+  if (!response) {
+    LOG_ERROR("[LLM STREAM] request failed: {}",
+              httplib::to_string(response.error()));
+  } else if (response->status < 200 || response->status >= 300) {
+    LOG_ERROR("[LLM STREAM] HTTP status={}", response->status);
+  }
+}
+
 } // namespace codepilot

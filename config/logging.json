@@ -5,7 +5,7 @@
       "level": "debug",
       "sinks": ["console", "file"],
       "pattern": "[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%n] %v",
-      "file_path": "/app/logs/codepilot.log",
+      "file_path": "./logs/codepilot.log",
       "max_file_size_mb": 10,
       "max_files": 5
     },
