@@ -22,6 +22,11 @@ set_tests_properties(temp-runtime-test PROPERTIES
 )
 
 if(WIN32)
+    add_executable(sqlite-integrity-check
+        integration/sqlite_integrity_check.cpp
+    )
+    target_link_libraries(sqlite-integrity-check PRIVATE sqlite3)
+
     find_program(CODEPILOT_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
 
     add_test(NAME backend-health-test
@@ -73,5 +78,23 @@ if(WIN32)
         LABELS "integration"
         RUN_SERIAL TRUE
         TIMEOUT 180
+    )
+
+    add_test(NAME backend-concurrency-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-concurrency.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -SqliteCheckExe "$<TARGET_FILE:sqlite-integrity-check>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-concurrency-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 420
     )
 endif()
