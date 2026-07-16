@@ -27,6 +27,7 @@ DataAccessFacade::~DataAccessFacade() {
     sqlite3_close(db_);
     db_ = nullptr;
   }
+  initialized_ = false;
 }
 
 // ============================================================
@@ -110,30 +111,85 @@ void DataAccessFacade::createAllTables() {
   LogRepository(db_).initTable();
 
   // task_contexts 表（用于主循环中断恢复）
-  sqlite3_exec(db_,
-               "CREATE TABLE IF NOT EXISTS task_contexts ("
-               "  task_id TEXT PRIMARY KEY,"
-               "  context_json TEXT NOT NULL,"
-               "  updated_at TEXT NOT NULL"
-               ");",
-               nullptr, nullptr, nullptr);
+  const auto executeRequired = [this](const char *component,
+                                      const char *sql) {
+    char *error = nullptr;
+    if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
+      const std::string message = error ? error : sqlite3_errmsg(db_);
+      sqlite3_free(error);
+      throw std::runtime_error(std::string(component) + ": " + message);
+    }
+  };
+
+  executeRequired("failed to initialize task_contexts",
+                  "CREATE TABLE IF NOT EXISTS task_contexts ("
+                  "  task_id TEXT PRIMARY KEY,"
+                  "  context_json TEXT NOT NULL,"
+                  "  updated_at TEXT NOT NULL"
+                  ");");
 
   // system_health 表（由 AppBootstrap 迁移至此，消除双连接）
-  sqlite3_exec(db_,
-               "CREATE TABLE IF NOT EXISTS system_health ("
-               "    id INTEGER PRIMARY KEY CHECK (id = 1),"
-               "    service TEXT NOT NULL,"
-               "    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
-               ");",
-               nullptr, nullptr, nullptr);
-  sqlite3_exec(db_,
-               "INSERT INTO system_health (id, service, checked_at) "
-               "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
-               "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;",
-               nullptr, nullptr, nullptr);
+  executeRequired("failed to initialize system_health",
+                  "CREATE TABLE IF NOT EXISTS system_health ("
+                  "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+                  "    service TEXT NOT NULL,"
+                  "    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                  ");");
+  executeRequired(
+      "failed to update system_health",
+      "INSERT INTO system_health (id, service, checked_at) "
+      "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
+      "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;");
 
   // 版本化数据库迁移（幂等，自动处理 ALTER TABLE 等增量变更）
-  MigrationRunner(db_).migrate();
+  // Older databases may already contain Repository-managed columns while
+  // schema_migrations is empty. In that case ALTER TABLE reports a duplicate
+  // column and migrate() returns false even though the database is usable.
+  // Do not treat every such result as corruption, but do require an intact
+  // database and every table used by the current backend.
+  if (!MigrationRunner(db_).migrate()) {
+    sqlite3_stmt *check = nullptr;
+    if (sqlite3_prepare_v2(db_, "PRAGMA quick_check(1);", -1, &check,
+                           nullptr) != SQLITE_OK) {
+      throw std::runtime_error("migration compatibility check failed: " +
+                               std::string(sqlite3_errmsg(db_)));
+    }
+    const bool integrityOk =
+        sqlite3_step(check) == SQLITE_ROW &&
+        std::string(reinterpret_cast<const char *>(sqlite3_column_text(check, 0))) ==
+            "ok";
+    sqlite3_finalize(check);
+    if (!integrityOk) {
+      throw std::runtime_error(
+          "migration failed and database integrity check did not return ok");
+    }
+
+    static const char *requiredTables[] = {
+        "globals",          "global_context", "sessions",
+        "workspaces",       "tasks",          "task_events",
+        "tool_calls",       "permission_requests",
+        "file_changes",     "execution_logs", "task_contexts",
+        "system_health",    "schema_migrations"};
+    if (sqlite3_prepare_v2(
+            db_,
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;",
+            -1, &check, nullptr) != SQLITE_OK) {
+      throw std::runtime_error("migration schema check failed: " +
+                               std::string(sqlite3_errmsg(db_)));
+    }
+    for (const char *table : requiredTables) {
+      sqlite3_reset(check);
+      sqlite3_clear_bindings(check);
+      sqlite3_bind_text(check, 1, table, -1, SQLITE_STATIC);
+      if (sqlite3_step(check) != SQLITE_ROW) {
+        sqlite3_finalize(check);
+        throw std::runtime_error(
+            std::string("migration failed and required table is missing: ") +
+            table);
+      }
+    }
+    sqlite3_finalize(check);
+  }
 }
 
 // ============================================================

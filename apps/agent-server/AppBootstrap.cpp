@@ -39,84 +39,129 @@ std::string readFile(const std::string &path) {
   return ss.str();
 }
 
-std::string extractConfigValue(const std::string &configPath,
-                               const std::string &key) {
-  const std::string raw = readFile(configPath);
-  if (raw.empty()) {
-    return "";
-  }
-  try {
-    nlohmann::json config = nlohmann::json::parse(raw);
-    const auto dot = key.find('.');
-    if (dot != std::string::npos) {
-      const std::string top = key.substr(0, dot);
-      const std::string sub = key.substr(dot + 1);
-      if (config.contains(top) && config[top].is_object() &&
-          config[top].contains(sub)) {
-        return config[top][sub].get<std::string>();
-      }
-    } else {
-      if (config.contains(key)) {
-        return config[key].get<std::string>();
-      }
+class LoggingShutdownGuard {
+public:
+  ~LoggingShutdownGuard() {
+    if (active_) {
+      codepilot::log::shutdown();
     }
-  } catch (const std::exception &) {
-    // 解析失败返回空，调用方使用默认值
   }
-  return "";
+  void activate() { active_ = true; }
+
+private:
+  bool active_{false};
+};
+
+nlohmann::json loadRequiredConfig(const std::string &configPath) {
+  std::ifstream input(configPath);
+  if (!input.is_open()) {
+    throw std::runtime_error("required configuration file is not readable: '" +
+                             configPath + "'");
+  }
+
+  std::ostringstream contents;
+  contents << input.rdbuf();
+  try {
+    auto config = nlohmann::json::parse(contents.str());
+    if (!config.is_object()) {
+      throw std::runtime_error("top-level JSON value must be an object");
+    }
+    return config;
+  } catch (const std::exception &error) {
+    throw std::runtime_error("invalid JSON in required configuration file '" +
+                             configPath + "': " + error.what());
+  }
 }
 
-std::string extract_storage_path(const std::string &config_path) {
-  const std::string path = extractConfigValue(config_path, "storage.path");
-  // 相对路径直接返回（sqlite3 相对于 CWD 解析）
+std::string optionalString(const nlohmann::json &config,
+                           const std::string &section,
+                           const std::string &key) {
+  if (!config.contains(section)) {
+    return "";
+  }
+  if (!config[section].is_object()) {
+    throw std::runtime_error("configuration field '" + section +
+                             "' must be an object");
+  }
+  if (!config[section].contains(key)) {
+    return "";
+  }
+  if (!config[section][key].is_string()) {
+    throw std::runtime_error("configuration field '" + section + "." + key +
+                             "' must be a string");
+  }
+  return config[section][key].get<std::string>();
+}
+
+std::string extract_storage_path(const nlohmann::json &config) {
+  const std::string path = optionalString(config, "storage", "path");
   return path.empty() ? "./storage/agent.db" : path;
 }
 
-std::string extract_workspace_root(const std::string &config_path) {
-  const std::string root = extractConfigValue(config_path, "workspace.root");
+std::string extract_workspace_root(const nlohmann::json &config) {
+  const std::string root = optionalString(config, "workspace", "root");
   return root.empty() ? "./workspace" : root;
+}
+
+void ensureDirectory(const std::filesystem::path &path,
+                     const std::string &component) {
+  std::error_code error;
+  const bool exists = std::filesystem::exists(path, error);
+  if (error) {
+    throw std::runtime_error("cannot inspect " + component + " directory '" +
+                             path.string() + "': " + error.message());
+  }
+  if (exists) {
+    if (!std::filesystem::is_directory(path, error) || error) {
+      throw std::runtime_error(component + " path is not a directory: '" +
+                               path.string() + "'");
+    }
+    return;
+  }
+  if (!std::filesystem::create_directories(path, error) || error) {
+    throw std::runtime_error("failed to create " + component + " directory '" +
+                             path.string() + "': " + error.message());
+  }
 }
 
 void ensure_runtime_directories(const std::string &database_path,
                                 const std::string &workspace_root) {
-  std::error_code error;
-
   const std::filesystem::path database_parent =
       std::filesystem::path(database_path).parent_path();
   if (!database_parent.empty()) {
-    std::filesystem::create_directories(database_parent, error);
-    if (error) {
-      throw std::runtime_error("failed to create storage directory '" +
-                               database_parent.string() + "': " +
-                               error.message());
-    }
+    ensureDirectory(database_parent, "storage");
   }
-
-  error.clear();
-  std::filesystem::create_directories(workspace_root, error);
-  if (error) {
-    throw std::runtime_error("failed to create workspace directory '" +
-                             workspace_root + "': " + error.message());
-  }
-
-  error.clear();
-  std::filesystem::create_directories("./logs", error);
-  if (error) {
-    throw std::runtime_error("failed to create log directory './logs': " +
-                             error.message());
-  }
+  ensureDirectory(workspace_root, "workspace");
+  ensureDirectory("./logs", "log");
 }
 
 } // namespace
 
 int run_agent_server(const std::string &config_path, bool enableConsole) {
+  running.store(true);
   std::signal(SIGINT, handle_signal);
 #ifndef _WIN32
   std::signal(SIGTERM, handle_signal);
 #endif
 
-  const std::string database_path = extract_storage_path(config_path);
-  const std::string workspace_root = extract_workspace_root(config_path);
+  nlohmann::json agent_config;
+  try {
+    agent_config = loadRequiredConfig(config_path);
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][Configuration] " << error.what() << std::endl;
+    return 2;
+  }
+
+  std::string database_path;
+  std::string workspace_root;
+  try {
+    database_path = extract_storage_path(agent_config);
+    workspace_root = extract_workspace_root(agent_config);
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][Configuration] Invalid startup paths in '"
+              << config_path << "': " << error.what() << std::endl;
+    return 2;
+  }
 
   try {
     ensure_runtime_directories(database_path, workspace_root);
@@ -126,41 +171,80 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
     return 1;
   }
 
-  // 初始化统一日志系统
+  LoggingShutdownGuard logging_guard;
   const std::string logConfigPath = "./config/logging.json";
-  codepilot::log::initFromFile(logConfigPath);
-
-  // 初始化工具系统
-  codepilot::ToolSystem::getInstance().init(workspace_root, config_path);
-
-  // 初始化存储门面（建表+system_health 统一由此完成，消除 AppBootstrap 双连接）
-  bool database_connected = false;
-  std::string database_error;
   try {
-    codepilot::DataAccessFacade::getInstance().init(database_path);
-    database_connected = true;
-  } catch (const std::exception &e) {
-    database_error = e.what();
+    loadRequiredConfig(logConfigPath);
+    codepilot::log::initFromFile(logConfigPath);
+    logging_guard.activate();
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][Logging] Unable to initialize logging from '"
+              << logConfigPath << "': " << error.what() << std::endl;
+    return 3;
   }
 
-  // 初始化通信门面（绑定 EventBus + DataAccessFacade）
-  codepilot::SSEGateway::getInstance().init(
-      &codepilot::ToolSystem::getInstance().eventBus(),
-      &codepilot::DataAccessFacade::getInstance());
+  try {
+    codepilot::ToolSystem::getInstance().init(workspace_root,
+                                              "config/tools.json");
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][ToolSystem] Initialization failed for workspace '"
+              << workspace_root << "': " << error.what() << std::endl;
+    return 4;
+  }
 
-  // 初始化 LLM 门面（加载 llm.json + llm.local.json）
-  codepilot::LlmClientFacade::getInstance().init("config/llm.json");
+  try {
+    codepilot::DataAccessFacade::getInstance().init(database_path);
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][SQLite] Unable to initialize database '"
+              << database_path << "': " << error.what() << std::endl;
+    return 5;
+  }
+
+  try {
+    codepilot::SSEGateway::getInstance().init(
+        &codepilot::ToolSystem::getInstance().eventBus(),
+        &codepilot::DataAccessFacade::getInstance());
+    if (!codepilot::SSEGateway::getInstance().isInitialized()) {
+      throw std::runtime_error("gateway did not enter the initialized state");
+    }
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][SSEGateway] Initialization failed: " << error.what()
+              << std::endl;
+    return 4;
+  }
+
+  try {
+    codepilot::LlmClientFacade::getInstance().init("config/llm.json");
+  } catch (const std::exception &error) {
+    std::cerr << "[WARN][LLM] Optional model configuration 'config/llm.json' "
+                 "is unavailable: "
+              << error.what() << std::endl;
+  }
   LOG_INFO("LlmClientFacade available: {}",
            codepilot::LlmClientFacade::getInstance().isAvailable() ? "true"
                                                                    : "false");
   LOG_INFO("LlmClientFacade default provider: {}",
            codepilot::LlmClientFacade::getInstance().getDefaultProvider());
 
-  // 初始化 Agent 编排器（加载 Expert 配置，启用 Expert Chain 主循环）
-  codepilot::AgentOrchestrator::getInstance().init("config/experts.json");
+  try {
+    codepilot::AgentOrchestrator::getInstance().init("config/experts.json");
+  } catch (const std::exception &error) {
+    std::cerr << "[FATAL][AgentOrchestrator] Initialization failed for "
+                 "'config/experts.json': "
+              << error.what() << std::endl;
+    return 4;
+  }
   LOG_INFO("AgentOrchestrator ready: {}",
            codepilot::AgentOrchestrator::getInstance().isReady() ? "true"
                                                                  : "false");
+  if (!codepilot::AgentOrchestrator::getInstance().isReady()) {
+    LOG_WARN("Optional expert configuration is unavailable; health and "
+             "non-agent APIs remain available");
+  }
+  if (!codepilot::LlmClientFacade::getInstance().isAvailable()) {
+    LOG_WARN("No LLM provider or API key is configured; model-dependent "
+             "tasks will fail at runtime");
+  }
   if (codepilot::AgentOrchestrator::getInstance().isReady()) {
     auto names = codepilot::AgentConfiguration::getInstance().listExpertNames();
     LOG_INFO("Loaded {} experts", names.size());
@@ -185,17 +269,13 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
   LOG_INFO("Config: {}", config_path);
   LOG_INFO("Workspace: {}", workspace_root);
   LOG_INFO("SQLite: {} connected={}", database_path,
-           (database_connected ? "true" : "false"));
-  if (!database_error.empty()) {
-    LOG_ERROR("SQLite error: {}", database_error);
-  }
+           "true");
 
   codepilot::HttpServerConfig server_config;
   server_config.host = "0.0.0.0";
   server_config.port = 8080;
   server_config.databasePath = database_path;
-  server_config.databaseConnected = database_connected;
-  server_config.databaseError = database_error;
+  server_config.databaseConnected = true;
 
   codepilot::HttpServer server(server_config);
   std::unique_ptr<InternalConsole> console;
@@ -213,6 +293,5 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
   }
 
   LOG_INFO("CodePilot Agent Server stopped");
-  codepilot::log::shutdown();
   return result;
 }
