@@ -114,4 +114,21 @@ if(WIN32)
         RUN_SERIAL TRUE
         TIMEOUT 240
     )
+
+    add_test(NAME backend-llm-failure-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-llm-failure.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-llm-failure-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 300
+    )
 endif()

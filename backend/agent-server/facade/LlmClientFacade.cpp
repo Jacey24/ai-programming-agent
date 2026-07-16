@@ -233,6 +233,7 @@ LlmResponse LlmClientFacade::chat(const std::string &prompt,
   std::lock_guard<std::mutex> lock(mutex_);
   if (!initialized_) {
     LlmResponse resp;
+    resp.errorKind = LlmErrorKind::NotConfigured;
     resp.error = "LlmClientFacade not initialized";
     return resp;
   }

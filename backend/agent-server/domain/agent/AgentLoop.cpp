@@ -19,6 +19,36 @@
 
 namespace codepilot {
 
+namespace {
+
+constexpr int kMaxLlmAttemptsPerExpert = 2;
+
+bool hasReadableText(const std::string &value) {
+  return value.find_first_not_of(" \t\n\r") != std::string::npos;
+}
+
+std::string safeLlmError(const LlmResponse &response) {
+  switch (response.errorKind) {
+  case LlmErrorKind::NotConfigured:
+    return "LLM 未配置";
+  case LlmErrorKind::Http:
+    return response.httpStatus > 0
+               ? "LLM 服务返回 HTTP " + std::to_string(response.httpStatus)
+               : "LLM 服务返回错误响应";
+  case LlmErrorKind::EmptyResponse:
+    return "LLM 返回空响应";
+  case LlmErrorKind::InvalidResponse:
+    return "LLM 返回无法解析的响应";
+  case LlmErrorKind::Transport:
+    return "LLM 连接或请求超时";
+  case LlmErrorKind::None:
+  default:
+    return "LLM 调用失败";
+  }
+}
+
+} // namespace
+
 AgentLoop::AgentLoop(const std::string &configPath) : configPath_(configPath) {
   AgentConfiguration::getInstance().init(configPath);
 }
@@ -193,6 +223,7 @@ AgentLoopResult AgentLoop::runExpertChain(
       roundsLeft = currentExpert->maxInternalRounds;
     }
     int globalReadsUsed = 0;
+    int llmAttempts = 0;
 
     // 兜底保护：executor 进入时如果既没有历史也没有有效计划，直接终止
     if (currentExpert->name == "executor" && sessionHistory.empty() &&
@@ -263,41 +294,22 @@ AgentLoopResult AgentLoop::runExpertChain(
         int timeout =
             currentExpert->llmTimeout > 0 ? currentExpert->llmTimeout : 60;
 
+        ++llmAttempts;
         llmResp = LlmClientFacade::getInstance().chat(prompt, provider, model,
                                                       timeout);
       } else {
-        // 推送明确的错误信息到 SSE
-        if (SSEGateway::getInstance().isInitialized()) {
-          json errMeta;
-          errMeta["source"] = "llm";
-          errMeta["expert"] = currentExpert->name;
-          errMeta["stage"] = "error";
-          errMeta["reason"] = "LLM 门面未初始化或无可用的 API Key";
-          SSEGateway::getInstance().push(
-              taskId, EventType::AgentMessage,
-              "[" + currentExpert->name +
-                  "] ⚠ LLM 不可用: 请检查 config/llm.json 和 API Key 环境变"
-                  "量",
-              errMeta, SSEGateway::Channel::Status,
-              SSEGateway::Persist::Always);
-          SSEGateway::getInstance().pushDialog(
-              taskId, "⚠ 无法执行任务: LLM 未配置。请设置 " +
-                          LlmClientFacade::getInstance().getDefaultProvider() +
-                          " 的 API Key 环境变量，然后重启服务。");
-        }
-        lastOutput =
-            "<done>LLM 未配置，跳过执行。请检查 API Key 环境变量。</done>";
-        break;
+        return finalizeWithCriticalSummary(
+            taskId, "LLM 未配置，无法执行任务", "failed", sessionHistory,
+            planMgr, ctx);
       }
 
       if (cancelFlag && cancelFlag->load()) {
         return cancelledResult();
       }
 
-      if (!llmResp.success || llmResp.content.empty()) {
-        sessionHistory += "\n[system] LLM 调用失败: " +
-                          (llmResp.error.empty() ? "未知错误" : llmResp.error) +
-                          "\n";
+      if (!llmResp.success || !hasReadableText(llmResp.content)) {
+        const std::string safeError = safeLlmError(llmResp);
+        sessionHistory += "\n[system] " + safeError + "\n";
         if (SSEGateway::getInstance().isInitialized()) {
           json errMeta;
           errMeta["source"] = "llm";
@@ -305,10 +317,16 @@ AgentLoopResult AgentLoop::runExpertChain(
           errMeta["stage"] = "error";
           SSEGateway::getInstance().push(
               taskId, EventType::AgentMessage,
-              "[" + currentExpert->name + "] LLM 调用失败: " +
-                  (llmResp.error.empty() ? "未知错误" : llmResp.error),
+              "[" + currentExpert->name + "] " + safeError,
               errMeta, SSEGateway::Channel::Status,
               SSEGateway::Persist::Always);
+        }
+        if (llmAttempts >= kMaxLlmAttemptsPerExpert) {
+          return finalizeWithCriticalSummary(
+              taskId,
+              "Expert [" + currentExpert->name + "] " + safeError +
+                  "，已达到 2 次尝试上限",
+              "failed", sessionHistory, planMgr, ctx);
         }
         roundsLeft--;
         continue;
@@ -329,8 +347,8 @@ AgentLoopResult AgentLoop::runExpertChain(
 
       lastOutput = llmResp.content;
 
+      std::string dialogContent;
       {
-        std::string dialogContent;
         bool inTag = false;
         for (size_t i = 0; i < lastOutput.size(); ++i) {
           if (lastOutput[i] == '<')
@@ -339,15 +357,6 @@ AgentLoopResult AgentLoop::runExpertChain(
             inTag = false;
           else if (!inTag)
             dialogContent += lastOutput[i];
-        }
-        // Summarizer output is only final after parsing and routing confirms
-        // _done. Do not publish its raw candidate through the generic dialog
-        // path; parse/call failures must be handled by the critical fallback.
-        if (currentExpert->name != "summarizer" && !dialogContent.empty() &&
-            dialogContent.find_first_not_of(" \t\n\r") != std::string::npos) {
-          if (SSEGateway::getInstance().isInitialized()) {
-            SSEGateway::getInstance().pushDialog(taskId, dialogContent);
-          }
         }
         if (SSEGateway::getInstance().isInitialized()) {
           json rawMeta;
@@ -364,6 +373,18 @@ AgentLoopResult AgentLoop::runExpertChain(
       }
 
       TagCollection tags = MessageBus::parse(lastOutput);
+
+      // A readable summarizer result is valuable even if its control tag is
+      // malformed. Preserve it as the sole final output, but keep the task
+      // failed because the configured protocol was not satisfied.
+      if (currentExpert->name == "summarizer" && !tags.has("done") &&
+          !tags.has("fail") && hasReadableText(dialogContent)) {
+        result.status = "failed";
+        result.finalOutput = dialogContent;
+        result.finalPlan = planMgr.snapshot();
+        result.summary = ctx.summary;
+        return result;
+      }
 
       // ── <cmd> ──
       int acceptedCmdCount = 0;
@@ -727,12 +748,12 @@ AgentLoopResult AgentLoop::runExpertChain(
         sessionHistory += "\n[user] 已确认\n";
       }
 
-      // ★ 当模型输出了 cmd 但全部被拒绝时，不消耗轮次
+      // Rejected commands still consume a round. Otherwise a model that keeps
+      // returning unavailable or malformed tool calls can loop forever.
       int totalCmdCount = static_cast<int>(tags.get("cmd").size());
       if (totalCmdCount > 0 && acceptedCmdCount == 0) {
         sessionHistory += "\n[system] 你的上一轮指令全部格式不规范。";
         sessionHistory += "请检查工具名称和 JSON 参数格式后重试。\n";
-        continue; // 不消耗 roundsLeft
       }
 
       sessionHistory += "\n[assistant] " + lastOutput + "\n";
@@ -875,10 +896,6 @@ AgentLoopResult AgentLoop::runExpertChain(
       result.finalPlan = planMgr.snapshot();
       result.summary = ctx.summary;
 
-      if (SSEGateway::getInstance().isInitialized() &&
-          !result.finalOutput.empty()) {
-        SSEGateway::getInstance().pushDialog(taskId, result.finalOutput);
-      }
       return result;
     }
 
@@ -927,40 +944,15 @@ AgentLoopResult AgentLoop::finalizeWithCriticalSummary(
   result.summary = ctx.summary;
 
   const std::string planFragment = result.finalPlan.toPromptFragment();
+  (void)sessionHistory;
 
-  std::string recentHistory = sessionHistory;
-  if (recentHistory.size() > 2000) {
-    recentHistory = "...(更早的日志已省略)\n" +
-                    recentHistory.substr(recentHistory.size() - 2000);
-  }
-
-  std::string summaryPrompt =
-      "你是一个系统状态汇报助手。以下任务因异常原因终止，请用友好的语言向用户"
-      "总结当前状态。\n\n"
-      "异常原因：" +
-      reason + "\n\n" + "用户目标：" + ctx.goal + "\n\n" + planFragment +
-      "\n\n" + "执行日志摘要：\n" + recentHistory +
-      "\n\n请用1-3段简短文字汇报：已完成什么、失败原因、用户接下来可以做什么。"
-      "不要使用XML标签。";
-
-  if (LlmClientFacade::getInstance().isAvailable()) {
-    LlmResponse resp =
-        LlmClientFacade::getInstance().chat(summaryPrompt, "", "", 60);
-    if (resp.success && !resp.content.empty()) {
-      result.finalOutput = resp.content;
-    } else {
-      result.finalOutput = "任务异常终止: " + reason + "\n" + planFragment;
-    }
-  } else {
-    result.finalOutput = "任务异常终止: " + reason + "\n" + planFragment;
-  }
+  result.finalOutput = "任务异常终止: " + reason + "\n" + planFragment;
 
   if (SSEGateway::getInstance().isInitialized()) {
     json meta;
     meta["stage"] = "critical_exit";
     meta["reason"] = reason;
     meta["status"] = status;
-    SSEGateway::getInstance().pushDialog(taskId, result.finalOutput);
     SSEGateway::getInstance().push(
         taskId, EventType::AgentMessage, "[系统] " + reason, meta,
         SSEGateway::Channel::Status, SSEGateway::Persist::Always);

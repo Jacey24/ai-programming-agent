@@ -22,6 +22,7 @@ struct AgentLoopResult {
   Plan finalPlan;
   std::string summary;
   std::vector<std::string> expertChain;
+  bool finalOutputSent{false};
 };
 
 // ============================================================
