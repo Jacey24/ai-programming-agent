@@ -14,6 +14,7 @@
 #include <csignal>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -76,6 +77,36 @@ std::string extract_workspace_root(const std::string &config_path) {
   return root.empty() ? "./workspace" : root;
 }
 
+void ensure_runtime_directories(const std::string &database_path,
+                                const std::string &workspace_root) {
+  std::error_code error;
+
+  const std::filesystem::path database_parent =
+      std::filesystem::path(database_path).parent_path();
+  if (!database_parent.empty()) {
+    std::filesystem::create_directories(database_parent, error);
+    if (error) {
+      throw std::runtime_error("failed to create storage directory '" +
+                               database_parent.string() + "': " +
+                               error.message());
+    }
+  }
+
+  error.clear();
+  std::filesystem::create_directories(workspace_root, error);
+  if (error) {
+    throw std::runtime_error("failed to create workspace directory '" +
+                             workspace_root + "': " + error.message());
+  }
+
+  error.clear();
+  std::filesystem::create_directories("./logs", error);
+  if (error) {
+    throw std::runtime_error("failed to create log directory './logs': " +
+                             error.message());
+  }
+}
+
 } // namespace
 
 int run_agent_server(const std::string &config_path, bool enableConsole) {
@@ -84,12 +115,20 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
   std::signal(SIGTERM, handle_signal);
 #endif
 
+  const std::string database_path = extract_storage_path(config_path);
+  const std::string workspace_root = extract_workspace_root(config_path);
+
+  try {
+    ensure_runtime_directories(database_path, workspace_root);
+  } catch (const std::exception &error) {
+    std::cerr << "[ERROR] Unable to prepare runtime directories: "
+              << error.what() << std::endl;
+    return 1;
+  }
+
   // 初始化统一日志系统
   const std::string logConfigPath = "./config/logging.json";
   codepilot::log::initFromFile(logConfigPath);
-
-  const std::string database_path = extract_storage_path(config_path);
-  const std::string workspace_root = extract_workspace_root(config_path);
 
   // 初始化工具系统
   codepilot::ToolSystem::getInstance().init(workspace_root, config_path);

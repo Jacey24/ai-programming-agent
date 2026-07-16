@@ -133,7 +133,38 @@ if(WIN32)
     )
 endif()
 
-install(TARGETS codepilot-agent-server RUNTIME DESTINATION bin)
+install(TARGETS codepilot-agent-server
+    RUNTIME DESTINATION .
+    COMPONENT agent-server
+)
+
+if(WIN32)
+    # POST_BUILD has already collected every linked non-system runtime DLL in
+    # the configuration-specific output directory. Install those exact DLLs.
+    install(DIRECTORY $<TARGET_FILE_DIR:codepilot-agent-server>/
+        DESTINATION .
+        COMPONENT agent-server
+        FILES_MATCHING PATTERN "*.dll"
+    )
+
+    if(MSVC)
+        set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+        include(InstallRequiredSystemLibraries)
+        install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+            DESTINATION .
+            COMPONENT agent-server
+        )
+    endif()
+endif()
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/config/
+    DESTINATION config
+    COMPONENT agent-server
+    PATTERN "llm.local.json" EXCLUDE
+)
+install(DIRECTORY DESTINATION storage COMPONENT agent-server)
+install(DIRECTORY DESTINATION workspace COMPONENT agent-server)
+install(DIRECTORY DESTINATION logs COMPONENT agent-server)
 
 # ============================================================
 # 工具测试可执行文件（独立于 agent-server）
