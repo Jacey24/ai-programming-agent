@@ -5,14 +5,30 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace {
 
 #ifdef _WIN32
-int emitGbkOutput() {
-  const unsigned char bytes[] = {
-      0xC4, 0xBF, 0xB1, 0xEA, 0xD6, 0xB5, 0x20, 0x37, 0x20, 0xB5, 0xC4,
-      0xCB, 0xF7, 0xD2, 0xFD, 0xCE, 0xAA, 0x3A, 0x20, 0x33, 0x0D, 0x0A};
-  std::cout.write(reinterpret_cast<const char *>(bytes), sizeof(bytes));
+int emitAnsiOutput() {
+  const std::wstring text = L"目标值 7 的索引为: 3\r\n";
+  const int size = WideCharToMultiByte(GetACP(), 0, text.data(),
+                                       static_cast<int>(text.size()), nullptr,
+                                       0, nullptr, nullptr);
+  if (size <= 0) {
+    return 1;
+  }
+
+  std::string bytes(static_cast<std::size_t>(size), '\0');
+  if (WideCharToMultiByte(GetACP(), 0, text.data(),
+                          static_cast<int>(text.size()), bytes.data(), size,
+                          nullptr, nullptr) <= 0) {
+    return 1;
+  }
+  std::cout.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   return 0;
 }
 #endif
@@ -21,19 +37,19 @@ int emitGbkOutput() {
 
 int main(int argc, char **argv) {
 #ifdef _WIN32
-  if (argc > 1 && std::string(argv[1]) == "--emit-gbk") {
-    return emitGbkOutput();
+  if (argc > 1 && std::string(argv[1]) == "--emit-ansi") {
+    return emitAnsiOutput();
   }
 
   const std::string executable =
       std::filesystem::absolute(argv[0]).string();
   codepilot::ProcessRunner runner;
   const codepilot::ProcessResult result =
-      runner.execute("\"" + executable + "\" --emit-gbk", 10);
+      runner.execute("\"" + executable + "\" --emit-ansi", 10);
 
   const std::string expected = "目标值 7 的索引为: 3\r\n";
   if (!result.success || result.exitCode != 0 || result.output != expected) {
-    std::cerr << "GBK output was not normalized to UTF-8\n";
+    std::cerr << "ANSI output was not normalized to UTF-8\n";
     std::cerr << "success=" << result.success
               << " exitCode=" << result.exitCode << " output=" << result.output
               << "\n";

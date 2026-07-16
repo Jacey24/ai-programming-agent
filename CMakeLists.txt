@@ -21,6 +21,10 @@ endif()
 add_subdirectory(apps/agent-server)
 add_subdirectory(apps/cli-client)
 
+if(CODEPILOT_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+
 if(CODEPILOT_BUILD_TUI)
     add_subdirectory(apps/tui-client)
 endif()
