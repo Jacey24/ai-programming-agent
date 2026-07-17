@@ -8,6 +8,7 @@ import {
   getConfigWorkspace, setConfigWorkspace,
   getConfigLogging, setConfigLogging,
   getExpertLlmDefaults, setExpertLlmDefaults,
+  saveExpertGraphPositions,
 } from '../api/api';
 
 interface Props {
@@ -63,6 +64,9 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Pr
                 outline: 'none', cursor: 'pointer' }}
             />
           </Section>
+
+          {/* ── Debug: Reset Expert Positions ── */}
+          <DebugResetPositions />
 
           {/* ── LLM ── */}
           <LlmSection theme={theme} />
@@ -313,6 +317,38 @@ function ConfigFieldSection({ title, load, save }: {
         rows={4} className="form-input text-[10px] font-mono"
         style={{ width: '100%', resize: 'vertical' }} />
       <Btn label="保存" loading={saving} onClick={handleSave} />
+    </Section>
+  );
+}
+
+// ---- Debug: Reset Expert Positions ----
+function DebugResetPositions() {
+  const [resetting, setResetting] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const handleReset = async () => {
+    setResetting(true);
+    setMsg('');
+    try {
+      // Pass an empty object to clear all saved positions.
+      // The backend will use the default layout logic.
+      await saveExpertGraphPositions({});
+      setMsg('✅ 位置已重置，刷新画布即可恢复默认布局');
+    } catch {
+      setMsg('❌ 重置失败');
+    }
+    setResetting(false);
+  };
+
+  return (
+    <Section title="🔧 Expert 位置 Debug">
+      <p className="text-[9px] text-[var(--text-secondary)] leading-relaxed">
+        若卡片被拖到画面外无法找回，点击下方按钮将所有卡片恢复到默认位置。
+      </p>
+      <div className="flex items-center gap-2">
+        <Btn label="重置卡片位置" loading={resetting} onClick={handleReset} />
+        {msg && <span className={`text-[9px] ${msg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>{msg}</span>}
+      </div>
     </Section>
   );
 }

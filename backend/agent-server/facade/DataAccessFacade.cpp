@@ -157,11 +157,24 @@ bool DataAccessFacade::isDatabaseConnected() {
 // ============================================================
 // Session 组
 // ============================================================
-SessionRecord DataAccessFacade::createSession(const std::string &title) {
+SessionRecord DataAccessFacade::createSession(const std::string &title,
+                                              const std::string &workspace_id) {
   std::lock_guard<std::mutex> lock(mutex_);
   const std::string now = iso8601Now();
-  return SessionRepository(db_).createSession(generateId("session"), title, now,
-                                              now);
+  const std::string id = generateId("session");
+  auto record = SessionRepository(db_).createSession(id, title, now, now);
+  if (!workspace_id.empty()) {
+    const char *sql = "UPDATE sessions SET workspace_id = ? WHERE id = ?;";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+      sqlite3_bind_text(stmt, 1, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(stmt, 2, id.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+    }
+    record.workspace_id = workspace_id;
+  }
+  return record;
 }
 
 std::optional<SessionRecord>

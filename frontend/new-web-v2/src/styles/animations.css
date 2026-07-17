@@ -1,0 +1,101 @@
+/* ========== 统一动效系统 ========== */
+/* 设计原则：仅用 opacity + transform（GPU 合成），120-180ms，支持打断 */
+
+/* 纯淡入 */
+@keyframes anim-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 淡入 + 微缩放弹出 */
+@keyframes anim-fade-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* 淡入 + 从下方滑入 */
+@keyframes anim-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 淡入 + 从上方滑下 */
+@keyframes anim-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 淡入 + 从左侧滑入 */
+@keyframes anim-slide-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 模态框背板淡入 */
+@keyframes anim-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 模态框面板弹出 */
+@keyframes anim-modal-pop {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 闪烁光标 */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* 脉冲 — 用于状态指示灯 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* 弹跳 — 用于加载点动画 */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* --- 动画工具类 --- */
+.anim-fade-in     { animation: anim-fade-in     0.15s ease-out both; }
+.anim-slide-up    { animation: anim-slide-up    0.15s ease-out both; }
+.anim-slide-down  { animation: anim-slide-down  0.15s ease-out both; }
+.anim-slide-left  { animation: anim-slide-left  0.15s ease-out both; }
+.anim-backdrop-in { animation: anim-backdrop-in 0.18s ease-out both; }
+.anim-modal-pop   { animation: anim-modal-pop   0.18s ease-out both; }
+
+/* --- Phase 过渡：交错淡出 / 淡入 --- */
+@keyframes stagger-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.stagger-fade-out .stagger-item { animation: stagger-out 0.12s ease-in both; }
+.stagger-fade-in  .stagger-item { animation: anim-fade    0.13s ease-out both; }
+
+.stagger-fade-out .stagger-item:nth-child(1)  { animation-delay: 0.00s; }
+.stagger-fade-out .stagger-item:nth-child(2)  { animation-delay: 0.03s; }
+.stagger-fade-out .stagger-item:nth-child(3)  { animation-delay: 0.07s; }
+.stagger-fade-out .stagger-item:nth-child(4)  { animation-delay: 0.01s; }
+.stagger-fade-out .stagger-item:nth-child(5)  { animation-delay: 0.09s; }
+.stagger-fade-out .stagger-item:nth-child(6)  { animation-delay: 0.04s; }
+.stagger-fade-out .stagger-item:nth-child(7)  { animation-delay: 0.11s; }
+.stagger-fade-out .stagger-item:nth-child(8)  { animation-delay: 0.02s; }
+.stagger-fade-out .stagger-item:nth-child(9)  { animation-delay: 0.08s; }
+.stagger-fade-out .stagger-item:nth-child(10) { animation-delay: 0.05s; }
+
+.stagger-fade-in .stagger-item:nth-child(1)  { animation-delay: 0.00s; }
+.stagger-fade-in .stagger-item:nth-child(2)  { animation-delay: 0.04s; }
+.stagger-fade-in .stagger-item:nth-child(3)  { animation-delay: 0.09s; }
+.stagger-fade-in .stagger-item:nth-child(4)  { animation-delay: 0.02s; }
+.stagger-fade-in .stagger-item:nth-child(5)  { animation-delay: 0.06s; }
+.stagger-fade-in .stagger-item:nth-child(6)  { animation-delay: 0.11s; }
+.stagger-fade-in .stagger-item:nth-child(7)  { animation-delay: 0.01s; }
+.stagger-fade-in .stagger-item:nth-child(8)  { animation-delay: 0.07s; }
+.stagger-fade-in .stagger-item:nth-child(9)  { animation-delay: 0.04s; }
+.stagger-fade-in .stagger-item:nth-child(10) { animation-delay: 0.10s; }

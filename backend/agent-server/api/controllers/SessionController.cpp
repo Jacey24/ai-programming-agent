@@ -14,6 +14,8 @@ SessionController::SessionController(std::string database_path)
 std::string SessionController::createSession(const std::string &request) {
   const std::string req_body = request_body(request);
   const std::string title = extract_json_string(req_body, "title");
+  const std::string workspace_id =
+      extract_json_string(req_body, "workspace_id");
   if (title.empty()) {
     return http_response(
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"title is required"}})",
@@ -28,7 +30,7 @@ std::string SessionController::createSession(const std::string &request) {
   }
 
   try {
-    auto session = facade.createSession(title);
+    auto session = facade.createSession(title, workspace_id);
     std::ostringstream response_body;
     response_body << R"({"success":true,"data":{"id":")"
                   << json_escape(session.id) << R"(","title":")"

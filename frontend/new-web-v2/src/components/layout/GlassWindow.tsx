@@ -7,14 +7,8 @@ interface GlassWindowProps {
   className?: string;
   children: ReactNode;
   pointerEvents?: CSSProperties['pointerEvents'];
-  overflow?: CSSProperties['overflow'];
 }
 
-/**
- * 玻璃窗口模板 — 负责 position + zIndex + backdrop-filter，
- * 确保毛玻璃效果在 root stacking context 中稳定工作。
- * overflow 默认为 hidden，由调用方按需覆盖。
- */
 export function GlassWindow({
   zIndex,
   position = 'absolute',
@@ -22,7 +16,6 @@ export function GlassWindow({
   className,
   children,
   pointerEvents,
-  overflow,
 }: GlassWindowProps) {
   return (
     <div
@@ -30,7 +23,7 @@ export function GlassWindow({
         position,
         zIndex,
         pointerEvents,
-        overflow: overflow ?? 'hidden',
+        overflow: 'auto',
         backdropFilter: 'blur(80px) saturate(1.2) brightness(1.05)',
         WebkitBackdropFilter: 'blur(80px) saturate(1.2) brightness(1.05)',
         ...style,

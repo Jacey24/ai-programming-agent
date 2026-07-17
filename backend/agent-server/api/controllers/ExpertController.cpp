@@ -130,6 +130,7 @@ json buildNodeJson(const codepilot::ExpertConfig &e, const json &positions) {
   node["llm"]["timeout"] = e.llmTimeout;
   node["limits"]["max_internal_rounds"] = e.maxInternalRounds;
   node["limits"]["tool_timeout_seconds"] = e.toolTimeoutSeconds;
+  node["context_template"] = e.contextTemplate;
   node["on_fail"] = e.onFailRoute;
   if (positions.contains(e.name))
     node["position"] = positions[e.name];
