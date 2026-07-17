@@ -19,7 +19,10 @@ export function SessionList({ workspaceId, onSelect }: Props) {
     if (workspaceId === lastCacheKey.current) return;
     lastCacheKey.current = workspaceId;
     setLoading(true);
-    try { const res = await listSessionsByWorkspace(workspaceId); setSessions(res.items || []); } catch {}
+    try {
+      const res = await listSessionsByWorkspace(workspaceId);
+      setSessions((res.items || []).filter(s => s.workspace_id === workspaceId));
+    } catch {}
     setLoading(false);
   }, [workspaceId]);
 
@@ -27,7 +30,13 @@ export function SessionList({ workspaceId, onSelect }: Props) {
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
-    try { const s = await createSession(newTitle.trim(), workspaceId); setNewTitle(''); setShowNew(false); onSelect(s); }
+    try {
+      const s = await createSession(newTitle.trim(), workspaceId);
+      if (s.workspace_id !== workspaceId) throw new Error('Session workspace mismatch');
+      setNewTitle('');
+      setShowNew(false);
+      onSelect(s);
+    }
     catch { alert('创建会话失败'); }
   };
 
@@ -68,7 +77,7 @@ export function SessionList({ workspaceId, onSelect }: Props) {
           sessions.map(s => (
             <div key={s.id} className="flex items-center gap-1.5 group">
               <button
-                onClick={() => onSelect(s)}
+                onClick={() => s.workspace_id === workspaceId && onSelect(s)}
                 style={{ minHeight: 52, padding: '10px 16px', textAlign: 'left' }}
                 className="flex-1 rounded-xl border border-transparent hover:border-[var(--glass-border)] hover:bg-[var(--accent)]/5 transition-colors"
               >

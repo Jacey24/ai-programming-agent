@@ -529,11 +529,14 @@ try {
     $backend = Start-Backend $currentScenario $script:runDirectory
     $health = Wait-Health $backend
     Assert-True ($health -eq 200) 'Backend did not start without an LLM provider.'
-    $session = Invoke-Json POST '/api/v1/sessions' '{"title":"Startup validation"}'
     $workspaceBody = [ordered]@{
         name = 'Startup validation'; path = './workspace'
     } | ConvertTo-Json -Compress
     $workspace = Invoke-Json POST '/api/v1/workspaces' $workspaceBody
+    $sessionBody = [ordered]@{
+        title = 'Startup validation'; workspace_id = [string]$workspace.data.id
+    } | ConvertTo-Json -Compress
+    $session = Invoke-Json POST '/api/v1/sessions' $sessionBody
     $taskBody = [ordered]@{
         session_id = [string]$session.data.id
         workspace_id = [string]$workspace.data.id

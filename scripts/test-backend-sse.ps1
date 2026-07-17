@@ -416,11 +416,12 @@ try {
 
     $health = Invoke-JsonRequest GET '/api/v1/health' $null
     Assert-True ($health.StatusCode -eq 200 -and $health.Json.success -eq $true) 'Backend health check failed.'
-    $session = Invoke-JsonRequest POST '/api/v1/sessions' '{"title":"SSE regression session"}' $true
-    Assert-True ($session.StatusCode -eq 200) "Session creation failed: $($session.Body)"; $sessionId = [string]$session.Json.data.id
     $workspaceJson = [ordered]@{ name = 'SSE regression workspace'; path = $workspaceDirectory.Replace('\', '/') } | ConvertTo-Json -Compress
     $workspace = Invoke-JsonRequest POST '/api/v1/workspaces' $workspaceJson $true
     Assert-True ($workspace.StatusCode -eq 200) "Workspace creation failed: $($workspace.Body)"; $workspaceId = [string]$workspace.Json.data.id
+    $sessionJson = [ordered]@{ title = 'SSE regression session'; workspace_id = $workspaceId } | ConvertTo-Json -Compress
+    $session = Invoke-JsonRequest POST '/api/v1/sessions' $sessionJson $true
+    Assert-True ($session.StatusCode -eq 200) "Session creation failed: $($session.Body)"; $sessionId = [string]$session.Json.data.id
 
     Invoke-Scenario 'basic connection, history replay, failure termination, and fast completion' {
         $task = New-Task 'SSE regression safe direct answer' 'answer'; $terminal = Wait-TaskTerminal $task

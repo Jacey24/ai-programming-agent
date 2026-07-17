@@ -367,6 +367,11 @@ std::string WorkspaceController::listSessions(const std::string &request) {
   }
 
   try {
+    if (!facade.getWorkspace(clean_id)) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
     auto sessions = facade.listSessionsByWorkspace(clean_id);
     std::ostringstream body;
     body << R"({"success":true,"data":{"workspace_id":")"

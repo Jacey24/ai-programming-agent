@@ -193,8 +193,18 @@ SELECT COUNT(*) || ':' || COUNT(DISTINCT version) || ':' ||
        COALESCE(group_concat(version, ','), '')
 FROM (SELECT version FROM schema_migrations ORDER BY version);
 '@
-    Assert-True ($summary -eq '4:4:1,2,3,4') `
+    Assert-True ($summary -eq '5:5:1,2,3,4,5') `
         "Unexpected migration records: '$summary'."
+}
+
+function Assert-RelationIndexes {
+    param([string]$Database)
+    foreach ($index in @('idx_sessions_workspace_id', 'idx_tasks_session_id',
+            'idx_tasks_workspace_id')) {
+        $count = Invoke-SqliteScalar $Database `
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='$index';"
+        Assert-True ($count -eq '1') "Missing relation index $index."
+    }
 }
 
 function Assert-Column {
@@ -295,6 +305,7 @@ try {
     Assert-CoreTables $freshDatabase
     Assert-MigrationColumns $freshDatabase
     Assert-MigrationsComplete $freshDatabase
+    Assert-RelationIndexes $freshDatabase
 
     # 2. Ten consecutive starts retain data and never duplicate records.
     Invoke-SqliteExec $freshDatabase @'
@@ -349,6 +360,7 @@ VALUES ('old-task-sentinel', 'old-global', 'old-workspace', 'preserve old row',
     Stop-Backend $backend
     Assert-MigrationColumns $oldDatabase
     Assert-MigrationsComplete $oldDatabase
+    Assert-RelationIndexes $oldDatabase
     $oldSentinel = Invoke-SqliteScalar $oldDatabase `
         "SELECT COUNT(*) FROM tasks WHERE id='old-task-sentinel';"
     Assert-True ($oldSentinel -eq '1') 'Old database data was not preserved.'
@@ -422,11 +434,14 @@ CREATE VIEW messages AS SELECT 'blocked' AS id;
     $rwDatabase = New-ScenarioDatabase 'post migration read write'
     Set-DatabaseConfig $rwDatabase
     $backend = Start-And-AssertHealthy 'migration-read-write-create'
-    $session = Invoke-Json POST '/api/v1/sessions' '{"title":"Migration persistence"}'
     $workspaceBody = [ordered]@{
         name = 'Migration persistence'; path = './workspace'
     } | ConvertTo-Json -Compress
     $workspace = Invoke-Json POST '/api/v1/workspaces' $workspaceBody
+    $sessionBody = [ordered]@{
+        title = 'Migration persistence'; workspace_id = [string]$workspace.data.id
+    } | ConvertTo-Json -Compress
+    $session = Invoke-Json POST '/api/v1/sessions' $sessionBody
     $taskBody = [ordered]@{
         session_id = [string]$session.data.id
         workspace_id = [string]$workspace.data.id

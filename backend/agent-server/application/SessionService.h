@@ -12,7 +12,8 @@ class SessionService {
 public:
     explicit SessionService(sqlite3* db);
 
-    SessionRecord createSession(const std::string& title);
+    SessionRecord createSession(const std::string& title,
+                                const std::string& workspace_id);
     std::vector<SessionRecord> listSessions();
     std::optional<SessionRecord> getSessionById(const std::string& session_id);
 

@@ -211,7 +211,7 @@ std::string TaskController::createTask(const std::string &request) {
         "400 Bad Request");
   }
 
-  std::string session_id = extractStringField(body, "session_id");
+  const std::string session_id = extractStringField(body, "session_id");
   const std::string global_id = extractStringField(body, "global_id");
   const std::string workspace_id = extractStringField(body, "workspace_id");
   const std::string input = extractStringField(body, "input");
@@ -220,12 +220,9 @@ std::string TaskController::createTask(const std::string &request) {
       !error.empty()) {
     return error;
   }
-  if (session_id.empty()) {
-    session_id = "s_default";
-  }
-  if (workspace_id.empty() || input.empty()) {
+  if (session_id.empty() || workspace_id.empty() || input.empty()) {
     return http_response(
-        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id and input are required"}})",
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id, workspace_id and input are required"}})",
         "400 Bad Request");
   }
 
@@ -244,11 +241,18 @@ std::string TaskController::createTask(const std::string &request) {
           R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
           "404 Not Found");
     }
-    WorkspaceManager::getInstance().getOrCreate(workspace->id, workspace->path);
-    // Auto-create session if not found
-    if (!facade.getSession(session_id)) {
-      facade.createSession("Auto Session");
+    const auto session = facade.getSession(session_id);
+    if (!session) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
+          "404 Not Found");
     }
+    if (session->workspace_id != workspace_id) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_WORKSPACE_MISMATCH","message":"session does not belong to workspace"}})",
+          "409 Conflict");
+    }
+    WorkspaceManager::getInstance().getOrCreate(workspace->id, workspace->path);
 
     if (!global_id.empty()) {
       if (!facade.getGlobal(global_id)) {
@@ -394,10 +398,16 @@ std::string TaskController::continueTask(const std::string &request) {
           R"({"success":false,"error":{"code":"SESSION_ID_REQUIRED","message":"session_id is required"}})",
           "400 Bad Request");
     }
-    if (!facade.getSession(session_id)) {
+    const auto session = facade.getSession(session_id);
+    if (!session) {
       return http_response(
           R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
           "404 Not Found");
+    }
+    if (session->workspace_id != workspace_id) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_WORKSPACE_MISMATCH","message":"session does not belong to workspace"}})",
+          "409 Conflict");
     }
 
     if (!global_id.empty()) {

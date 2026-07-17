@@ -21,6 +21,11 @@ std::string SessionController::createSession(const std::string &request) {
         R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"title is required"}})",
         "400 Bad Request");
   }
+  if (workspace_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"workspace_id is required"}})",
+        "400 Bad Request");
+  }
 
   auto &facade = DataAccessFacade::getInstance();
   if (!facade.isInitialized()) {
@@ -30,10 +35,16 @@ std::string SessionController::createSession(const std::string &request) {
   }
 
   try {
+    if (!facade.getWorkspace(workspace_id)) {
+      return http_response(
+          R"({"success":false,"error":{"code":"WORKSPACE_NOT_FOUND","message":"workspace not found"}})",
+          "404 Not Found");
+    }
     auto session = facade.createSession(title, workspace_id);
     std::ostringstream response_body;
     response_body << R"({"success":true,"data":{"id":")"
-                  << json_escape(session.id) << R"(","title":")"
+                  << json_escape(session.id) << R"(","workspace_id":")"
+                  << json_escape(session.workspace_id) << R"(","title":")"
                   << json_escape(session.title) << R"(","alias":")"
                   << json_escape(session.alias) << R"(","created_at":")"
                   << json_escape(session.created_at) << R"(","updated_at":")"

@@ -35,20 +35,25 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 SessionRecord SessionRepository::createSession(const std::string &id,
                                                const std::string &title,
+                                               const std::string &workspace_id,
                                                const std::string &created_at,
                                                const std::string &updated_at) {
+  if (workspace_id.empty()) {
+    throw std::invalid_argument("workspace_id is required");
+  }
   sqlite3_stmt *stmt = nullptr;
   const char *sql =
-      "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, "
-      "?, ?);";
+      "INSERT INTO sessions (id, title, workspace_id, created_at, updated_at) "
+      "VALUES (?, ?, ?, ?, ?);";
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     throw std::runtime_error(lastError());
   }
 
   sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 3, created_at.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_text(stmt, 4, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, workspace_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 4, created_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 5, updated_at.c_str(), -1, SQLITE_TRANSIENT);
 
   const int step_result = sqlite3_step(stmt);
   if (step_result != SQLITE_DONE) {
@@ -58,7 +63,8 @@ SessionRecord SessionRepository::createSession(const std::string &id,
   }
 
   sqlite3_finalize(stmt);
-  return SessionRecord{id, title, "", "", "", "", "", created_at, updated_at};
+  return SessionRecord{id, title, "", workspace_id, "", "", "", created_at,
+                       updated_at};
 }
 
 std::optional<SessionRecord>

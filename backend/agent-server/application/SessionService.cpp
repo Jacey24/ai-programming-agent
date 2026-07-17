@@ -23,10 +23,12 @@ std::string generateId(const std::string& prefix) {
 
 SessionService::SessionService(sqlite3* db) : db_(db) {}
 
-SessionRecord SessionService::createSession(const std::string& title) {
+SessionRecord SessionService::createSession(const std::string& title,
+                                            const std::string& workspace_id) {
     const std::string now = currentTimestamp();
     SessionRepository repository(db_);
-    return repository.createSession(generateId("session"), title, now, now);
+    return repository.createSession(generateId("session"), title, workspace_id,
+                                    now, now);
 }
 
 std::vector<SessionRecord> SessionService::listSessions() {
