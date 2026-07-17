@@ -1,4 +1,5 @@
 #include "infrastructure/storage/repositories/SessionRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include <stdexcept>
 
@@ -27,12 +28,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     throw std::runtime_error(error);
   }
 
-  // Migration: add alias column if missing (for databases created before this
-  // field existed)
-  const char *migration_sql =
-      "ALTER TABLE sessions ADD COLUMN alias TEXT DEFAULT '';";
-  sqlite3_exec(db_, migration_sql, nullptr, nullptr,
-               nullptr); // ignore error if column already exists
+  codepilot::addSqliteColumnIfMissing(
+      db_, "sessions", "alias",
+      "ALTER TABLE sessions ADD COLUMN alias TEXT DEFAULT '';");
 }
 
 SessionRecord SessionRepository::createSession(const std::string &id,

@@ -22,6 +22,16 @@ set_tests_properties(temp-runtime-test PROPERTIES
 )
 
 if(WIN32)
+    add_executable(sqlite-integrity-check
+        integration/sqlite_integrity_check.cpp
+    )
+    target_link_libraries(sqlite-integrity-check PRIVATE sqlite3)
+
+    add_executable(sqlite-migration-test-helper
+        integration/sqlite_migration_test_helper.cpp
+    )
+    target_link_libraries(sqlite-migration-test-helper PRIVATE sqlite3)
+
     find_program(CODEPILOT_POWERSHELL_EXECUTABLE NAMES pwsh powershell REQUIRED)
 
     add_test(NAME backend-health-test
@@ -73,5 +83,92 @@ if(WIN32)
         LABELS "integration"
         RUN_SERIAL TRUE
         TIMEOUT 180
+    )
+
+    add_test(NAME backend-concurrency-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-concurrency.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -SqliteCheckExe "$<TARGET_FILE:sqlite-integrity-check>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-concurrency-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 420
+    )
+
+    add_test(NAME backend-startup-validation-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-startup.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-startup-validation-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 240
+    )
+
+    add_test(NAME backend-sqlite-migration-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-sqlite-migration.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -SqliteTestExe "$<TARGET_FILE:sqlite-migration-test-helper>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-sqlite-migration-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 300
+    )
+
+    add_test(NAME backend-llm-failure-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-llm-failure.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-llm-failure-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 300
+    )
+
+    add_test(NAME backend-cancellation-regression-test
+        COMMAND "${CODEPILOT_POWERSHELL_EXECUTABLE}"
+            -NoLogo
+            -NoProfile
+            -NonInteractive
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-cancellation.ps1"
+            -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -BuildType "$<CONFIG>"
+            -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
+    )
+    set_tests_properties(backend-cancellation-regression-test PROPERTIES
+        LABELS "integration"
+        RUN_SERIAL TRUE
+        TIMEOUT 300
     )
 endif()

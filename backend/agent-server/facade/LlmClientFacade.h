@@ -59,7 +59,8 @@ public:
   // ============================================================
   LlmResponse chat(const std::string &prompt,
                    const std::string &provider = "auto",
-                   const std::string &model = "", int timeout = 0);
+                   const std::string &model = "", int timeout = 0,
+                   std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
 
   // ============================================================
   // 流式 chat（第 1 点优化）
@@ -68,7 +69,11 @@ public:
   // ============================================================
   void chatStream(const std::string &prompt, OnTokenCallback onToken,
                   const std::string &provider = "auto",
-                  const std::string &model = "", int timeout = 0);
+                  const std::string &model = "", int timeout = 0,
+                  std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
+
+  // Actively interrupts any cpp-httplib request using this task flag.
+  void cancelRequests(const std::shared_ptr<std::atomic<bool>> &cancelFlag);
 
   // ============================================================
   // 健康检查

@@ -1,4 +1,5 @@
 #include "infrastructure/storage/repositories/GlobalRepository.h"
+#include "infrastructure/storage/SqliteConnection.h"
 
 #include <stdexcept>
 
@@ -25,10 +26,9 @@ CREATE TABLE IF NOT EXISTS globals (
     throw std::runtime_error(error);
   }
 
-  // 兼容迁移：为已有数据库添加 workspace_id 列
-  const char *migrate_sql =
-      "ALTER TABLE globals ADD COLUMN workspace_id TEXT DEFAULT ''";
-  sqlite3_exec(db_, migrate_sql, nullptr, nullptr, nullptr);
+  codepilot::addSqliteColumnIfMissing(
+      db_, "globals", "workspace_id",
+      "ALTER TABLE globals ADD COLUMN workspace_id TEXT DEFAULT '';");
 }
 
 void GlobalRepository::initContextTable() {

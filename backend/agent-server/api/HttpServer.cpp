@@ -582,18 +582,63 @@ int HttpServer::run(const std::atomic_bool &running) {
         }
       });
 
+#ifdef _WIN32
+  // SO_REUSEADDR permits a wildcard listener to coexist with an existing
+  // loopback listener on Windows. Startup validation requires exclusive
+  // ownership so any process already using 8080 makes startup fail.
+  svr.set_socket_options([](socket_t socket) {
+    httplib::set_socket_opt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1);
+  });
+#endif
+
+  if (!svr.bind_to_port(cfg.host, cfg.port)) {
+    std::cerr << "[FATAL][HttpServer] Failed to bind " << cfg.host << ":"
+              << cfg.port << "; the port may already be in use" << std::endl;
+    return 6;
+  }
+
+  std::atomic_bool listenFinished{false};
+  std::atomic_bool listenResult{false};
+  std::thread listenThread([&]() {
+    listenResult.store(svr.listen_after_bind());
+    listenFinished.store(true);
+  });
+
+  const auto readyDeadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!svr.is_running() && !listenFinished.load() &&
+         std::chrono::steady_clock::now() < readyDeadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+  }
+
+  if (!svr.is_running()) {
+    svr.stop();
+    if (listenThread.joinable()) {
+      listenThread.join();
+    }
+    std::cerr << "[FATAL][HttpServer] Listener failed to start on " << cfg.host
+              << ":" << cfg.port << std::endl;
+    return 6;
+  }
+
   std::cout << "Listening: " << cfg.host << ":" << cfg.port << "\n";
   std::cout << "Health endpoint: GET /api/v1/health\n";
 
-  std::thread listenThread([&]() { svr.listen(cfg.host.c_str(), cfg.port); });
-
-  while (running.load()) {
+  while (running.load() && !listenFinished.load()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
+  const bool listenerStoppedUnexpectedly =
+      running.load() && listenFinished.load();
   svr.stop();
   if (listenThread.joinable()) {
     listenThread.join();
+  }
+
+  if (listenerStoppedUnexpectedly || !listenResult.load()) {
+    std::cerr << "[ERROR][HttpServer] Listener stopped unexpectedly on "
+              << cfg.host << ":" << cfg.port << std::endl;
+    return 6;
   }
 
   return 0;

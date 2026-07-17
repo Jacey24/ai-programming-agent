@@ -229,10 +229,12 @@ LlmClientFacade::resolveProvider(const std::string &requested) const {
 // ============================================================
 LlmResponse LlmClientFacade::chat(const std::string &prompt,
                                   const std::string &provider,
-                                  const std::string &model, int timeout) {
+                                  const std::string &model, int timeout,
+                                  std::shared_ptr<std::atomic<bool>> cancelFlag) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!initialized_) {
     LlmResponse resp;
+    resp.errorKind = LlmErrorKind::NotConfigured;
     resp.error = "LlmClientFacade not initialized";
     return resp;
   }
@@ -244,11 +246,13 @@ LlmResponse LlmClientFacade::chat(const std::string &prompt,
     MockLlmClient mock;
     LlmRequest req;
     req.prompt = prompt;
+    req.cancelFlag = std::move(cancelFlag);
     return mock.chat(req);
   }
 
   LlmRequest req;
   req.prompt = prompt;
+  req.cancelFlag = std::move(cancelFlag);
 
   // model 覆盖
   if (!model.empty()) {
@@ -272,7 +276,8 @@ LlmResponse LlmClientFacade::chat(const std::string &prompt,
 void LlmClientFacade::chatStream(const std::string &prompt,
                                  OnTokenCallback onToken,
                                  const std::string &provider,
-                                 const std::string &model, int timeout) {
+                                 const std::string &model, int timeout,
+                                 std::shared_ptr<std::atomic<bool>> cancelFlag) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!initialized_) {
     onToken("LlmClientFacade not initialized");
@@ -285,6 +290,7 @@ void LlmClientFacade::chatStream(const std::string &prompt,
     MockLlmClient mock;
     LlmRequest req;
     req.prompt = prompt;
+    req.cancelFlag = std::move(cancelFlag);
     auto resp = mock.chat(req);
     if (resp.success && !resp.content.empty()) {
       onToken(resp.content);
@@ -294,6 +300,7 @@ void LlmClientFacade::chatStream(const std::string &prompt,
 
   LlmRequest req;
   req.prompt = prompt;
+  req.cancelFlag = std::move(cancelFlag);
   if (!model.empty()) {
     req.model = model;
   } else {
@@ -305,6 +312,11 @@ void LlmClientFacade::chatStream(const std::string &prompt,
   req.timeoutSeconds = timeout > 0 ? timeout : 0;
 
   it->second->chatStream(req, onToken);
+}
+
+void LlmClientFacade::cancelRequests(
+    const std::shared_ptr<std::atomic<bool>> &cancelFlag) {
+  OpenAICompatibleClient::cancelRequests(cancelFlag);
 }
 
 // ============================================================

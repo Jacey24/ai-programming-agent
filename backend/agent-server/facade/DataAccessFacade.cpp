@@ -27,6 +27,7 @@ DataAccessFacade::~DataAccessFacade() {
     sqlite3_close(db_);
     db_ = nullptr;
   }
+  initialized_ = false;
 }
 
 // ============================================================
@@ -81,9 +82,8 @@ void DataAccessFacade::init(const std::string &dbPath) {
     throw std::runtime_error(error);
   }
 
-  configureSqliteDatabase(db_);
-
   try {
+    configureSqliteDatabase(db_);
     createAllTables();
   } catch (...) {
     sqlite3_close(db_);
@@ -110,29 +110,39 @@ void DataAccessFacade::createAllTables() {
   LogRepository(db_).initTable();
 
   // task_contexts 表（用于主循环中断恢复）
-  sqlite3_exec(db_,
-               "CREATE TABLE IF NOT EXISTS task_contexts ("
-               "  task_id TEXT PRIMARY KEY,"
-               "  context_json TEXT NOT NULL,"
-               "  updated_at TEXT NOT NULL"
-               ");",
-               nullptr, nullptr, nullptr);
+  const auto executeRequired = [this](const char *component,
+                                      const char *sql) {
+    char *error = nullptr;
+    if (sqlite3_exec(db_, sql, nullptr, nullptr, &error) != SQLITE_OK) {
+      const std::string message = error ? error : sqlite3_errmsg(db_);
+      sqlite3_free(error);
+      throw std::runtime_error(std::string(component) + ": " + message);
+    }
+  };
+
+  executeRequired("failed to initialize task_contexts",
+                  "CREATE TABLE IF NOT EXISTS task_contexts ("
+                  "  task_id TEXT PRIMARY KEY,"
+                  "  context_json TEXT NOT NULL,"
+                  "  updated_at TEXT NOT NULL"
+                  ");");
 
   // system_health 表（由 AppBootstrap 迁移至此，消除双连接）
-  sqlite3_exec(db_,
-               "CREATE TABLE IF NOT EXISTS system_health ("
-               "    id INTEGER PRIMARY KEY CHECK (id = 1),"
-               "    service TEXT NOT NULL,"
-               "    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
-               ");",
-               nullptr, nullptr, nullptr);
-  sqlite3_exec(db_,
-               "INSERT INTO system_health (id, service, checked_at) "
-               "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
-               "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;",
-               nullptr, nullptr, nullptr);
+  executeRequired("failed to initialize system_health",
+                  "CREATE TABLE IF NOT EXISTS system_health ("
+                  "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+                  "    service TEXT NOT NULL,"
+                  "    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                  ");");
+  executeRequired(
+      "failed to update system_health",
+      "INSERT INTO system_health (id, service, checked_at) "
+      "VALUES (1, 'codepilot-agent-server', CURRENT_TIMESTAMP) "
+      "ON CONFLICT(id) DO UPDATE SET checked_at = CURRENT_TIMESTAMP;");
 
-  // 版本化数据库迁移（幂等，自动处理 ALTER TABLE 等增量变更）
+  // Repositories create current tables first. The migration runner then
+  // reconciles historical steps against the actual schema and records only
+  // migrations whose complete target structure is satisfied.
   MigrationRunner(db_).migrate();
 }
 

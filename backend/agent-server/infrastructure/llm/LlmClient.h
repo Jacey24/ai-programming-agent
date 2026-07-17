@@ -1,20 +1,35 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace codepilot {
+
+enum class LlmErrorKind {
+  None,
+  NotConfigured,
+  Transport,
+  Http,
+  EmptyResponse,
+  InvalidResponse,
+  Cancelled,
+};
 
 struct LlmRequest {
   std::string prompt;
   std::string model;
   int timeoutSeconds{120};
+  std::shared_ptr<std::atomic<bool>> cancelFlag;
 };
 
 struct LlmResponse {
   bool success{false};
   std::string content;
   std::string error;
+  LlmErrorKind errorKind{LlmErrorKind::None};
+  int httpStatus{0};
   bool usedFallback{false};
 };
 
