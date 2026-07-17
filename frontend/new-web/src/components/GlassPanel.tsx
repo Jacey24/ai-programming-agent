@@ -237,7 +237,7 @@ export function GlassPanel({
           style={{ borderTop: '1px solid var(--glass-border-strong)' }}
         >
           {activeTab === 'chat' ? (
-            activeSession ? (
+            activeSession && activeSession.workspace_id === workspace?.id ? (
               <ChatView
                 workspaceId={workspace?.id || ''}
                 session={activeSession}

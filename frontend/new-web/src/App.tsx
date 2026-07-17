@@ -45,11 +45,17 @@ export default function App() {
     if (transitioning) return;
     setTransitioning(true);
     setActiveWorkspace(ws);
+    setActiveSession(current => current?.workspace_id === ws.id ? current : null);
     timerRef.current = window.setTimeout(() => {
       setPhase('normal');
       setTransitioning(false);
     }, PHASE_TRANSITION_MS);
   }, [transitioning]);
+
+  const selectSession = useCallback((session: SessionRecord) => {
+    if (!activeWorkspace || session.workspace_id !== activeWorkspace.id) return;
+    setActiveSession(session);
+  }, [activeWorkspace]);
 
   const exitWorkspace = useCallback(() => {
     if (transitioning) return;
@@ -155,7 +161,7 @@ export default function App() {
           onTabChange={setActiveTab}
           workspace={activeWorkspace}
           activeSession={activeSession}
-          onSelectSession={setActiveSession}
+          onSelectSession={selectSession}
           onBackToSessions={() => setActiveSession(null)}
           onExitWorkspace={exitWorkspace}
           scale={scale}

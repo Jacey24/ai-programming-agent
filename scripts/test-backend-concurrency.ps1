@@ -199,8 +199,8 @@ try {
     [CodePilotConcurrencyProcess]::StartStub($stubPort,1500);$stubStarted=$true
     $backendId=[CodePilotConcurrencyProcess]::StartBackend($runtimeExe,("--config `"$agentConfig`""),$runDirectory);$ownedBackendIds.Add($backendId);Assert-True(Wait-Port 8080 $true 20)'Backend did not open port 8080.'
     $health=Invoke-JsonRequest GET '/api/v1/health' $null;Assert-True($health.StatusCode-eq 200-and$health.Json.success)'Health failed.'
-    $session=Invoke-JsonRequest POST '/api/v1/sessions' '{"title":"Concurrency regression"}' $true;Assert-True ($session.StatusCode -eq 200 -and $session.Json.success) "Session fixture failed: $($session.Body)";$sessionId=[string]$session.Json.data.id
     $workspaceBody=[ordered]@{name='Concurrency regression';path=$workspaceDirectory.Replace('\','/')}|ConvertTo-Json -Compress;$workspace=Invoke-JsonRequest POST '/api/v1/workspaces' $workspaceBody $true;Assert-True ($workspace.StatusCode -eq 200 -and $workspace.Json.success) "Workspace fixture failed: $($workspace.Body)";$workspaceId=[string]$workspace.Json.data.id
+    $sessionBody=[ordered]@{title='Concurrency regression';workspace_id=$workspaceId}|ConvertTo-Json -Compress;$session=Invoke-JsonRequest POST '/api/v1/sessions' $sessionBody $true;Assert-True ($session.StatusCode -eq 200 -and $session.Json.success) "Session fixture failed: $($session.Body)";$sessionId=[string]$session.Json.data.id
     $llm=[ordered]@{default='localstub';providers=[ordered]@{localstub=[ordered]@{name='Local concurrency stub';base_url="http://127.0.0.1:$stubPort/v1";model='local-test';api_key_env='';timeout_seconds=10}}}|ConvertTo-Json -Depth 5 -Compress
     Assert-True((Invoke-JsonRequest PUT '/api/v1/config/llm' $llm $true).StatusCode-eq 200)'Could not configure local LLM.';Assert-True((Invoke-JsonRequest PUT '/api/v1/config/llm/local' '{"providers":{"localstub":{"api_key":"local-only-test-key"}}}' $true).StatusCode-eq 200)'Could not configure local key.'
 

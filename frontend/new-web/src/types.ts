@@ -30,8 +30,8 @@ export interface SessionRecord {
 export interface TaskRecord {
   id: string;
   global_id?: string;
-  session_id?: string;
-  workspace_id?: string;
+  session_id: string;
+  workspace_id: string;
   goal?: string;
   status?: string;
   current_expert?: string;

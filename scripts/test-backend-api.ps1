@@ -293,6 +293,7 @@ $configDirectory = Join-Path $runDirectory 'config'
 $workspaceDirectory = Join-Path $runDirectory 'workspace'
 $workspaceWithSpaces = Join-Path $workspaceDirectory 'API workspace with spaces'
 $secondWorkspace = Join-Path $workspaceDirectory 'Updated workspace'
+$workspaceBDirectory = Join-Path $workspaceDirectory 'Workspace B'
 $requestDirectory = Join-Path $runDirectory 'test-results\requests'
 $contractFile = Join-Path $runDirectory 'test-results\backend-api-contract.json'
 $backendProcessId = $null
@@ -308,7 +309,7 @@ try {
 
     foreach ($directory in @($binDirectory, $configDirectory, (Join-Path $runDirectory 'logs'),
             (Join-Path $runDirectory 'storage'), $workspaceDirectory, $workspaceWithSpaces,
-            $secondWorkspace, $requestDirectory)) {
+            $secondWorkspace, $workspaceBDirectory, $requestDirectory)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
@@ -357,27 +358,17 @@ try {
         Add-ContractResult $response @('error.code:string', 'error.message:string')
     }
 
-    $response = Invoke-JsonRequest -Name 'create disposable session' -Method POST -Path '/api/v1/sessions' -Body '{"title":"API regression session"}' -SendBody $true
-    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
-    Assert-JsonType $response.Json 'data.id' String; Assert-JsonType $response.Json 'data.title' String
-    $disposableSessionId = $response.Json.data.id; Add-ContractResult $response @('data.id:string', 'data.title:string')
+    $response = Invoke-JsonRequest -Name 'session missing workspace id' -Method POST -Path '/api/v1/sessions' -Body '{"title":"Missing workspace"}' -SendBody $true
+    Assert-StatusCode $response 400; Assert-ContentType $response; Assert-ErrorCode $response 'INVALID_REQUEST'
+    Add-ContractResult $response @('error.code:string', 'error.message:string')
 
-    $response = Invoke-JsonRequest -Name 'update session' -Method PUT -Path "/api/v1/sessions/$disposableSessionId" -Body '{"title":"Updated API session","alias":"api-test"}' -SendBody $true
-    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
-    Assert-JsonField $response.Json 'data.id' $disposableSessionId; Assert-JsonField $response.Json 'data.alias' 'api-test'
-    Add-ContractResult $response @('data.id:string', 'data.alias:string')
-
-    $response = Invoke-JsonRequest -Name 'list sessions' -Method GET -Path '/api/v1/sessions'
-    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
-    Assert-JsonType $response.Json 'data.items' Array; Add-ContractResult $response @('data.items:array')
+    $response = Invoke-JsonRequest -Name 'session unknown workspace' -Method POST -Path '/api/v1/sessions' -Body '{"title":"Unknown workspace","workspace_id":"workspace-does-not-exist"}' -SendBody $true
+    Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'WORKSPACE_NOT_FOUND'
+    Add-ContractResult $response @('error.code:string', 'error.message:string')
 
     $response = Invoke-JsonRequest -Name 'missing session' -Method GET -Path '/api/v1/sessions/session-does-not-exist'
     Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'SESSION_NOT_FOUND'
     Add-ContractResult $response @('error.code:string', 'error.message:string')
-
-    $response = Invoke-JsonRequest -Name 'delete session' -Method DELETE -Path "/api/v1/sessions/$disposableSessionId"
-    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
-    Assert-JsonField $response.Json 'data.id' $disposableSessionId; Add-ContractResult $response @('data.id:string')
 
     $workspacePathJson = $workspaceWithSpaces.Replace('\', '/') | ConvertTo-Json -Compress
     $workspaceBody = '{"name":"API workspace","path":' + $workspacePathJson + '}'
@@ -406,9 +397,72 @@ try {
     Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'WORKSPACE_NOT_FOUND'
     Add-ContractResult $response @('error.code:string', 'error.message:string')
 
-    $taskSessionResponse = Invoke-JsonRequest -Name 'create task session' -Method POST -Path '/api/v1/sessions' -Body '{"title":"Task API session"}' -SendBody $true
+    $workspaceBPathJson = $workspaceBDirectory.Replace('\', '/') | ConvertTo-Json -Compress
+    $response = Invoke-JsonRequest -Name 'create workspace B' -Method POST -Path '/api/v1/workspaces' -Body ('{"name":"Workspace B","path":' + $workspaceBPathJson + '}') -SendBody $true
+    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
+    $workspaceBId = $response.Json.data.id
+
+    $sessionABody = @{ title = 'Workspace A session'; workspace_id = $workspaceId } | ConvertTo-Json -Compress
+    $response = Invoke-JsonRequest -Name 'create workspace A session' -Method POST -Path '/api/v1/sessions' -Body $sessionABody -SendBody $true
+    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
+    Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
+    Assert-JsonType $response.Json 'data.alias' String; Assert-JsonType $response.Json 'data.created_at' String; Assert-JsonType $response.Json 'data.updated_at' String
+    $sessionAId = $response.Json.data.id
+    Add-ContractResult $response @('data.id:string', 'data.workspace_id:string', 'data.title:string', 'data.alias:string')
+
+    $sessionBBody = @{ title = 'Workspace B session'; workspace_id = $workspaceBId } | ConvertTo-Json -Compress
+    $response = Invoke-JsonRequest -Name 'create workspace B session' -Method POST -Path '/api/v1/sessions' -Body $sessionBBody -SendBody $true
+    Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
+    Assert-JsonField $response.Json 'data.workspace_id' $workspaceBId
+    $sessionBId = $response.Json.data.id
+
+    $response = Invoke-JsonRequest -Name 'get workspace A session' -Method GET -Path "/api/v1/sessions/$sessionAId"
+    Assert-StatusCode $response 200; Assert-Success $response $true; Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
+
+    $response = Invoke-JsonRequest -Name 'list all sessions' -Method GET -Path '/api/v1/sessions'
+    Assert-StatusCode $response 200; Assert-Success $response $true; Assert-JsonType $response.Json 'data.items' Array
+    foreach ($session in @($response.Json.data.items)) {
+        if ([string]::IsNullOrEmpty([string]$session.workspace_id)) { Fail-Assertion 'Every session response must include workspace_id.' }
+    }
+
+    $response = Invoke-JsonRequest -Name 'list workspace A sessions' -Method GET -Path "/api/v1/workspaces/$workspaceId/sessions"
+    Assert-StatusCode $response 200; Assert-Success $response $true; Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
+    $workspaceASessions = @($response.Json.data.items)
+    if (@($workspaceASessions | Where-Object { $_.id -eq $sessionAId }).Count -ne 1) { Fail-Assertion 'Workspace A session list did not include its own session.' }
+    if (@($workspaceASessions | Where-Object { $_.id -eq $sessionBId }).Count -ne 0) { Fail-Assertion 'Workspace A session list included a Workspace B session.' }
+    foreach ($session in $workspaceASessions) { if ($session.workspace_id -ne $workspaceId) { Fail-Assertion 'Workspace A session list contained a mismatched workspace_id.' } }
+
+    $response = Invoke-JsonRequest -Name 'list missing workspace sessions' -Method GET -Path '/api/v1/workspaces/workspace-does-not-exist/sessions'
+    Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'WORKSPACE_NOT_FOUND'
+
+    $response = Invoke-JsonRequest -Name 'update session' -Method PUT -Path "/api/v1/sessions/$sessionAId" -Body '{"title":"Updated API session","alias":"api-test"}' -SendBody $true
+    Assert-StatusCode $response 200; Assert-Success $response $true; Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
+
+    $tasksBefore = Invoke-JsonRequest -Name 'list tasks before rejected creates' -Method GET -Path '/api/v1/tasks?page=1&page_size=100'
+    Assert-StatusCode $tasksBefore 200; Assert-Success $tasksBefore $true
+    $taskCountBefore = @($tasksBefore.Json.data.items).Count
+    $sessionCountBefore = @((Invoke-JsonRequest -Name 'list sessions before rejected creates' -Method GET -Path '/api/v1/sessions').Json.data.items).Count
+
+    foreach ($invalidTask in @(
+            @{ Name = 'task unknown workspace'; Body = (@{ session_id = $sessionAId; workspace_id = 'workspace-does-not-exist'; input = 'must fail' } | ConvertTo-Json -Compress); Status = 404; Code = 'WORKSPACE_NOT_FOUND' },
+            @{ Name = 'task unknown session'; Body = (@{ session_id = 'session-does-not-exist'; workspace_id = $workspaceId; input = 'must fail' } | ConvertTo-Json -Compress); Status = 404; Code = 'SESSION_NOT_FOUND' },
+            @{ Name = 'task session workspace mismatch'; Body = (@{ session_id = $sessionAId; workspace_id = $workspaceBId; input = 'must fail' } | ConvertTo-Json -Compress); Status = 409; Code = 'SESSION_WORKSPACE_MISMATCH' })) {
+        $response = Invoke-JsonRequest -Name $invalidTask.Name -Method POST -Path '/api/v1/tasks' -Body $invalidTask.Body -SendBody $true
+        Assert-StatusCode $response $invalidTask.Status; Assert-ContentType $response; Assert-ErrorCode $response $invalidTask.Code
+    }
+
+    $tasksAfter = Invoke-JsonRequest -Name 'list tasks after rejected creates' -Method GET -Path '/api/v1/tasks?page=1&page_size=100'
+    Assert-StatusCode $tasksAfter 200; Assert-Success $tasksAfter $true
+    if (@($tasksAfter.Json.data.items).Count -ne $taskCountBefore) { Fail-Assertion 'Rejected task requests inserted task rows.' }
+    $sessionsAfter = Invoke-JsonRequest -Name 'list sessions after rejected creates' -Method GET -Path '/api/v1/sessions'
+    Assert-StatusCode $sessionsAfter 200; Assert-Success $sessionsAfter $true
+    if (@($sessionsAfter.Json.data.items).Count -ne $sessionCountBefore) { Fail-Assertion 'Rejected task requests auto-created a session.' }
+
+    $taskSessionBody = @{ title = 'Task API session'; workspace_id = $workspaceId } | ConvertTo-Json -Compress
+    $taskSessionResponse = Invoke-JsonRequest -Name 'create task session' -Method POST -Path '/api/v1/sessions' -Body $taskSessionBody -SendBody $true
     Assert-StatusCode $taskSessionResponse 200; Assert-ContentType $taskSessionResponse; Assert-Success $taskSessionResponse $true
-    $taskSessionId = $taskSessionResponse.Json.data.id; Add-ContractResult $taskSessionResponse @('data.id:string')
+    Assert-JsonField $taskSessionResponse.Json 'data.workspace_id' $workspaceId
+    $taskSessionId = $taskSessionResponse.Json.data.id; Add-ContractResult $taskSessionResponse @('data.id:string', 'data.workspace_id:string')
 
     $taskBody = [ordered]@{
         session_id = $taskSessionId; workspace_id = $workspaceId; input = 'API regression: do not call tools.'
@@ -417,6 +471,7 @@ try {
     $response = Invoke-JsonRequest -Name 'create task' -Method POST -Path '/api/v1/tasks' -Body $taskBody -SendBody $true
     Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true
     Assert-JsonType $response.Json 'data.id' String; Assert-JsonType $response.Json 'data.status' String
+    Assert-JsonField $response.Json 'data.session_id' $taskSessionId
     Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
     $taskId = $response.Json.data.id; Add-ContractResult $response @('data.id:string', 'data.workspace_id:string', 'data.status:string')
 

@@ -24,6 +24,7 @@ public:
 
   void initTable();
   SessionRecord createSession(const std::string &id, const std::string &title,
+                              const std::string &workspace_id,
                               const std::string &created_at,
                               const std::string &updated_at);
   std::optional<SessionRecord> findById(const std::string &session_id);

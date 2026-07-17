@@ -425,6 +425,17 @@ std::vector<MigrationRunner::Migration> MigrationRunner::builtinMigrations() {
            "ALTER TABLE sessions ADD COLUMN last_active_at TEXT DEFAULT '';",
            "sessions", "last_active_at", "TEXT", false, "''")}});
 
+  // V005: Workspace -> Session -> Task lookup indexes. Legacy rows with an
+  // empty workspace/session binding are intentionally preserved; all new
+  // writes are validated by the controllers before repository insertion.
+  migrations.push_back(
+      {5, "workspace_session_task_indexes", {sqlStep(
+       "CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON "
+       "sessions(workspace_id);"
+       "CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);"
+       "CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON "
+       "tasks(workspace_id);")}});
+
   return migrations;
 }
 
