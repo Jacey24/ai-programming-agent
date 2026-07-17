@@ -249,9 +249,10 @@ interface Props {
   loading: boolean;
   theme: 'dark' | 'light';
   embedded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
-export function ToolPanel({ tools: initialTools, loading: initialLoading, theme, embedded = false }: Props) {
+export function ToolPanel({ tools: initialTools, loading: initialLoading, theme, embedded = false, onExpandedChange }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [tools, setTools] = useState<ToolInfo[]>(initialTools);
   const [loading, setLoading] = useState(initialLoading);
@@ -261,7 +262,11 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme,
     setLoading(initialLoading);
   }, [initialTools, initialLoading]);
 
-  const handleToggle = useCallback(() => setExpanded(prev => !prev), []);
+  const handleToggle = useCallback(() => setExpanded(prev => {
+    const next = !prev;
+    onExpandedChange?.(next);
+    return next;
+  }), [onExpandedChange]);
 
   const handleConfigRefresh = useCallback(async () => {
     setLoading(true);
@@ -290,15 +295,19 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme,
   return (
     <GlassWindow
       zIndex={30}
-      position={embedded ? 'absolute' : 'fixed'}
+      position={embedded ? 'relative' : 'fixed'}
       style={{
         ...(embedded
-          ? { left: 0, bottom: 12, height: 'min(42%, 360px)', maxHeight: 'calc(100% - 24px)', flexDirection: 'row-reverse' as const }
+          ? {
+              width: expanded ? PANEL_WIDTH : TAB_WIDTH,
+              height: '100%',
+              flexDirection: 'row-reverse' as const,
+            }
           : { right: 0, top: 56, bottom: 16 }),
-        transform: expanded ? 'translateX(0)' : embedded
-          ? `translateX(-${PANEL_WIDTH - TAB_WIDTH}px)`
-          : `translateX(${PANEL_WIDTH - TAB_WIDTH}px)`,
-        transition: 'transform 0.15s ease-out',
+        transform: embedded ? 'none' : expanded ? 'translateX(0)'
+          :
+          `translateX(${PANEL_WIDTH - TAB_WIDTH}px)`,
+        transition: embedded ? 'width 0.15s ease-out' : 'transform 0.15s ease-out',
         display: 'flex',
       }}
     >

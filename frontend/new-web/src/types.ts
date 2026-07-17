@@ -232,6 +232,16 @@ export interface FileTreeNode {
   children?: FileTreeNode[];
 }
 
+export interface WorkspaceFileContent {
+  path: string;
+  name: string;
+  language: string;
+  content: string;
+  size: number;
+  readonly: boolean;
+  encoding: 'utf-8'|'utf-8-bom'|'system';
+}
+
 export type PillTone = 'ok'|'warning'|'danger'|'idle';
 
 export interface PillStatus {

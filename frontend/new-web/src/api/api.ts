@@ -1,4 +1,4 @@
-import type {ActiveTaskState, ConfigMergeView, ExpertGraph, ExpertRouteRule, ExpertSummary, Exponent, FileChange, FileTreeNode, HealthResponse, LlmProvider, MessageRecord, PermissionRecord, SessionRecord, TaskCreationRecord, TaskEventRecord, TaskLog, TaskRecord, ToolCallLog, ToolInfo, WorkspaceRecord,} from '../types';
+import type {ActiveTaskState, ConfigMergeView, ExpertGraph, ExpertRouteRule, ExpertSummary, Exponent, FileChange, FileTreeNode, HealthResponse, LlmProvider, MessageRecord, PermissionRecord, SessionRecord, TaskCreationRecord, TaskEventRecord, TaskLog, TaskRecord, ToolCallLog, ToolInfo, WorkspaceFileContent, WorkspaceRecord,} from '../types';
 
 import {requestJson} from './client';
 import {endpoints} from './endpoints';
@@ -35,9 +35,22 @@ export const getFileTree = (workspaceId: string, signal?: AbortSignal) =>
         endpoints.workspaceFiles(workspaceId), {signal});
 
 export const getFileContent = (workspaceId: string, filePath: string, signal?: AbortSignal) =>
-    requestJson<{content: string; path: string}>(
+    requestJson<WorkspaceFileContent>(
         fileContentRequestUrl(
             endpoints.workspaceFileContent(workspaceId), filePath), {signal});
+
+export const saveWorkspaceFile = (
+    workspaceId: string,
+    filePath: string,
+    content: string,
+    encoding: WorkspaceFileContent['encoding'],
+    signal?: AbortSignal,
+) => requestJson<WorkspaceFileContent>(
+    fileContentRequestUrl(endpoints.workspaceFileContent(workspaceId), filePath), {
+      method: 'PUT',
+      body: JSON.stringify({content, encoding}),
+      signal,
+    });
 
 export const revealWorkspaceFile = (workspaceId: string, filePath: string) =>
     requestJson<{revealed: boolean; path: string}>(

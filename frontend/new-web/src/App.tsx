@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { AppPhase, GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
 import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools } from './api/api';
 import { GlassPanel } from './components/GlassPanel';
@@ -8,6 +9,11 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ExpertGraphCanvas } from './components/ExpertGraphCanvas';
 import { AmbientBubbles } from './components/AmbientBubbles';
 import { initialWorkflowStoreState, workflowStoreReducer } from './workflowState';
+import {
+  DEFAULT_SESSION_WIDTH,
+  LAYOUT_STORAGE_KEY,
+  clampSessionWidth,
+} from './fileEditor';
 
 /* ################################################################
  * 工作区切换交错动画规范（STAGGER ANIMATION CONVENTION）
@@ -46,6 +52,17 @@ export default function App() {
   const [scale, setScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [positionResetVersion, setPositionResetVersion] = useState(0);
+  const [toolPanelExpanded, setToolPanelExpanded] = useState(false);
+  const fileDirtyRef = useRef(false);
+  const activeWorkspaceRef = useRef<WorkspaceRecord | null>(null);
+  const activeSessionRef = useRef<SessionRecord | null>(null);
+  activeWorkspaceRef.current = activeWorkspace;
+  activeSessionRef.current = activeSession;
+  const [resizingLayout, setResizingLayout] = useState(false);
+  const [sessionPaneWidth, setSessionPaneWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(LAYOUT_STORAGE_KEY));
+    return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_SESSION_WIDTH;
+  });
   const [initializing, setInitializing] = useState(true);
   const [workflowStore, dispatchWorkflow] = useReducer(workflowStoreReducer, initialWorkflowStoreState);
   // ★ 阶段过渡锁：过渡期间忽视重复点击
@@ -53,7 +70,49 @@ export default function App() {
   const timerRef = useRef<number>(0);
   const restoreRequest = useRef(0);
   const restoreAbort = useRef<AbortController | null>(null);
+  const workspaceMainRef = useRef<HTMLElement>(null);
+  const sessionPaneWidthRef = useRef(sessionPaneWidth);
+  sessionPaneWidthRef.current = sessionPaneWidth;
   useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  useEffect(() => {
+    const main = workspaceMainRef.current;
+    if (!main) return;
+    const applyBounds = () => {
+      const toolWidth = toolPanelExpanded ? 240 : 28;
+      setSessionPaneWidth(current => clampSessionWidth(current, main.clientWidth, toolWidth));
+    };
+    applyBounds();
+    const observer = new ResizeObserver(applyBounds);
+    observer.observe(main);
+    return () => observer.disconnect();
+  }, [phase, toolPanelExpanded]);
+
+  const handleFileDirtyChange = useCallback((dirty: boolean) => {
+    fileDirtyRef.current = dirty;
+  }, []);
+
+  const beginLayoutResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !workspaceMainRef.current) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sessionPaneWidthRef.current;
+    const main = workspaceMainRef.current;
+    const toolWidth = toolPanelExpanded ? 240 : 28;
+    setResizingLayout(true);
+    const handleMove = (moveEvent: PointerEvent) => {
+      const desired = startWidth - (moveEvent.clientX - startX);
+      setSessionPaneWidth(clampSessionWidth(desired, main.clientWidth, toolWidth));
+    };
+    const handleUp = () => {
+      setResizingLayout(false);
+      localStorage.setItem(LAYOUT_STORAGE_KEY, String(Math.round(sessionPaneWidthRef.current)));
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp, { once: true });
+  }, [toolPanelExpanded]);
 
   useEffect(() => {
     dispatchWorkflow({
@@ -135,7 +194,22 @@ export default function App() {
 
   useEffect(() => {
     void restoreFromLocation();
-    const onPopState = () => { void restoreFromLocation(); };
+    const onPopState = () => {
+      if (fileDirtyRef.current && !window.confirm(
+        '当前文件有未保存修改。确定放弃修改并切换 Workspace 吗？\n选择“取消”后可返回文件页保存。',
+      )) {
+        const currentWorkspace = activeWorkspaceRef.current;
+        const currentSession = activeSessionRef.current;
+        window.history.pushState(
+          null,
+          '',
+          currentWorkspace ? workspacePath(currentWorkspace.id, currentSession?.id) : '/',
+        );
+        return;
+      }
+      fileDirtyRef.current = false;
+      void restoreFromLocation();
+    };
     window.addEventListener('popstate', onPopState);
     return () => {
       window.removeEventListener('popstate', onPopState);
@@ -265,8 +339,16 @@ export default function App() {
 
       {/* 主区域 — z-index: 10 */}
       <main
-        className="workspace-main flex-1 min-h-0 overflow-hidden stagger-item"
+        ref={workspaceMainRef}
+        className={`workspace-main flex-1 min-h-0 overflow-hidden stagger-item ${resizingLayout ? 'is-resizing' : ''}`}
       >
+        <aside className="workspace-tool-pane" aria-label="Tools">
+          <ToolPanelWrapper
+            theme={theme}
+            embedded
+            onExpandedChange={setToolPanelExpanded}
+          />
+        </aside>
         <section className="workspace-graph-pane" aria-label="Expert workflow">
           <ExpertGraphCanvas
             theme={theme}
@@ -274,9 +356,19 @@ export default function App() {
             positionResetVersion={positionResetVersion}
             workflowState={workflowState}
           />
-          <ToolPanelWrapper theme={theme} embedded />
         </section>
-        <section className="workspace-session-pane" aria-label="Current session">
+        <div
+          className="workspace-pane-resizer"
+          role="separator"
+          aria-label="调整流程图和右侧窗口宽度"
+          aria-orientation="vertical"
+          onPointerDown={beginLayoutResize}
+        />
+        <section
+          className="workspace-session-pane"
+          aria-label="Current session"
+          style={{ width: sessionPaneWidth }}
+        >
           <GlassPanel
             theme={theme}
             activeTab={activeTab}
@@ -288,6 +380,7 @@ export default function App() {
             onExitWorkspace={exitWorkspace}
             onWorkflowTaskSelected={handleWorkflowTaskSelected}
             onWorkflowEvents={handleWorkflowEvents}
+            onFileDirtyChange={handleFileDirtyChange}
             scale={scale}
           />
         </section>
@@ -310,7 +403,15 @@ export default function App() {
 // ====================================================================
 // 工具面板包装器（加载工具列表）
 // ====================================================================
-function ToolPanelWrapper({ theme, embedded = false }: { theme: 'dark' | 'light'; embedded?: boolean }) {
+function ToolPanelWrapper({
+  theme,
+  embedded = false,
+  onExpandedChange,
+}: {
+  theme: 'dark'|'light';
+  embedded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+}) {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -335,7 +436,13 @@ function ToolPanelWrapper({ theme, embedded = false }: { theme: 'dark' | 'light'
     load();
   }, []);
 
-  return <ToolPanel tools={tools} loading={loading} theme={theme} embedded={embedded} />;
+  return <ToolPanel
+    tools={tools}
+    loading={loading}
+    theme={theme}
+    embedded={embedded}
+    onExpandedChange={onExpandedChange}
+  />;
 }
 
 // ====================================================================

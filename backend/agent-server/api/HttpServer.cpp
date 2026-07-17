@@ -390,6 +390,9 @@ int HttpServer::run(const std::atomic_bool &running) {
         WorkspaceFileController, getTree, "GET " + req.target);
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/content)",
         WorkspaceFileController, getFileContent, "GET " + req.target);
+  ROUTE(Put, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/content)",
+        WorkspaceFileController, saveFileContent,
+        "PUT " + req.target + " \r\n\r\n" + req.body);
   ROUTE(Post, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/reveal)",
         WorkspaceFileController, revealInFileManager, "POST " + req.target);
   ROUTE(Put, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,

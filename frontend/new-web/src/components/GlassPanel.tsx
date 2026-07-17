@@ -1,7 +1,8 @@
+import { useRef } from 'react';
 import type { GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, WorkspaceRecord } from '../types';
 import { SessionList } from './SessionList';
 import { ChatView } from './ChatView';
-import { FileTree } from './FileTree';
+import { WorkspaceFiles, type WorkspaceFilesHandle } from './WorkspaceFiles';
 import { GlassWindow } from './GlassWindow';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   onExitWorkspace: () => void;
   onWorkflowTaskSelected: (task: TaskRecord | null) => void;
   onWorkflowEvents: (task: TaskRecord, events: TaskEventRecord[]) => void;
+  onFileDirtyChange?: (dirty: boolean) => void;
   scale: number;
 }
 
@@ -29,8 +31,10 @@ export function GlassPanel({
   onExitWorkspace,
   onWorkflowTaskSelected,
   onWorkflowEvents,
+  onFileDirtyChange,
   scale,
 }: Props) {
+  const workspaceFilesRef = useRef<WorkspaceFilesHandle>(null);
   // 统一玻璃面板样式参数（与 glass-panel CSS 类保持一致）
   const glassStyle = {
     background: 'color-mix(in srgb, var(--bg) 45%, transparent)',
@@ -73,7 +77,10 @@ export function GlassPanel({
         >
           {/* ← back button */}
           <button
-            onClick={onExitWorkspace}
+            onClick={() => {
+              if (workspaceFilesRef.current) workspaceFilesRef.current.requestExitWorkspace();
+              else onExitWorkspace();
+            }}
             title="切换工作区"
             style={{
               width: 34 / scale,
@@ -165,12 +172,14 @@ export function GlassPanel({
 
         {/* Content area */}
         <div
-          key={activeTab}
-          className="flex-1 min-h-0 flex flex-col overflow-hidden anim-fade-in"
+          className="flex-1 min-h-0 flex flex-col overflow-hidden"
           style={{ borderTop: '1px solid var(--glass-border-strong)' }}
         >
-          {activeTab === 'chat' ? (
-            activeSession && activeSession.workspace_id === workspace?.id ? (
+          <div
+            className="min-h-0 flex-1 flex-col overflow-hidden anim-fade-in"
+            style={{ display: activeTab === 'chat' ? 'flex' : 'none' }}
+          >
+            {activeSession && activeSession.workspace_id === workspace?.id ? (
               <ChatView
                 workspaceId={workspace?.id || ''}
                 session={activeSession}
@@ -183,14 +192,20 @@ export function GlassPanel({
                 workspaceId={workspace?.id || ''}
                 onSelect={onSelectSession}
               />
-            )
-          ) : (
-            <FileTree
+            )}
+          </div>
+          <div
+            className="min-h-0 flex-1 flex-col overflow-hidden anim-fade-in"
+            style={{ display: activeTab === 'files' ? 'flex' : 'none' }}
+          >
+            <WorkspaceFiles
+              ref={workspaceFilesRef}
               workspace={workspace}
               onExitWorkspace={onExitWorkspace}
+              onDirtyChange={onFileDirtyChange}
               theme={theme}
             />
-          )}
+          </div>
         </div>
       </div>
     </GlassWindow>
