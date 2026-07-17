@@ -338,7 +338,8 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
       } else if (type === 'task_completed') {
         items.push({ kind: 'status', data: { title: '✓ 任务完成', status: 'success', id }, time });
       } else if (type === 'task_failed' || type === 'task_cancelled') {
-        items.push({ kind: 'status', data: { title: evt.content || type, status: 'failed', id }, time });
+        const interrupted = type === 'task_failed' && strMeta(meta, 'status') === 'interrupted';
+        items.push({ kind: 'status', data: { title: interrupted ? '任务中断' : (evt.content || type), detail: interrupted ? evt.content : undefined, status: 'failed', id }, time });
       } else if (type === 'stream_end') {
         items.push({ kind: 'status', data: { title: 'Stream ended', detail: evt.content || '', status: 'success', id }, time });
       }

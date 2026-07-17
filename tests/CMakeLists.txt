@@ -21,6 +21,17 @@ set_tests_properties(temp-runtime-test PROPERTIES
     WORKING_DIRECTORY "$<TARGET_FILE_DIR:temp-runtime-test>"
 )
 
+add_executable(task-recovery-test
+    unit/test_task_recovery.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/TaskRecovery.cpp
+)
+target_include_directories(task-recovery-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/backend/agent-server
+)
+target_link_libraries(task-recovery-test PRIVATE sqlite3)
+add_test(NAME task-recovery-test COMMAND task-recovery-test)
+set_tests_properties(task-recovery-test PROPERTIES LABELS "unit;storage")
+
 if(WIN32)
     add_executable(sqlite-integrity-check
         integration/sqlite_integrity_check.cpp
@@ -76,6 +87,7 @@ if(WIN32)
             -ExecutionPolicy Bypass
             -File "${CMAKE_SOURCE_DIR}/scripts/test-backend-sse.ps1"
             -BackendExe "$<TARGET_FILE:codepilot-agent-server>"
+            -SqliteTestExe "$<TARGET_FILE:sqlite-migration-test-helper>"
             -BuildType "$<CONFIG>"
             -SourceConfigDirectory "${CMAKE_SOURCE_DIR}/config"
     )

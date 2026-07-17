@@ -193,7 +193,13 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
   }
 
   try {
-    codepilot::DataAccessFacade::getInstance().init(database_path);
+    auto &dataAccess = codepilot::DataAccessFacade::getInstance();
+    dataAccess.init(database_path);
+    const auto recovery = dataAccess.recoverInterruptedTasks();
+    LOG_INFO("Crash recovery complete: interrupted_tasks={}, "
+             "expired_permissions={}, inserted_terminal_events={}",
+             recovery.tasksInterrupted, recovery.permissionsExpired,
+             recovery.terminalEventsInserted);
   } catch (const std::exception &error) {
     std::cerr << "[FATAL][SQLite] Unable to initialize database '"
               << database_path << "': " << error.what() << std::endl;

@@ -1,4 +1,4 @@
-export type TaskStatus = "created" | "running" | "completed" | "failed" | "cancelled" | string;
+export type TaskStatus = "created" | "running" | "completed" | "failed" | "cancelled" | "interrupted" | string;
 
 export interface ApiErrorBody {
   code?: string;

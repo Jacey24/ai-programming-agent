@@ -54,7 +54,7 @@ export default function App() {
 
   useEffect(() => {
     const task = agent.activeTask;
-    if (!task?.id || !["completed", "failed", "cancelled"].includes(task.status || "")) {
+    if (!task?.id || !["completed", "failed", "cancelled", "interrupted"].includes(task.status || "")) {
       return;
     }
     if (lastTerminalTask.current === task.id) {
@@ -93,7 +93,7 @@ export default function App() {
         label: "Task",
         value: taskStatus,
         detail: agent.activeTask?.id || agent.chatFallback?.prompt || "no active task",
-        tone: taskStatus === "failed" || taskStatus === "cancelled" ? "danger" : taskStatus === "completed" ? "ok" : taskStatus === "running" ? "warning" : "idle",
+        tone: taskStatus === "failed" || taskStatus === "cancelled" || taskStatus === "interrupted" ? "danger" : taskStatus === "completed" ? "ok" : taskStatus === "running" ? "warning" : "idle",
       },
     ];
   }, [agent.activeTask, agent.chatFallback, agent.health, agent.streamError, agent.streamStatus]);

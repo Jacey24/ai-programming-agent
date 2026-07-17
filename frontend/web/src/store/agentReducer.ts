@@ -107,7 +107,7 @@ export const initialAgentState: AgentState = {
   error: "",
 };
 
-export const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled"]);
+export const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);
 const TERMINAL_EVENT_STATUS: Record<string, string> = {
   task_completed: "completed",
   task_failed: "failed",
@@ -449,7 +449,13 @@ function eventToTask(task: TaskRecord | null, event: TaskEventRecord): TaskRecor
   }
 
   const type = event.type || "";
-  const nextStatus = TERMINAL_EVENT_STATUS[type];
+  const metadataStatus =
+    event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+      ? (event.metadata as Record<string, unknown>).status
+      : undefined;
+  const nextStatus = metadataStatus === "interrupted"
+    ? "interrupted"
+    : TERMINAL_EVENT_STATUS[type];
   if (!nextStatus) {
     return task;
   }

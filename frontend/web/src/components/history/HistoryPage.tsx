@@ -157,7 +157,7 @@ function formatDuration(start?: string, end?: string) {
 
 function statusClass(status?: string) {
   if (status === "completed") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
-  if (status === "failed" || status === "cancelled") return "border-rose-500/25 bg-rose-500/10 text-rose-300";
+  if (status === "failed" || status === "cancelled" || status === "interrupted") return "border-rose-500/25 bg-rose-500/10 text-rose-300";
   if (status === "running") return "border-amber-500/25 bg-amber-500/10 text-amber-300";
   return "border-slate-700 bg-slate-900/70 text-slate-400";
 }

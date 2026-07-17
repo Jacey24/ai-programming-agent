@@ -100,7 +100,11 @@ void EventPrinter::onEvent(const json &event) {
       std::cerr << "[EVENT TRACE] status: printed task_completed" << std::endl;
     } else if (type == "task_failed") {
       std::cout << std::endl;
-      printColored("[status]", "任务失败", colorRed());
+      printColored("[status]",
+                   metadata.value("status", "") == "interrupted"
+                       ? "任务中断"
+                       : "任务失败",
+                   colorRed());
       std::cerr << "[EVENT TRACE] status: printed task_failed" << std::endl;
     } else if (type == "task_cancelled") {
       std::cout << std::endl;

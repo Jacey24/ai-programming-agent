@@ -65,6 +65,11 @@ bool SSEGateway::isTerminal(EventType type) {
          type == EventType::TaskCancelled;
 }
 
+bool isTerminalTaskStatus(const std::string &status) {
+  return status == "completed" || status == "failed" ||
+         status == "cancelled" || status == "interrupted";
+}
+
 std::string SSEGateway::channelToString(Channel ch) {
   switch (ch) {
   case Channel::Dialog:
@@ -515,6 +520,17 @@ void SSEGateway::streamTaskEventsImpl(
           connection->signal->cv.notify_all();
         }
       }
+
+      // A recovered task can be terminal even when no new terminal event was
+      // required. End the stream from the persisted status without emitting
+      // or persisting another event.
+      if (!connection->done.load()) {
+        const auto task = dataFacade_->getTask(taskId);
+        if (task && task->status == "interrupted") {
+          connection->done.store(true);
+          connection->signal->cv.notify_all();
+        }
+      }
     }
 
     // 心跳保活 + 结束检测
@@ -537,9 +553,7 @@ void SSEGateway::streamTaskEventsImpl(
       }
       if (++ticks % 3 == 0 && dataFacade_ && dataFacade_->isInitialized()) {
         auto task = dataFacade_->getTask(taskId);
-        if (task &&
-            (task->status == "completed" || task->status == "failed" ||
-             task->status == "cancelled")) {
+        if (task && isTerminalTaskStatus(task->status)) {
           connection->done.store(true);
           connection->signal->cv.notify_all();
         }

@@ -583,7 +583,9 @@ std::string TaskController::cancelTask(const std::string &request) {
     }
 
     const bool cancelled =
-        AgentOrchestrator::getInstance().cancelTask(task_id);
+        task->status == "interrupted"
+            ? false
+            : AgentOrchestrator::getInstance().cancelTask(task_id);
     const auto currentTask = facade.getTask(task_id);
     if (!currentTask) {
       return http_response(

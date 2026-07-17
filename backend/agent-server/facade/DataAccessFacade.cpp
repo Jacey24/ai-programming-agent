@@ -1,5 +1,6 @@
 #include "facade/DataAccessFacade.h"
 #include "infrastructure/storage/SqliteConnection.h"
+#include "infrastructure/storage/TaskRecovery.h"
 #include "infrastructure/storage/migrations/MigrationRunner.h"
 
 #include <atomic>
@@ -92,6 +93,14 @@ void DataAccessFacade::init(const std::string &dbPath) {
   }
 
   initialized_ = true;
+}
+
+TaskRecoveryReport DataAccessFacade::recoverInterruptedTasks() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!initialized_ || !db_) {
+    throw std::runtime_error("DataAccessFacade is not initialized");
+  }
+  return codepilot::recoverInterruptedTasks(db_);
 }
 
 // ============================================================

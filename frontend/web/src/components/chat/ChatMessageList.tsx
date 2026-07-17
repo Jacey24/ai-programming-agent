@@ -66,7 +66,7 @@ export function ChatMessageList({ state, onOpenFile, onResolvePermission }: Chat
           onOpenFile={onOpenFile}
           onResolvePermission={onResolvePermission}
           hasLaterEvent={index < events.length - 1}
-          taskSettled={["completed", "failed", "cancelled"].includes(state.activeTask?.status || "")}
+          taskSettled={["completed", "failed", "cancelled", "interrupted"].includes(state.activeTask?.status || "")}
         />
       ))}
 
