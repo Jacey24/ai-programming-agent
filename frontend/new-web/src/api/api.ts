@@ -1,4 +1,4 @@
-import type {ActiveTaskState, ConfigMergeView, ExpertGraph, ExpertRouteRule, ExpertSummary, Exponent, FileChange, FileTreeNode, HealthResponse, LlmProvider, PermissionRecord, SessionRecord, TaskEventRecord, TaskLog, TaskRecord, ToolCallLog, ToolInfo, WorkspaceRecord,} from '../types';
+import type {ActiveTaskState, ConfigMergeView, ExpertGraph, ExpertRouteRule, ExpertSummary, Exponent, FileChange, FileTreeNode, HealthResponse, LlmProvider, MessageRecord, PermissionRecord, SessionRecord, TaskCreationRecord, TaskEventRecord, TaskLog, TaskRecord, ToolCallLog, ToolInfo, WorkspaceRecord,} from '../types';
 
 import {requestJson} from './client';
 import {endpoints} from './endpoints';
@@ -10,8 +10,8 @@ export const getHealth = () => requestJson<HealthResponse>(endpoints.health);
 export const listWorkspaces = () =>
     requestJson<{items: WorkspaceRecord[]}>(endpoints.workspaces);
 
-export const getWorkspace = (id: string) =>
-    requestJson<WorkspaceRecord>(endpoints.workspace(id));
+export const getWorkspace = (id: string, signal?: AbortSignal) =>
+    requestJson<WorkspaceRecord>(endpoints.workspace(id), {signal});
 
 export const createWorkspace = (name: string, path: string) =>
     requestJson<WorkspaceRecord>(endpoints.workspaces, {
@@ -41,12 +41,17 @@ export const getFileContent = (workspaceId: string, filePath: string) =>
 export const listSessions = () =>
     requestJson<{items: SessionRecord[]}>(endpoints.sessions);
 
-export const listSessionsByWorkspace = (workspaceId: string) =>
+export const listSessionsByWorkspace =
+    (workspaceId: string, signal?: AbortSignal) =>
     requestJson<{items: SessionRecord[]}>(
-        endpoints.workspaceSessions(workspaceId));
+        endpoints.workspaceSessions(workspaceId), {signal});
 
-export const getSession = (id: string) =>
-    requestJson<SessionRecord>(endpoints.session(id));
+export const getSession = (id: string, signal?: AbortSignal) =>
+    requestJson<SessionRecord>(endpoints.session(id), {signal});
+
+export const listMessages = (sessionId: string, signal?: AbortSignal) =>
+    requestJson<{session_id: string; items: MessageRecord[]}>(
+        endpoints.sessionMessages(sessionId), {signal});
 
 export const createSession = (title: string, workspaceId: string) =>
     requestJson<SessionRecord>(endpoints.sessions, {
@@ -60,7 +65,7 @@ export const deleteSession = (id: string) =>
 // ==================== Tasks ====================
 export const createTask =
     (sessionId: string, workspaceId: string, input: string) =>
-        requestJson<TaskRecord>(endpoints.tasks, {
+        requestJson<TaskCreationRecord>(endpoints.tasks, {
           method: 'POST',
           body: JSON.stringify(
               {session_id: sessionId, workspace_id: workspaceId, input}),
@@ -83,15 +88,17 @@ export const cancelTask = (id: string) =>
 export const deleteTask = (id: string) =>
     requestJson<{deleted: boolean}>(endpoints.task(id), {method: 'DELETE'});
 
-export const listTasks = (sessionId: string) =>
+export const listTasks = (sessionId: string, signal?: AbortSignal) =>
     requestJson<{items: TaskRecord[]}>(
-        `${endpoints.tasks}?session_id=${encodeURIComponent(sessionId)}`);
+        endpoints.sessionTasks(sessionId), {signal});
 
-export const listTaskEvents = (taskId: string) =>
-    requestJson<{items: TaskEventRecord[]}>(endpoints.taskEventHistory(taskId));
+export const listTaskEvents = (taskId: string, signal?: AbortSignal) =>
+    requestJson<{items: TaskEventRecord[]}>(
+        endpoints.taskEventHistory(taskId), {signal});
 
-export const getTaskToolCalls = (taskId: string) =>
-    requestJson<{items: ToolCallLog[]}>(endpoints.taskToolCalls(taskId));
+export const getTaskToolCalls = (taskId: string, signal?: AbortSignal) =>
+    requestJson<{items: ToolCallLog[]}>(
+        endpoints.taskToolCalls(taskId), {signal});
 
 export const getTaskLogs = (taskId: string) =>
     requestJson<{items: TaskLog[]}>(endpoints.taskLogs(taskId));

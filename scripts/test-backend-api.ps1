@@ -435,6 +435,9 @@ try {
     $response = Invoke-JsonRequest -Name 'list missing workspace sessions' -Method GET -Path '/api/v1/workspaces/workspace-does-not-exist/sessions'
     Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'WORKSPACE_NOT_FOUND'
 
+    $response = Invoke-JsonRequest -Name 'list missing session messages' -Method GET -Path '/api/v1/sessions/session-does-not-exist/messages'
+    Assert-StatusCode $response 404; Assert-ContentType $response; Assert-ErrorCode $response 'SESSION_NOT_FOUND'
+
     $response = Invoke-JsonRequest -Name 'update session' -Method PUT -Path "/api/v1/sessions/$sessionAId" -Body '{"title":"Updated API session","alias":"api-test"}' -SendBody $true
     Assert-StatusCode $response 200; Assert-Success $response $true; Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
 
@@ -473,7 +476,17 @@ try {
     Assert-JsonType $response.Json 'data.id' String; Assert-JsonType $response.Json 'data.status' String
     Assert-JsonField $response.Json 'data.session_id' $taskSessionId
     Assert-JsonField $response.Json 'data.workspace_id' $workspaceId
+    Assert-JsonField $response.Json 'data.user_message.session_id' $taskSessionId
+    Assert-JsonField $response.Json 'data.user_message.role' 'user'
+    Assert-JsonField $response.Json 'data.user_message.message_type' 'normal'
     $taskId = $response.Json.data.id; Add-ContractResult $response @('data.id:string', 'data.workspace_id:string', 'data.status:string')
+    $userMessageId = [string]$response.Json.data.user_message.id
+
+    $messages = Invoke-JsonRequest -Name 'list session messages' -Method GET -Path "/api/v1/sessions/$taskSessionId/messages"
+    Assert-StatusCode $messages 200; Assert-ContentType $messages; Assert-Success $messages $true
+    Assert-JsonField $messages.Json 'data.session_id' $taskSessionId
+    $createdUserMessages = @($messages.Json.data.items | Where-Object { $_.id -eq $userMessageId -and $_.task_id -eq $taskId })
+    if ($createdUserMessages.Count -ne 1) { Fail-Assertion 'Task user Message was missing or duplicated.' }
 
     $response = Invoke-JsonRequest -Name 'get task' -Method GET -Path "/api/v1/tasks/$taskId"
     Assert-StatusCode $response 200; Assert-ContentType $response; Assert-Success $response $true

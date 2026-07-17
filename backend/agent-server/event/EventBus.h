@@ -2,6 +2,7 @@
 
 #include "EventTypes.h"
 #include <functional>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,7 @@ struct EventData {
   std::string content;
   json metadata;         // 支持任意 JSON 结构
   std::string createdAt; // ISO 8601 格式
+  std::int64_t sequenceNo{0}; // 仅持久化事件为正数
 
   std::string typeToString() const;
   std::string serialize() const;

@@ -228,6 +228,7 @@ std::string TaskController::createTask(const std::string &request) {
 
   std::string effectiveGlobalId;
   TaskRecord task;
+  MessageRecord userMessage;
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
       return http_response(
@@ -276,8 +277,10 @@ std::string TaskController::createTask(const std::string &request) {
             "500 Internal Server Error");
       }
     }
-    task =
-        facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
+    auto creation = facade.createTaskWithUserMessage(
+        session_id, effectiveGlobalId, workspace_id, input);
+    task = creation.task;
+    userMessage = creation.user_message;
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
     const auto refreshed = facade.getTask(task.id);
     if (refreshed) {
@@ -332,7 +335,14 @@ std::string TaskController::createTask(const std::string &request) {
   }
   response_body << R"(,"created_at":")" << json_escape(task.created_at)
                 << R"(","updated_at":")" << json_escape(task.updated_at)
-                << R"("}})";
+                << R"(","user_message":{"id":")"
+                << json_escape(userMessage.id) << R"(","session_id":")"
+                << json_escape(userMessage.session_id) << R"(","task_id":")"
+                << json_escape(task.id)
+                << R"(","role":"user","message_type":"normal","content":")"
+                << json_escape(userMessage.content) << R"(","sequence_no":)"
+                << userMessage.sequence_no << R"(,"source_event_id":null,"created_at":")"
+                << json_escape(userMessage.created_at) << R"("}}})";
   return http_response(response_body.str());
 }
 
@@ -367,6 +377,7 @@ std::string TaskController::continueTask(const std::string &request) {
 
   std::string effectiveGlobalId;
   TaskRecord task;
+  MessageRecord userMessage;
   try {
     if (!DataAccessFacade::getInstance().isInitialized()) {
       return http_response(
@@ -432,8 +443,10 @@ std::string TaskController::continueTask(const std::string &request) {
             "500 Internal Server Error");
       }
     }
-    task =
-        facade.createTask(session_id, effectiveGlobalId, workspace_id, input);
+    auto creation = facade.createTaskWithUserMessage(
+        session_id, effectiveGlobalId, workspace_id, input);
+    task = creation.task;
+    userMessage = creation.user_message;
     facade.updateTaskStatus(task.id, "running", task.plan, task.current_step);
 
     EventData created = EventData::Create(task.id, EventType::TaskCreated,
@@ -476,7 +489,14 @@ std::string TaskController::continueTask(const std::string &request) {
                 << R"(","global_id":")" << json_escape(task.global_id)
                 << R"(","workspace_id":")" << json_escape(workspace_id)
                 << R"(","goal":")" << json_escape(input)
-                << R"(","status":"running"}})";
+                << R"(","status":"running","user_message":{"id":")"
+                << json_escape(userMessage.id) << R"(","session_id":")"
+                << json_escape(userMessage.session_id) << R"(","task_id":")"
+                << json_escape(task.id)
+                << R"(","role":"user","message_type":"normal","content":")"
+                << json_escape(userMessage.content) << R"(","sequence_no":)"
+                << userMessage.sequence_no << R"(,"source_event_id":null,"created_at":")"
+                << json_escape(userMessage.created_at) << R"("}}})";
   return http_response(response_body.str());
 }
 
@@ -767,7 +787,8 @@ std::string TaskController::listEventHistory(const std::string &request) {
         metadata = json::object();
       }
       body << metadata.dump() << R"(,"created_at":")"
-           << json_escape(event.created_at) << R"("})";
+           << json_escape(event.created_at) << R"(","sequence_no":)"
+           << event.sequence_no << "}";
     }
     body << "]}}";
     return http_response(body.str());

@@ -199,6 +199,23 @@ int HttpServer::run(const std::atomic_bool &running) {
           "application/json");
       return;
     }
+    const auto task = DataAccessFacade::getInstance().getTask(taskId);
+    if (!task) {
+      res.status = 404;
+      res.set_content(
+          R"({"success":false,"error":{"code":"TASK_NOT_FOUND","message":"task not found"}})",
+          "application/json");
+      return;
+    }
+    if (req.has_param("session_id") &&
+        req.get_param_value("session_id") != task->session_id) {
+      res.status = 409;
+      res.set_content(
+          R"({"success":false,"error":{"code":"TASK_SESSION_MISMATCH","message":"task does not belong to session"}})",
+          "application/json");
+      return;
+    }
+    const std::string lastEventId = req.get_header_value("Last-Event-ID");
     struct SseContext {
       std::mutex mtx;
       std::condition_variable cv;
@@ -267,9 +284,10 @@ int HttpServer::run(const std::atomic_bool &running) {
       ctx->cv.notify_one();
       return true;
     };
-    std::thread([sendFn, taskId, ctx]() {
+    std::thread([sendFn, taskId, lastEventId, ctx]() {
       SSEGateway::getInstance().streamTaskEvents(sendFn, taskId,
-                                                 ctx->connectionSignal);
+                                                 ctx->connectionSignal,
+                                                 lastEventId);
 
       {
         std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -344,6 +362,11 @@ int HttpServer::run(const std::atomic_bool &running) {
         "POST /api/v1/sessions \r\n\r\n" + req.body);
   ROUTE(Get, "/api/v1/sessions", SessionController, listSessions,
         "GET /api/v1/sessions?" + build_query_string(req.params));
+  ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+)/messages)",
+        SessionController, listMessages,
+        "GET /api/v1/sessions/" + req.matches[1].str() + "/messages");
+  ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+)/tasks)", TaskController,
+        listTasks, "GET /api/v1/tasks?session_id=" + req.matches[1].str());
   ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+))", SessionController,
         getSession, "GET /api/v1/sessions/" + req.matches[1].str());
   ROUTE(Put, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+))", SessionController,

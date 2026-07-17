@@ -69,13 +69,13 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Pr
           <DebugResetPositions />
 
           {/* ── LLM ── */}
-          <LlmSection theme={theme} />
+          <LlmSection />
 
           {/* ── LLM Providers ── */}
-          <LlmProvidersSection theme={theme} />
+          <LlmProvidersSection />
 
           {/* ── API Key ── */}
-          <ApiKeySection theme={theme} />
+          <ApiKeySection />
 
           {/* ── Workspace ── */}
           <ConfigFieldSection
@@ -111,7 +111,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 // ---- LLM ----
-function LlmSection({ theme }: { theme: 'dark' | 'light' }) {
+function LlmSection() {
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -172,7 +172,7 @@ function LlmSection({ theme }: { theme: 'dark' | 'light' }) {
 }
 
 // ---- LLM Providers ----
-function LlmProvidersSection({ theme }: { theme: 'dark' | 'light' }) {
+function LlmProvidersSection() {
   const [providers, setProviders] = useState<LlmProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -244,7 +244,7 @@ function LlmProvidersSection({ theme }: { theme: 'dark' | 'light' }) {
 }
 
 // ---- API Key ----
-function ApiKeySection({ theme }: { theme: 'dark' | 'light' }) {
+function ApiKeySection() {
   const [masked, setMasked] = useState('••••••••');
   const [newKey, setNewKey] = useState('');
   const [saving, setSaving] = useState(false);

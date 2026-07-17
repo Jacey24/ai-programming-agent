@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Exponent } from '../types';
 import {
-  getExpert, createExpert, updateExpert, deleteExpert, patchExpert,
+  getExpert, createExpert, deleteExpert, patchExpert,
 } from '../api/api';
 
 // ── 模板积木定义 ──

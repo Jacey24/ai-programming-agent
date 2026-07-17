@@ -69,7 +69,7 @@ interface PreviewState {
 }
 
 // ====== 主组件 ======
-export function FileTree({ workspace, onExitWorkspace, theme }: Props) {
+export function FileTree({ workspace, theme }: Props) {
   const [rootNodes, setRootNodes] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

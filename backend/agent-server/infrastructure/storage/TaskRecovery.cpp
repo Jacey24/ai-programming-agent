@@ -142,6 +142,10 @@ TaskRecoveryReport recoverInterruptedTasks(sqlite3 *db) {
   execute(db, "BEGIN IMMEDIATE;", "failed to begin task recovery");
   bool transactionOpen = true;
   try {
+    const bool hasEventSequence =
+        sqlite3_table_column_metadata(db, nullptr, "task_events",
+                                      "sequence_no", nullptr, nullptr,
+                                      nullptr, nullptr, nullptr) == SQLITE_OK;
     const auto staleTasks = findStaleTasks(db);
     TaskRecoveryReport report;
     Statement updateTask(
@@ -158,9 +162,15 @@ TaskRecoveryReport recoverInterruptedTasks(sqlite3 *db) {
     Statement recoveryEventId(
         db, "SELECT task_id, type, metadata FROM task_events WHERE id=?;");
     Statement insertEvent(
-        db, "INSERT INTO task_events "
-            "(id, task_id, type, content, metadata) VALUES (?, ?, "
-            "'task_failed', ?, ?);");
+        db, hasEventSequence
+                ? "INSERT INTO task_events "
+                  "(id, task_id, type, content, metadata, sequence_no) "
+                  "VALUES (?, ?, 'task_failed', ?, ?, "
+                  "(SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM task_events "
+                  "WHERE task_id = ?));"
+                : "INSERT INTO task_events "
+                  "(id, task_id, type, content, metadata) VALUES (?, ?, "
+                  "'task_failed', ?, ?);");
 
     const std::string content =
         "The backend exited unexpectedly while this task was executing. "
@@ -207,6 +217,9 @@ TaskRecoveryReport recoverInterruptedTasks(sqlite3 *db) {
       bindText(db, insertEvent.get(), 2, task.id);
       bindText(db, insertEvent.get(), 3, content);
       bindText(db, insertEvent.get(), 4, metadata);
+      if (hasEventSequence) {
+        bindText(db, insertEvent.get(), 5, task.id);
+      }
       stepDone(db, insertEvent.get(),
                "failed to insert crash recovery terminal event");
       report.terminalEventsInserted +=

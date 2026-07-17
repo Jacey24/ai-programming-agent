@@ -17,7 +17,7 @@ ReplayRecord ReplayRepository::getReplayByTaskId(const std::string& task_id) {
 
 std::vector<EventRecord> ReplayRepository::findEventsByTaskId(const std::string& task_id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE task_id = ? ORDER BY created_at ASC;";
+    const char* sql = "SELECT id, task_id, type, content, metadata, created_at, sequence_no FROM task_events WHERE task_id = ? ORDER BY sequence_no ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -41,6 +41,7 @@ std::vector<EventRecord> ReplayRepository::findEventsByTaskId(const std::string&
             content ? content : "",
             metadata ? metadata : "",
             created_at ? created_at : "",
+            sqlite3_column_int64(stmt, 6),
         });
     }
 

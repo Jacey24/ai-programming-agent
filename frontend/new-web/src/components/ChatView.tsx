@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { SessionRecord, TaskEventRecord, TaskRecord } from '../types';
-import { createTask, cancelTask, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
+import type { MessageRecord, SessionRecord, TaskEventRecord, TaskRecord, ToolCallLog } from '../types';
+import { createTask, cancelTask, getTaskToolCalls, listMessages, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
 import { ToolCallCard } from './ToolCallCard';
 
 interface Props {
@@ -11,21 +11,13 @@ interface Props {
 }
 
 type TimelineItem =
-  | { kind: 'msg'; data: ChatMessage; time: string }
+  | { kind: 'msg'; data: MessageRecord; time: string }
   | { kind: 'tool'; data: { toolName: string; status: 'running' | 'success' | 'failed'; arguments?: unknown; output?: string; id: string }; time: string }
   | { kind: 'status'; data: { title: string; detail?: string; status: 'running' | 'success' | 'failed'; id: string }; time: string }
   | { kind: 'perm'; data: { permissionId: string; toolName: string; detail: string; id: string }; time: string }
-  | { kind: 'streaming'; data: { content: string }; time: string }
+  | { kind: 'streaming'; data: { taskId: string; content: string }; time: string }
   | { kind: 'loading' }
   | { kind: 'dot-loader' };
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  expert?: string;
-  timestamp: string;
-}
 
 function objMeta(meta: unknown): Record<string, unknown> {
   return meta && typeof meta === 'object' ? meta as Record<string, unknown> : {};
@@ -96,6 +88,7 @@ const PERSISTED_EVENT_TYPES = [
 ];
 
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+const TERMINAL_EVENT_TYPES = new Set(['task_completed', 'task_failed', 'task_cancelled']);
 
 function isTerminalTask(task: TaskRecord | null): boolean {
   return Boolean(task?.status && TERMINAL_TASK_STATUSES.has(task.status));
@@ -106,24 +99,29 @@ function isInterruptedEvent(event: TaskEventRecord): boolean {
 }
 
 export function ChatView({ workspaceId, session, onBack }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [input, setInput] = useState('');
   const [activeTask, setActiveTask] = useState<TaskRecord | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const eventSource = useRef<EventSource | null>(null);
+  const activeSessionId = useRef(session.id);
+  activeSessionId.current = session.id;
   const seenIds = useRef<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lastHistoryKey = useRef<string>('');
+  const historyRequest = useRef(0);
   const [rawEvents, setRawEvents] = useState<TaskEventRecord[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCallLog[]>([]);
 
-  const [streamingContent, setStreamingContent] = useState<string>('');
-  const streamingRef = useRef<string>('');
+  const [streamingContent, setStreamingContent] = useState<Record<string, string>>({});
+  const streamingRef = useRef<Record<string, string>>({});
 
-  const addMessage = useCallback((msg: ChatMessage) => {
-    // ★ 过滤工具调用语法
-    const cleanMsg = { ...msg, content: stripToolCalls(msg.content) };
-    setMessages(prev => prev.find(m => m.id === cleanMsg.id) ? prev : [...prev, cleanMsg]);
+  const mergeMessages = useCallback((incoming: MessageRecord[]) => {
+    setMessages(prev => {
+      const byId = new Map(prev.map(message => [message.id, message]));
+      for (const message of incoming) byId.set(message.id, message);
+      return [...byId.values()].sort((a, b) => a.sequence_no - b.sequence_no);
+    });
   }, []);
 
   const appendEvents = useCallback((evts: TaskEventRecord[]) => {
@@ -131,11 +129,19 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
       const existing = new Set(prev.map(e => e.id));
       const next = [...prev];
       for (const e of evts) {
+        if (TERMINAL_EVENT_TYPES.has(e.type || '') &&
+            next.some(existing => existing.task_id === e.task_id &&
+              TERMINAL_EVENT_TYPES.has(existing.type || ''))) continue;
         if (e.id && existing.has(e.id)) continue;
         if (e.id) existing.add(e.id);
         next.push(e);
       }
-      return next;
+      return next.sort((a, b) => {
+        if (a.task_id && a.task_id === b.task_id) {
+          return (a.sequence_no || 0) - (b.sequence_no || 0);
+        }
+        return (a.created_at || '').localeCompare(b.created_at || '');
+      });
     });
   }, []);
 
@@ -143,48 +149,81 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     eventSource.current?.close();
     eventSource.current = null;
     setStreaming(false);
-    streamingRef.current = '';
-    setStreamingContent('');
+    streamingRef.current = {};
+    setStreamingContent({});
   }, []);
 
-  const startSSE = useCallback((taskId: string) => {
+  const startSSE = useCallback((task: TaskRecord) => {
+    if (task.session_id !== session.id || task.workspace_id !== workspaceId) return;
     closeStream();
-    seenIds.current.clear();
-    setRawEvents([]);
-    streamingRef.current = '';
-    setStreamingContent('');
+    const seenStorageKey = `sse_seen_${task.id}`;
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(seenStorageKey) || '[]');
+      seenIds.current = new Set(Array.isArray(stored) ? stored.filter(value => typeof value === 'string') : []);
+    } catch {
+      seenIds.current.clear();
+    }
+    streamingRef.current = {};
+    setStreamingContent({});
     setStreaming(true);
-    const source = new EventSource(`/api/v1/tasks/${taskId}/events`);
+    const source = new EventSource(
+      `/api/v1/tasks/${encodeURIComponent(task.id)}/events?session_id=${encodeURIComponent(session.id)}`,
+    );
     eventSource.current = source;
 
     const handler = (e: MessageEvent) => {
       try {
+        if (activeSessionId.current !== session.id) return;
         const evt: TaskEventRecord = JSON.parse(e.data);
-        const evtId = evt.id || `${evt.type}:${evt.created_at}`;
+        if (evt.type !== 'stream_end' && evt.task_id !== task.id) return;
+        const evtId = evt.id || e.lastEventId || `${task.id}:${evt.type}:${evt.sequence_no ?? evt.created_at}`;
         if (seenIds.current.has(evtId)) return;
         seenIds.current.add(evtId);
+        try {
+          sessionStorage.setItem(seenStorageKey, JSON.stringify([...seenIds.current].slice(-500)));
+        } catch {}
 
         if (evt.type === 'agent_message_chunk' && evt.content) {
-          streamingRef.current += evt.content;
-          setStreamingContent(streamingRef.current);
+          const content = (streamingRef.current[task.id] || '') + evt.content;
+          streamingRef.current = { ...streamingRef.current, [task.id]: content };
+          setStreamingContent(prev => ({ ...prev, [task.id]: content }));
           return;
         }
 
-        if (evt.type === 'agent_message' && ((evt.metadata as { channel?: string })?.channel) === 'dialog' && evt.content) {
-          const isStreamEnd = (evt.metadata as { stream_end?: boolean })?.stream_end === true;
-          if (isStreamEnd && streamingRef.current) {
-            addMessage({ id: evtId, role: 'assistant', content: streamingRef.current, expert: (evt.metadata as { expert?: string })?.expert, timestamp: evt.created_at || '' });
-            streamingRef.current = '';
-            setStreamingContent('');
-          } else if (!isStreamEnd) {
-            addMessage({ id: evtId, role: 'assistant', content: evt.content, expert: (evt.metadata as { expert?: string })?.expert, timestamp: evt.created_at || '' });
-          }
+        if (PERSISTED_EVENT_TYPES.includes(evt.type || '') || evt.type === 'stream_end') {
+          appendEvents([evt]);
         }
-
-        appendEvents([evt]);
-        if (isInterruptedEvent(evt)) {
-          setActiveTask(prev => prev?.id === taskId ? { ...prev, status: 'interrupted' } : prev);
-          closeStream();
+        const terminalStatus = evt.type === 'task_completed' ? 'completed'
+          : evt.type === 'task_cancelled' ? 'cancelled'
+          : evt.type === 'task_failed'
+            ? (strMeta(objMeta(evt.metadata), 'status') === 'interrupted' ? 'interrupted' : 'failed')
+            : null;
+        if (terminalStatus) {
+          setActiveTask(prev => prev?.id === task.id ? { ...prev, status: terminalStatus } : prev);
+          const alignFinalMessage = async () => {
+            try {
+              const [persisted, persistedTools] = await Promise.all([
+                listMessages(session.id),
+                getTaskToolCalls(task.id),
+              ]);
+              if (activeSessionId.current !== session.id) return;
+              mergeMessages((persisted.items || []).filter(message => message.session_id === session.id));
+              setToolCalls(prev => {
+                const byId = new Map(prev.map(call => [call.id, call]));
+                for (const call of persistedTools.items || []) byId.set(call.id, call);
+                return [...byId.values()];
+              });
+            } catch {}
+            if (activeSessionId.current !== session.id) return;
+            setStreamingContent(prev => {
+              const next = { ...prev };
+              delete next[task.id];
+              return next;
+            });
+            delete streamingRef.current[task.id];
+            closeStream();
+          };
+          void alignFinalMessage();
         }
       } catch {}
     };
@@ -202,58 +241,52 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     source.addEventListener('task_failed', handler);
     source.addEventListener('task_cancelled', handler);
     source.addEventListener('stream_end', handler);
-    source.onerror = () => { setStreaming(false); closeStream(); };
-  }, [addMessage, appendEvents, closeStream]);
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) setStreaming(false);
+    };
+  }, [appendEvents, closeStream, mergeMessages, session.id, workspaceId]);
 
   useEffect(() => {
-    const key = session.id;
-    if (key === lastHistoryKey.current) return;
-    lastHistoryKey.current = key;
-    streamingRef.current = '';
-    setStreamingContent('');
+    const requestId = ++historyRequest.current;
+    const controller = new AbortController();
+    closeStream();
+    streamingRef.current = {};
+    setStreamingContent({});
     const loadHistory = async () => {
       setLoadingHistory(true);
+      setMessages([]);
+      setRawEvents([]);
+      setToolCalls([]);
+      setActiveTask(null);
       try {
-        const taskRes = await listTasks(session.id);
+        const [messageRes, taskRes] = await Promise.all([
+          listMessages(session.id, controller.signal),
+          listTasks(session.id, controller.signal),
+        ]);
+        if (requestId !== historyRequest.current || controller.signal.aborted) return;
+        setMessages((messageRes.items || []).slice().sort((a, b) => a.sequence_no - b.sequence_no));
         const tasks = (taskRes.items || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        const latestTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
+        setActiveTask(latestTask);
         const historyEvents: TaskEventRecord[] = [];
+        const historyToolCalls: ToolCallLog[] = [];
         for (const t of tasks) {
-          if (t.goal) addMessage({ id: `user_${t.id}`, role: 'user', content: t.goal, timestamp: t.created_at || '' });
           let hasInterruptedEvent = false;
           try {
-            const evtRes = await listTaskEvents(t.id);
+            const [evtRes, toolRes] = await Promise.all([
+              listTaskEvents(t.id, controller.signal),
+              getTaskToolCalls(t.id, controller.signal),
+            ]);
+            historyToolCalls.push(...(toolRes.items || []).filter(call => call.task_id === t.id));
             for (const evt of evtRes.items || []) {
-              const channel = ((evt.metadata as { channel?: string })?.channel) || '';
-              // dialog 消息走 addMessage
-              if (channel === 'dialog' && evt.content && evt.type === 'agent_message') {
-                addMessage({ id: evt.id || `evt_${t.id}_${evt.created_at}`, role: 'assistant', content: evt.content, expert: (evt.metadata as { expert?: string })?.expert, timestamp: evt.created_at || '' });
-              }
               // ★ 工具/权限/状态事件走 appendEvents（关闭后回来也能看到）
-              if (PERSISTED_EVENT_TYPES.includes(evt.type || '')) {
+              if (PERSISTED_EVENT_TYPES.includes(evt.type || '') &&
+                  !TOOL_EVENT_TYPES.includes(evt.type || '')) {
                 const historyEvent = t.status === 'interrupted' && evt.type === 'task_failed'
                   ? { ...evt, metadata: { ...objMeta(evt.metadata), status: 'interrupted' } }
                   : evt;
                 hasInterruptedEvent ||= isInterruptedEvent(historyEvent);
                 historyEvents.push(historyEvent);
-              }
-              // ★ 后端将工具调用记录为 agent_message (channel=debug, source=tool)
-              // 从 metadata 中提取 tool_name，构造 tool_finished 事件
-              if (evt.type === 'agent_message' && channel === 'debug' && evt.content) {
-                const src = strMeta((evt.metadata as Record<string, unknown>) || {}, 'source');
-                const toolName = strMeta((evt.metadata as Record<string, unknown>) || {}, 'tool_name');
-                if (src === 'tool' && toolName) {
-                  // 判断成功/失败
-                  const content = evt.content || '';
-                  const success = !content.includes('[EXECUTION_ERROR]') && !content.includes('异常:');
-                  historyEvents.push({
-                    ...evt,
-                    type: 'tool_finished',
-                    metadata: {
-                      tool_name: toolName,
-                      success,
-                    },
-                  } as TaskEventRecord);
-                }
               }
             }
           } catch {}
@@ -268,16 +301,22 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
             });
           }
         }
-        if (historyEvents.length > 0) {
+        if (requestId === historyRequest.current && historyEvents.length > 0) {
           appendEvents(historyEvents);
         }
+        if (requestId === historyRequest.current) {
+          setToolCalls(historyToolCalls);
+          if (latestTask && !isTerminalTask(latestTask)) startSSE(latestTask);
+        }
       } catch {}
-      setLoadingHistory(false);
+      if (requestId === historyRequest.current) setLoadingHistory(false);
     };
-    setMessages([]);
-    setRawEvents([]);
-    loadHistory();
-  }, [session.id, addMessage, appendEvents]);
+    void loadHistory();
+    return () => {
+      controller.abort();
+      ++historyRequest.current;
+    };
+  }, [session.id, appendEvents, closeStream, startSSE]);
 
   useEffect(() => () => closeStream(), [closeStream]);
 
@@ -293,24 +332,41 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     const text = input.trim();
     if (!text || streaming) return;
     setInput('');
-    const userMsgId = `user_${Date.now()}`;
-    addMessage({ id: userMsgId, role: 'user', content: text, timestamp: new Date().toISOString() });
+    const userMsgId = `temp_user_${Date.now()}`;
+    const temporaryMessage: MessageRecord = {
+      id: userMsgId,
+      session_id: session.id,
+      task_id: null,
+      role: 'user',
+      message_type: 'normal',
+      content: text,
+      sequence_no: Number.MAX_SAFE_INTEGER,
+      source_event_id: null,
+      created_at: new Date().toISOString(),
+    };
+    mergeMessages([temporaryMessage]);
     try {
       const task = await createTask(session.id, workspaceId, text);
-      setActiveTask(task);
-      // ★ 用服务端时间戳修正用户消息排序
-      if (task.created_at) {
-        setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, timestamp: task.created_at! } : m));
+      if (task.session_id !== session.id || task.workspace_id !== workspaceId) {
+        throw new Error('Task session mismatch');
       }
-      startSSE(task.id);
+      setActiveTask(task);
+      setMessages(prev => prev
+        .filter(message => message.id !== userMsgId && message.id !== task.user_message.id)
+        .concat(task.user_message)
+        .sort((a, b) => a.sequence_no - b.sequence_no));
+      startSSE(task);
     } catch {
-      addMessage({ id: `err_${Date.now()}`, role: 'assistant', content: '⚠️ 创建任务失败，请检查后端是否运行', timestamp: new Date().toISOString() });
+      setMessages(prev => prev.filter(message => message.id !== userMsgId));
     }
   };
 
   const handleCancel = async () => {
     if (!activeTask || isTerminalTask(activeTask)) return;
-    try { await cancelTask(activeTask.id); closeStream(); } catch {}
+    try {
+      const updated = await cancelTask(activeTask.id);
+      if (updated.session_id === session.id) setActiveTask(updated);
+    } catch {}
   };
 
   const [resolvedPerms, setResolvedPerms] = useState<Set<string>>(new Set());
@@ -339,7 +395,21 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     const items: TimelineItem[] = [];
 
     for (const msg of messages) {
-      items.push({ kind: 'msg', data: msg, time: msg.timestamp });
+      items.push({ kind: 'msg', data: msg, time: msg.created_at });
+    }
+
+    for (const call of toolCalls) {
+      items.push({
+        kind: 'tool',
+        data: {
+          toolName: call.tool_name || 'tool',
+          status: call.success ? 'success' : 'failed',
+          arguments: call.arguments,
+          output: call.result,
+          id: call.id,
+        },
+        time: call.created_at || '',
+      });
     }
 
     const deduped = dedupeToolEvents(rawEvents);
@@ -350,6 +420,8 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
       const time = evt.created_at || '';
 
       if (type === 'tool_started' || type === 'tool_output' || type === 'tool_finished') {
+        const persistedToolId = strMeta(meta, 'tool_call_id');
+        if (persistedToolId && toolCalls.some(call => call.id === persistedToolId)) continue;
         const toolName = strMeta(meta, 'tool_name') || 'tool';
         let status: 'running' | 'success' | 'failed' = 'running';
         if (type === 'tool_finished') {
@@ -366,16 +438,18 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         items.push({ kind: 'status', data: { title: 'Permission resolved', detail: evt.content || '权限已处理', status: 'success', id }, time });
       } else if (type === 'task_completed') {
         items.push({ kind: 'status', data: { title: '✓ 任务完成', status: 'success', id }, time });
-      } else if (type === 'task_failed' || type === 'task_cancelled') {
-        const interrupted = type === 'task_failed' && strMeta(meta, 'status') === 'interrupted';
-        items.push({ kind: 'status', data: { title: interrupted ? '任务中断' : (evt.content || type), detail: interrupted ? evt.content : undefined, status: 'failed', id }, time });
+      } else if (type === 'task_failed') {
+        const interrupted = strMeta(meta, 'status') === 'interrupted';
+        items.push({ kind: 'status', data: { title: interrupted ? '任务中断' : '任务失败', detail: interrupted ? evt.content : undefined, status: 'failed', id }, time });
+      } else if (type === 'task_cancelled') {
+        items.push({ kind: 'status', data: { title: evt.content || '任务已取消', status: 'failed', id }, time });
       } else if (type === 'stream_end') {
         items.push({ kind: 'status', data: { title: 'Stream ended', detail: evt.content || '', status: 'success', id }, time });
       }
     }
 
-    if (streamingContent) {
-      items.push({ kind: 'streaming', data: { content: streamingContent }, time: 'z' });
+    for (const [taskId, content] of Object.entries(streamingContent)) {
+      if (content) items.push({ kind: 'streaming', data: { taskId, content }, time: `z:${taskId}` });
     }
 
     items.sort((a, b) => {
@@ -390,7 +464,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     }
 
     return items;
-  }, [messages, rawEvents, loadingHistory, streaming, streamingContent]);
+  }, [messages, rawEvents, toolCalls, loadingHistory, streaming, streamingContent]);
 
   const TOP_HEIGHT = 44;
 
@@ -425,13 +499,8 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
                     color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
                   }}
                 >
-                  {msg.expert && (
-                    <div className="text-[10px] text-[var(--accent-lighter)] font-medium" style={{ marginBottom: 2 }}>
-                      [{msg.expert}]
-                    </div>
-                  )}
                   <div className="markdown-body">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown>{stripToolCalls(msg.content)}</ReactMarkdown>
                   </div>
                 </div>
               </div>
@@ -440,7 +509,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
 
           if (item.kind === 'streaming') {
             return (
-              <div key="streaming-bubble" className="flex justify-start">
+              <div key={`streaming-bubble-${item.data.taskId}`} className="flex justify-start">
                 <div
                   className="max-w-[85%] rounded-xl text-xs leading-relaxed"
                   style={{
@@ -557,7 +626,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
           return null;
         })}
 
-        {!loadingHistory && messages.length === 0 && rawEvents.length === 0 && !streaming && (
+        {!loadingHistory && messages.length === 0 && rawEvents.length === 0 && toolCalls.length === 0 && !streaming && (
           <div className="text-xs text-[var(--text-secondary)] text-center" style={{ padding: '32px 0' }}>发送消息开始</div>
         )}
       </div>

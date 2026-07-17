@@ -4,6 +4,7 @@
 #include "infrastructure/storage/repositories/FileChangeRepository.h"
 #include "infrastructure/storage/repositories/GlobalRepository.h"
 #include "infrastructure/storage/repositories/LogRepository.h"
+#include "infrastructure/storage/repositories/MessageRepository.h"
 #include "infrastructure/storage/repositories/PermissionRepository.h"
 #include "infrastructure/storage/repositories/ReplayRepository.h"
 #include "infrastructure/storage/repositories/SessionRepository.h"
@@ -20,6 +21,11 @@
 #include <vector>
 
 namespace codepilot {
+
+struct TaskMessageCreation {
+  TaskRecord task;
+  MessageRecord user_message;
+};
 
 // ============================================================
 // DataAccessFacade - 存储系统统一入口（单例门面 Facade）
@@ -92,6 +98,28 @@ public:
   std::vector<TaskRecord> listTasksByGlobal(const std::string &globalId);
   std::vector<TaskRecord> listRecentTasks(int limit = 20);
 
+  TaskMessageCreation createTaskWithUserMessage(
+      const std::string &sessionId, const std::string &globalId,
+      const std::string &workspaceId, const std::string &goal);
+
+  // ============================================================
+  // Message 组（Session 正式聊天记录）
+  // ============================================================
+  MessageRecord createMessage(
+      const std::string &sessionId,
+      const std::optional<std::string> &taskId, const std::string &role,
+      const std::string &messageType, const std::string &content,
+      const std::optional<std::string> &sourceEventId = std::nullopt);
+  std::optional<MessageRecord> getMessage(const std::string &id);
+  std::optional<MessageRecord>
+  getMessageBySourceEventId(const std::string &sourceEventId);
+  std::vector<MessageRecord>
+  listMessagesBySession(const std::string &sessionId);
+  std::vector<MessageRecord> listMessagesByTask(const std::string &taskId);
+  MessageRecord createFinalAssistantMessage(const std::string &taskId,
+                                            const std::string &messageType,
+                                            const std::string &content);
+
   // ============================================================
   // Workspace 组（独立存储，运行时通过 WorkspaceManager 管理）
   // ============================================================
@@ -119,6 +147,10 @@ public:
                         const std::string &type, const std::string &content,
                         const std::string &metadata);
   std::vector<EventRecord> getEventsByTaskId(const std::string &taskId);
+  std::vector<EventRecord>
+  getEventsByTaskIdAfterSequence(const std::string &taskId,
+                                 std::int64_t afterSequence);
+  std::optional<EventRecord> getEvent(const std::string &id);
   std::vector<EventRecord> getEventsByTaskIdAndType(const std::string &taskId,
                                                     const std::string &type);
 

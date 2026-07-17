@@ -30,7 +30,6 @@ interface ToolEditModalProps {
 
 function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
   const [enabled, setEnabled] = useState(tool.enabled);
-  const [prompt, setPrompt] = useState(tool.prompt || '');
   const [params, setParams] = useState<Record<string, { type: string; required: boolean }>>(
     () => {
       const copy: Record<string, { type: string; required: boolean }> = {};
@@ -271,7 +270,6 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
   const [expanded, setExpanded] = useState(false);
   const [tools, setTools] = useState<ToolInfo[]>(initialTools);
   const [loading, setLoading] = useState(initialLoading);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setTools(initialTools);
@@ -297,7 +295,6 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
       setTools(items as ToolInfo[]);
     } catch {}
     setLoading(false);
-    setRefreshKey(k => k + 1);
   }, []);
 
   const grouped = tools.reduce<Record<string, ToolInfo[]>>((acc, tool) => {

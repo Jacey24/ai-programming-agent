@@ -191,6 +191,72 @@ std::string SessionController::getSession(const std::string &request) {
   }
 }
 
+std::string SessionController::listMessages(const std::string &request) {
+  std::string session_id =
+      extract_path_segment(request, "/api/v1/sessions/");
+  const std::size_t suffix = session_id.find("/messages");
+  if (suffix != std::string::npos) {
+    session_id.resize(suffix);
+  }
+  if (session_id.empty()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"session_id is required"}})",
+        "400 Bad Request");
+  }
+
+  auto &facade = DataAccessFacade::getInstance();
+  if (!facade.isInitialized()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":"DataAccessFacade not initialized"}})",
+        "500 Internal Server Error");
+  }
+
+  try {
+    if (!facade.getSession(session_id)) {
+      return http_response(
+          R"({"success":false,"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}})",
+          "404 Not Found");
+    }
+    const auto messages = facade.listMessagesBySession(session_id);
+    std::ostringstream body;
+    body << R"({"success":true,"data":{"session_id":")"
+         << json_escape(session_id) << R"(","items":[)";
+    for (std::size_t i = 0; i < messages.size(); ++i) {
+      const auto &message = messages[i];
+      if (i > 0) {
+        body << ',';
+      }
+      body << R"({"id":")" << json_escape(message.id)
+           << R"(","session_id":")" << json_escape(message.session_id)
+           << R"(","task_id":)";
+      if (message.task_id) {
+        body << '"' << json_escape(*message.task_id) << '"';
+      } else {
+        body << "null";
+      }
+      body << R"(,"role":")" << json_escape(message.role)
+           << R"(","message_type":")" << json_escape(message.message_type)
+           << R"(","content":")" << json_escape(message.content)
+           << R"(","sequence_no":)" << message.sequence_no
+           << R"(,"source_event_id":)";
+      if (message.source_event_id) {
+        body << '"' << json_escape(*message.source_event_id) << '"';
+      } else {
+        body << "null";
+      }
+      body << R"(,"created_at":")" << json_escape(message.created_at)
+           << R"("})";
+    }
+    body << "]}}";
+    return http_response(body.str());
+  } catch (const std::exception &error) {
+    return http_response(
+        R"({"success":false,"error":{"code":"DATABASE_ERROR","message":")" +
+            json_escape(error.what()) + R"("}})",
+        "500 Internal Server Error");
+  }
+}
+
 std::string SessionController::deleteSession(const std::string &request) {
   const std::string session_id =
       extract_path_segment(request, "/api/v1/sessions/");

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionRecord } from '../types';
 import { listSessionsByWorkspace, createSession, deleteSession } from '../api/api';
 
@@ -12,21 +12,28 @@ export function SessionList({ workspaceId, onSelect }: Props) {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const lastCacheKey = useRef<string>('');
+  const requestId = useRef(0);
 
-  const refresh = useCallback(async () => {
+  useEffect(() => {
     if (!workspaceId) return;
-    if (workspaceId === lastCacheKey.current) return;
-    lastCacheKey.current = workspaceId;
-    setLoading(true);
-    try {
-      const res = await listSessionsByWorkspace(workspaceId);
-      setSessions((res.items || []).filter(s => s.workspace_id === workspaceId));
-    } catch {}
-    setLoading(false);
+    const currentRequest = ++requestId.current;
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await listSessionsByWorkspace(workspaceId, controller.signal);
+        if (currentRequest === requestId.current) {
+          setSessions((res.items || []).filter(s => s.workspace_id === workspaceId));
+        }
+      } catch {}
+      if (currentRequest === requestId.current) setLoading(false);
+    };
+    void load();
+    return () => {
+      controller.abort();
+      ++requestId.current;
+    };
   }, [workspaceId]);
-
-  useEffect(() => { refresh(); }, [refresh]);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;

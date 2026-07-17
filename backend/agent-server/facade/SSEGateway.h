@@ -1,6 +1,6 @@
 #pragma once
 
-#include "event/EventTypes.h"
+#include "event/EventBus.h"
 #include "facade/DataAccessFacade.h"
 
 #include <atomic>
@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -18,8 +19,6 @@
 using json = nlohmann::json;
 
 namespace codepilot {
-
-class EventBus;
 
 // ============================================================
 // SSEGateway - 全局数据中枢（单例门面 Facade）
@@ -143,7 +142,8 @@ public:
   };
   void streamTaskEvents(
       SendCallback sendFn, const std::string &taskId,
-      std::shared_ptr<ConnectionSignal> connectionSignal = nullptr);
+      std::shared_ptr<ConnectionSignal> connectionSignal = nullptr,
+      const std::string &lastEventId = "");
   [[deprecated("Use streamTaskEvents(SendCallback, taskId) instead")]]
   void streamTaskEvents(int clientFd, const std::string &taskId);
 
@@ -164,14 +164,15 @@ private:
 
   // 广播帧到所有活跃 SSE 客户端
   void broadcastFrame(const std::string &taskId, const std::string &eventName,
-                      const std::string &data);
+                      const std::string &eventId, const std::string &data);
 
   static std::string iso8601Now();
   static std::string generateEventId();
   static bool isTerminal(EventType type);
   void streamTaskEventsImpl(
       const std::string &taskId, SendCallback sendFn,
-      std::shared_ptr<ConnectionSignal> connectionSignal);
+      std::shared_ptr<ConnectionSignal> connectionSignal,
+      const std::string &lastEventId);
 
   EventBus *eventBus_ = nullptr;
   DataAccessFacade *dataFacade_ = nullptr;
@@ -189,6 +190,11 @@ private:
     std::atomic_bool done{false};
     std::atomic_bool cleanupStarted{false};
     std::mutex writeMutex;
+    std::mutex seenMutex;
+    std::unordered_set<std::string> seenEventIds;
+    std::mutex replayMutex;
+    bool replaying{true};
+    std::vector<EventData> pendingEvents;
   };
   std::atomic<std::uint64_t> nextConnectionId_{1};
   std::unordered_map<std::uint64_t, std::shared_ptr<ClientConnection>>

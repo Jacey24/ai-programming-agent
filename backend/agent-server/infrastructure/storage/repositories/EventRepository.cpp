@@ -31,9 +31,35 @@ EventRecord EventRepository::create(
     const std::string& type,
     const std::string& content,
     const std::string& metadata) {
+    char* transaction_error = nullptr;
+    if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr,
+                     &transaction_error) != SQLITE_OK) {
+        const std::string error = transaction_error ? transaction_error : lastError();
+        sqlite3_free(transaction_error);
+        throw std::runtime_error(error);
+    }
+
+    sqlite3_stmt* sequence_stmt = nullptr;
+    const char* sequence_sql =
+        "SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM task_events WHERE task_id = ?;";
+    if (sqlite3_prepare_v2(db_, sequence_sql, -1, &sequence_stmt, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        throw std::runtime_error(lastError());
+    }
+    sqlite3_bind_text(sequence_stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(sequence_stmt) != SQLITE_ROW) {
+        const std::string error = lastError();
+        sqlite3_finalize(sequence_stmt);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        throw std::runtime_error(error);
+    }
+    const std::int64_t sequence_no = sqlite3_column_int64(sequence_stmt, 0);
+    sqlite3_finalize(sequence_stmt);
+
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT INTO task_events (id, task_id, type, content, metadata) VALUES (?, ?, ?, ?, ?);";
+    const char* sql = "INSERT INTO task_events (id, task_id, type, content, metadata, sequence_no) VALUES (?, ?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
         throw std::runtime_error(lastError());
     }
 
@@ -42,21 +68,29 @@ EventRecord EventRepository::create(
     sqlite3_bind_text(stmt, 3, type.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 4, content.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 5, metadata.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 6, sequence_no);
 
     const int step_result = sqlite3_step(stmt);
     if (step_result != SQLITE_DONE) {
         const std::string error = lastError();
         sqlite3_finalize(stmt);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
         throw std::runtime_error(error);
     }
 
     sqlite3_finalize(stmt);
-    return EventRecord{id, task_id, type, content, metadata, ""};
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &transaction_error) != SQLITE_OK) {
+        const std::string error = transaction_error ? transaction_error : lastError();
+        sqlite3_free(transaction_error);
+        sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+        throw std::runtime_error(error);
+    }
+    return EventRecord{id, task_id, type, content, metadata, "", sequence_no};
 }
 
 std::optional<EventRecord> EventRepository::findById(const std::string& id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE id = ?;";
+    const char* sql = "SELECT id, task_id, type, content, metadata, created_at, sequence_no FROM task_events WHERE id = ?;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -88,6 +122,7 @@ std::optional<EventRecord> EventRepository::findById(const std::string& id) {
         content ? content : "",
         metadata ? metadata : "",
         created_at ? created_at : "",
+        sqlite3_column_int64(stmt, 6),
     };
 
     sqlite3_finalize(stmt);
@@ -96,7 +131,7 @@ std::optional<EventRecord> EventRepository::findById(const std::string& id) {
 
 std::vector<EventRecord> EventRepository::findByTaskId(const std::string& task_id) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE task_id = ? ORDER BY created_at ASC;";
+    const char* sql = "SELECT id, task_id, type, content, metadata, created_at, sequence_no FROM task_events WHERE task_id = ? ORDER BY sequence_no ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -120,6 +155,7 @@ std::vector<EventRecord> EventRepository::findByTaskId(const std::string& task_i
             content ? content : "",
             metadata ? metadata : "",
             created_at ? created_at : "",
+            sqlite3_column_int64(stmt, 6),
         });
     }
 
@@ -133,9 +169,40 @@ std::vector<EventRecord> EventRepository::findByTaskId(const std::string& task_i
     return events;
 }
 
+std::vector<EventRecord> EventRepository::findByTaskIdAfterSequence(
+    const std::string& task_id, std::int64_t after_sequence) {
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql =
+        "SELECT id, task_id, type, content, metadata, created_at, sequence_no "
+        "FROM task_events WHERE task_id = ? AND sequence_no > ? "
+        "ORDER BY sequence_no ASC;";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(lastError());
+    }
+    sqlite3_bind_text(stmt, 1, task_id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 2, after_sequence);
+    std::vector<EventRecord> events;
+    int result = SQLITE_ROW;
+    while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const auto text = [stmt](int column) {
+            const auto* value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
+            return std::string(value ? value : "");
+        };
+        events.push_back(EventRecord{text(0), text(1), text(2), text(3),
+                                     text(4), text(5), sqlite3_column_int64(stmt, 6)});
+    }
+    if (result != SQLITE_DONE) {
+        const std::string error = lastError();
+        sqlite3_finalize(stmt);
+        throw std::runtime_error(error);
+    }
+    sqlite3_finalize(stmt);
+    return events;
+}
+
 std::vector<EventRecord> EventRepository::findByTaskIdAndType(const std::string& task_id, const std::string& type) {
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, task_id, type, content, metadata, created_at FROM task_events WHERE task_id = ? AND type = ? ORDER BY created_at ASC;";
+    const char* sql = "SELECT id, task_id, type, content, metadata, created_at, sequence_no FROM task_events WHERE task_id = ? AND type = ? ORDER BY sequence_no ASC;";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error(lastError());
     }
@@ -160,6 +227,7 @@ std::vector<EventRecord> EventRepository::findByTaskIdAndType(const std::string&
             content ? content : "",
             metadata ? metadata : "",
             created_at ? created_at : "",
+            sqlite3_column_int64(stmt, 6),
         });
     }
 
