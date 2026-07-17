@@ -96,8 +96,9 @@ std::string AgentService::getToolsDescription() {
   }
 
   std::string desc;
-  auto &registry = ToolSystem::getInstance().registry();
-  auto names = registry.listToolNames();
+  auto &system = ToolSystem::getInstance();
+  auto &registry = system.registry();
+  auto names = system.listToolNames();
 
   for (size_t i = 0; i < names.size(); ++i) {
     if (i > 0)

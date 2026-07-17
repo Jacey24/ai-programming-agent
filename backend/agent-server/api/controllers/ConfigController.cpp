@@ -301,6 +301,9 @@ std::string ConfigController::listLlmProviders() const {
     for (auto it = llm["providers"].begin(); it != llm["providers"].end();
          ++it) {
       json p = it.value();
+      // Provider metadata responses never expose secrets, even if a legacy
+      // llm.json accidentally contains an inline api_key.
+      p.erase("api_key");
       p["id"] = it.key();
       const bool hasProviderKey =
           local.contains("providers") && local["providers"].is_object() &&
@@ -450,6 +453,8 @@ ConfigController::updateLlmProvider(const std::string &request) const {
   }
   llm["providers"][id]["base_url"] = baseUrl;
   llm["providers"][id]["model"] = model;
+  if (j.value("set_default", false))
+    llm["default"] = id;
   for (const char *field : {"name", "api_key_env", "timeout_seconds"}) {
     if (j.contains(field))
       llm["providers"][id][field] = j[field];
@@ -616,6 +621,29 @@ std::string ConfigController::setToolsConfig(const std::string &request) const {
     body["error"]["code"] = "INVALID_REQUEST";
     body["error"]["message"] = "请求体必须是有效的 JSON 对象";
     return http_response(body.dump(), "400 Bad Request");
+  }
+
+  for (auto it = j.begin(); it != j.end(); ++it) {
+    if (!it.value().is_object()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_TOOL_CONFIG","message":"每个工具配置必须是对象"}})",
+          "400 Bad Request");
+    }
+    const auto &config = it.value();
+    if (config.contains("enabled") && !config["enabled"].is_boolean()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_TOOL_CONFIG","message":"enabled 必须是布尔值"}})",
+          "400 Bad Request");
+    }
+    if (config.contains("risk_level")) {
+      const std::string risk = config.value("risk_level", "");
+      if (risk != "safe" && risk != "medium" && risk != "dangerous" &&
+          risk != "blocked") {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_TOOL_CONFIG","message":"risk_level 必须是 safe、medium、dangerous 或 blocked"}})",
+            "400 Bad Request");
+      }
+    }
   }
 
   if (!writeConfigFile(TOOLS_PATH, j.dump(2))) {

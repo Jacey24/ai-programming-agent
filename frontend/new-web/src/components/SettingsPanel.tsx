@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { LlmProvider } from '../types';
+import type { LlmProvider, PermissionPolicy, ToolInfo, WorkspaceRecord } from '../types';
 import {
   testLlmConnection,
   listLlmProviders, addLlmProvider, updateLlmProvider, deleteLlmProvider,
@@ -8,6 +8,7 @@ import {
   getConfigLogging, setConfigLogging,
   getExpertLlmDefaults, setExpertLlmDefaults,
   saveExpertGraphPositions,
+  getWorkspace, updateWorkspace, listTools,
 } from '../api/api';
 
 interface Props {
@@ -15,10 +16,12 @@ interface Props {
   theme: 'dark' | 'light';
   scale: number;
   onScaleChange: (v: number) => void;
+  workspace: WorkspaceRecord | null;
+  onExpertPositionsReset: () => void;
   onClose: () => void;
 }
 
-export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Props) {
+export function SettingsPanel({ show, theme, scale, onScaleChange, workspace, onExpertPositionsReset, onClose }: Props) {
   if (!show) return null;
 
   return createPortal(
@@ -32,7 +35,7 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Pr
       onClick={onClose}
     >
       <div
-        className="glass-panel flex flex-col anim-modal-pop"
+        className="glass-panel settings-panel flex flex-col anim-modal-pop"
         style={{
           marginTop: 80, width: 420, maxHeight: '82vh',
           maxWidth: 'calc(100vw - 48px)',
@@ -65,13 +68,15 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Pr
           </Section>
 
           {/* ── Debug: Reset Expert Positions ── */}
-          <DebugResetPositions />
+          <DebugResetPositions workspaceId={workspace?.id || ''} onReset={onExpertPositionsReset} />
 
           {/* ── LLM ── */}
           <LlmSection />
 
           {/* ── LLM Providers ── */}
           <LlmProvidersSection />
+
+          <WorkspacePermissionsSection workspaceId={workspace?.id || ''} />
 
           {/* ── Workspace ── */}
           <ConfigFieldSection
@@ -108,29 +113,54 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // ---- LLM ----
 function LlmSection() {
+  const [providers, setProviders] = useState<LlmProvider[]>([]);
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState('');
 
   useEffect(() => {
     const load = async () => {
       try {
-        const cfg = await getExpertLlmDefaults();
+        const [cfg, providerResult] = await Promise.all([
+          getExpertLlmDefaults(), listLlmProviders(),
+        ]);
         const data = cfg as unknown as { provider: string; model: string; timeout: number; temperature: number };
-        setProvider(data.provider || '');
-        setModel(data.model || '');
-      } catch {}
+        const items = providerResult.providers || [];
+        const selected = data.provider || providerResult.default || items[0]?.id || '';
+        setProviders(items);
+        setProvider(selected);
+        setModel(data.model || items.find(item => item.id === selected)?.model || '');
+      } catch (error) {
+        setSaveResult(`❌ ${error instanceof Error ? error.message : 'LLM 配置加载失败'}`);
+      }
     };
-    load();
+    void load();
   }, []);
 
   const handleSave = async () => {
+    const selected = providers.find(item => item.id === provider);
+    const trimmedKey = apiKey.trim();
+    if (!selected) { setSaveResult('❌ 请选择有效的 Provider'); return; }
+    if (!model.trim()) { setSaveResult('❌ Model 不能为空'); return; }
+    if (/^(?:\*+|•+)$/.test(trimmedKey)) {
+      setSaveResult('❌ API Key 不能是掩码值');
+      return;
+    }
     setSaving(true);
     setSaveResult('');
     try {
-      await setExpertLlmDefaults({ provider, model });
-      setSaveResult('✅ 已保存');
+      await updateLlmProvider(selected.id, {
+        id: selected.id,
+        base_url: selected.base_url,
+        model: model.trim(),
+        api_key: trimmedKey,
+        set_default: true,
+      });
+      await setExpertLlmDefaults({ provider, model: model.trim() });
+      setApiKey('');
+      setSaveResult('✅ 已保存并热加载');
     } catch (error) {
       setSaveResult(`❌ ${error instanceof Error ? error.message : '保存失败'}`);
     }
@@ -140,16 +170,27 @@ function LlmSection() {
   return (
     <Section title="LLM 默认值">
       <Field label="Provider">
-        <input value={provider} onChange={e => setProvider(e.target.value)}
-          placeholder="deepseek / doubao / openai"
-          className="form-input" style={{ width: '100%' }} />
+        <select value={provider} onChange={e => {
+          const id = e.target.value;
+          setProvider(id);
+          setModel(providers.find(item => item.id === id)?.model || '');
+          setApiKey('');
+        }} className="form-input" style={{ width: '100%' }}>
+          {providers.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
+        </select>
       </Field>
       <Field label="Model">
         <input value={model} onChange={e => setModel(e.target.value)}
           placeholder="deepseek-chat / doubao-pro-32k"
           className="form-input" style={{ width: '100%' }} />
       </Field>
-      {saveResult && <div className="text-[10px] text-[var(--text-secondary)]">{saveResult}</div>}
+      <Field label="API Key">
+        <input value={apiKey} onChange={e => setApiKey(e.target.value)}
+          type="password" autoComplete="new-password"
+          placeholder="留空表示不修改当前 Provider 的 Key"
+          className="form-input" style={{ width: '100%' }} />
+      </Field>
+      {saveResult && <div className="settings-message text-[var(--text-secondary)]">{saveResult}</div>}
       <div className="flex items-center gap-2">
         <Btn label="保存" primary loading={saving} onClick={handleSave} />
       </div>
@@ -167,6 +208,7 @@ function LlmProvidersSection() {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
   const refresh = useCallback(async () => {
@@ -242,7 +284,7 @@ function LlmProvidersSection() {
   };
 
   const handleDelete = async (id: string) => {
-    setBusy(true);
+    setDeletingId(id);
     setMessage('');
     try {
       await deleteLlmProvider(id);
@@ -252,7 +294,7 @@ function LlmProvidersSection() {
     } catch (error) {
       setMessage(`❌ ${error instanceof Error ? error.message : '删除失败'}`);
     }
-    setBusy(false);
+    setDeletingId(null);
   };
 
   const beginEdit = (provider: LlmProvider) => {
@@ -264,54 +306,144 @@ function LlmProvidersSection() {
     setMessage('');
   };
 
+  const editForm = (
+    <div className="provider-inline-form flex flex-col gap-2">
+      <input value={providerId} onChange={e => setProviderId(e.target.value)}
+        disabled={editingId !== ''} placeholder="Provider ID"
+        className="form-input" style={{ width: '100%' }} />
+      <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="Base URL"
+        className="form-input" style={{ width: '100%' }} />
+      <input value={model} onChange={e => setModel(e.target.value)} placeholder="Model"
+        className="form-input" style={{ width: '100%' }} />
+      <input value={apiKey} onChange={e => setApiKey(e.target.value)} type="password"
+        autoComplete="new-password"
+        placeholder={editingId === '' ? 'API Key' : 'API Key（留空表示不修改）'}
+        className="form-input" style={{ width: '100%' }} />
+      <div className="flex flex-wrap gap-2">
+        <Btn label={editingId === '' ? '添加' : '保存'} primary loading={busy} onClick={handleSave} />
+        <Btn label="测试连接" loading={busy} onClick={handleTest} />
+        <button onClick={clearForm} disabled={busy}
+          className="settings-action text-[var(--text-secondary)]"
+          style={{ background: 'none', border: 'none', cursor: 'pointer' }}>取消</button>
+      </div>
+    </div>
+  );
+
   return (
     <Section title="LLM Providers">
-      {loading ? <span className="text-[10px] text-[var(--text-secondary)]">加载中...</span> : (
+      {loading ? <span className="settings-message text-[var(--text-secondary)]">加载中...</span> : (
         <div className="flex flex-col gap-1">
           {providers.map(p => (
-            <div key={p.id} className="flex items-center gap-2" style={{ padding: '4px 0' }}>
-              <span className="text-[10px] text-[var(--text-primary)] font-medium flex-1">{p.id}</span>
-              <span className="text-[9px] text-[var(--text-secondary)] truncate max-w-[120px]">{p.model}</span>
-              <button onClick={() => beginEdit(p)} disabled={busy}
-                className="text-[9px] text-[var(--accent-lighter)]"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}>编辑</button>
-              <button onClick={() => handleDelete(p.id)}
-                disabled={busy}
-                style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--glass-border)',
-                  background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 10,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-              >✕</button>
-            </div>
+            <React.Fragment key={p.id}>
+              <div className="provider-row flex items-center gap-2" style={{ padding: '5px 0' }}>
+                <span className="provider-name text-[var(--text-primary)] font-medium flex-1">{p.id}</span>
+                <span className="provider-model text-[var(--text-secondary)] truncate max-w-[120px]">{p.model}</span>
+                <button onClick={() => beginEdit(p)} disabled={busy || deletingId !== null}
+                  className="settings-action text-[var(--accent-lighter)]"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}>编辑</button>
+                <button onClick={() => handleDelete(p.id)}
+                  disabled={busy || deletingId !== null}
+                  className="provider-delete"
+                  style={{ borderRadius: '50%', border: '1px solid var(--glass-border)',
+                    background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >{deletingId === p.id ? '…' : '✕'}</button>
+              </div>
+              {editingId === p.id && editForm}
+            </React.Fragment>
           ))}
         </div>
       )}
       {editingId === null ? (
         <button onClick={() => { clearForm(); setEditingId(''); setMessage(''); }}
-          className="text-[10px] text-[var(--accent-lighter)]"
+          className="settings-action text-[var(--accent-lighter)]"
           style={{ background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start' }}
         >+ 添加 Provider</button>
+      ) : editingId === '' ? editForm : null}
+      {message && <div className="settings-message text-[var(--text-secondary)]">{message}</div>}
+    </Section>
+  );
+}
+
+// ---- Workspace permission policies (real backend policy IDs/actions only) ----
+function WorkspacePermissionsSection({ workspaceId }: { workspaceId: string }) {
+  const [tools, setTools] = useState<ToolInfo[]>([]);
+  const [policies, setPolicies] = useState<Record<string, PermissionPolicy>>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const load = async () => {
+      try {
+        const [workspace, toolResult] = await Promise.all([
+          getWorkspace(workspaceId), listTools(),
+        ]);
+        const raw = workspace.permissions_config;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
+        setPolicies(parsed as Record<string, PermissionPolicy>);
+        setTools(toolResult.items || []);
+      } catch (error) {
+        setMessage(`❌ ${error instanceof Error ? error.message : '权限配置加载失败'}`);
+      }
+    };
+    void load();
+  }, [workspaceId]);
+
+  const setPolicy = (toolName: string, value: string) => {
+    setPolicies(previous => {
+      const next = { ...previous };
+      if (value === 'inherit') delete next[toolName];
+      else next[toolName] = value as PermissionPolicy;
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!workspaceId) { setMessage('❌ 当前没有可用的 Workspace'); return; }
+    setSaving(true);
+    setMessage('');
+    try {
+      await updateWorkspace(workspaceId, { permissions_config: policies });
+      setMessage('✅ 权限策略已保存，后端将在下一次工具调用时使用');
+    } catch (error) {
+      setMessage(`❌ ${error instanceof Error ? error.message : '权限保存失败'}`);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Section title="当前 Workspace 工具权限">
+      {!workspaceId ? (
+        <span className="settings-help text-[var(--text-secondary)]">进入 Workspace 后可配置</span>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          <input value={providerId} onChange={e => setProviderId(e.target.value)}
-            disabled={editingId !== ''} placeholder="Provider ID"
-            className="form-input text-[10px]" style={{ width: '100%' }} />
-          <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="Base URL"
-            className="form-input text-[10px]" style={{ width: '100%' }} />
-          <input value={model} onChange={e => setModel(e.target.value)} placeholder="Model"
-            className="form-input text-[10px]" style={{ width: '100%' }} />
-          <input value={apiKey} onChange={e => setApiKey(e.target.value)} type="password"
-            placeholder={editingId === '' ? 'API Key' : 'API Key（留空表示不修改）'}
-            className="form-input text-[10px]" style={{ width: '100%' }} />
-          <div className="flex gap-2">
-            <Btn label={editingId === '' ? '添加' : '保存'} primary loading={busy} onClick={handleSave} />
-            <Btn label="测试连接" loading={busy} onClick={handleTest} />
-            <button onClick={clearForm} disabled={busy}
-              className="text-[10px] text-[var(--text-secondary)]"
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}>取消</button>
+        <>
+          <p className="settings-help text-[var(--text-secondary)] leading-relaxed">
+            后端仅支持按工具 ID 的 ask、auto_approve、deny。高危或阻止级工具不提供自动批准。
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {tools.map(tool => {
+              const canAutoApprove = tool.risk_level === 'safe' && !tool.name.startsWith('shell.');
+              return (
+                <div key={tool.name} className="flex items-center gap-2 min-w-0">
+                  <span className="provider-name text-[var(--text-primary)] truncate flex-1" title={tool.name}>{tool.name}</span>
+                  <span className="provider-model text-[var(--text-secondary)]">{tool.risk_level}</span>
+                  <select className="form-input" style={{ width: 132 }}
+                    value={policies[tool.name] || 'inherit'}
+                    onChange={event => setPolicy(tool.name, event.target.value)}>
+                    <option value="inherit">继承默认</option>
+                    <option value="ask">每次询问</option>
+                    <option value="deny">拒绝</option>
+                    <option value="auto_approve" disabled={!canAutoApprove}>自动批准</option>
+                  </select>
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <Btn label="保存权限" primary loading={saving} onClick={handleSave} />
+          {message && <div className="settings-message text-[var(--text-secondary)]">{message}</div>}
+        </>
       )}
-      {message && <div className="text-[10px] text-[var(--text-secondary)]">{message}</div>}
     </Section>
   );
 }
@@ -355,7 +487,7 @@ function ConfigFieldSection({ title, load, save }: {
 }
 
 // ---- Debug: Reset Expert Positions ----
-function DebugResetPositions() {
+function DebugResetPositions({ workspaceId, onReset }: { workspaceId: string; onReset: () => void }) {
   const [resetting, setResetting] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -363,24 +495,24 @@ function DebugResetPositions() {
     setResetting(true);
     setMsg('');
     try {
-      // Pass an empty object to clear all saved positions.
-      // The backend will use the default layout logic.
-      await saveExpertGraphPositions({});
-      setMsg('✅ 位置已重置，刷新画布即可恢复默认布局');
-    } catch {
-      setMsg('❌ 重置失败');
+      if (!workspaceId) throw new Error('当前没有可用的 Workspace');
+      await saveExpertGraphPositions({}, workspaceId);
+      onReset();
+      setMsg('✅ 当前 Workspace 的卡片位置已恢复默认布局');
+    } catch (error) {
+      setMsg(`❌ ${error instanceof Error ? error.message : '重置失败'}`);
     }
     setResetting(false);
   };
 
   return (
     <Section title="🔧 Expert 位置 Debug">
-      <p className="text-[9px] text-[var(--text-secondary)] leading-relaxed">
+      <p className="settings-help text-[var(--text-secondary)] leading-relaxed">
         若卡片被拖到画面外无法找回，点击下方按钮将所有卡片恢复到默认位置。
       </p>
       <div className="flex items-center gap-2">
         <Btn label="重置卡片位置" loading={resetting} onClick={handleReset} />
-        {msg && <span className={`text-[9px] ${msg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>{msg}</span>}
+        {msg && <span className={`settings-message ${msg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>{msg}</span>}
       </div>
     </Section>
   );
@@ -403,7 +535,7 @@ function Btn({ label, primary, loading, onClick }: { label: string; primary?: bo
   return (
     <button onClick={onClick} disabled={loading}
       style={{
-        height: 26, padding: '0 12px', fontSize: 10, fontWeight: 600, borderRadius: 6,
+        height: 30, padding: '0 13px', fontSize: 12, fontWeight: 600, borderRadius: 7,
         background: primary || loading ? 'var(--accent)' : 'var(--surface)',
         color: primary || loading ? '#fff' : 'var(--text-secondary)',
         border: primary || loading ? 'none' : '1px solid var(--glass-border-strong)',

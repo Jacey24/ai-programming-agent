@@ -1,5 +1,6 @@
 #include "WorkspaceController.h"
 #include "api/controllers/HttpUtils.h"
+#include "application/ToolSystem.h"
 #include "facade/DataAccessFacade.h"
 #include "infrastructure/filesystem/WorkspaceManager.h"
 
@@ -17,6 +18,33 @@
 #endif
 
 namespace {
+
+std::optional<std::string>
+validate_permissions_config(const nlohmann::json &config) {
+  if (!config.is_object())
+    return "permissions_config must be an object";
+  auto &tools = codepilot::ToolSystem::getInstance();
+  for (auto it = config.begin(); it != config.end(); ++it) {
+    if (!it.value().is_string())
+      return "permission policy for [" + it.key() + "] must be a string";
+    const std::string action = it.value().get<std::string>();
+    if (action != "ask" && action != "auto_approve" && action != "deny")
+      return "unsupported permission policy for [" + it.key() + "]";
+    if (it.key() == "*" && action == "auto_approve")
+      return "wildcard auto_approve is not allowed";
+    if (it.key() != "*" && tools.isInitialized() &&
+        !tools.registry().hasTool(it.key()))
+      return "unknown tool permission ID: " + it.key();
+    if (action == "auto_approve" && tools.isInitialized()) {
+      const auto detail = tools.registry().getToolDetail(it.key());
+      const std::string risk = detail.value("risk_level", "");
+      const std::string group = detail.value("group", "");
+      if (risk != "safe" || group == "shell")
+        return "high-risk tool cannot be auto-approved: " + it.key();
+    }
+  }
+  return std::nullopt;
+}
 
 bool is_workspace_directory(const std::string &path) {
   std::error_code error;
@@ -162,6 +190,13 @@ std::string WorkspaceController::createWorkspace(const std::string &request) {
     auto bodyJson = nlohmann::json::parse(req_body, nullptr, false);
     if (!bodyJson.is_discarded() && bodyJson.is_object() &&
         bodyJson.contains("permissions_config")) {
+      if (const auto error =
+              validate_permissions_config(bodyJson["permissions_config"])) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_PERMISSION_CONFIG","message":")" +
+                json_escape(*error) + R"("}})",
+            "400 Bad Request");
+      }
       permissions_config = bodyJson["permissions_config"].dump();
     }
   } catch (...) {
@@ -227,6 +262,13 @@ std::string WorkspaceController::updateWorkspace(const std::string &request) {
     auto bodyJson = nlohmann::json::parse(req_body, nullptr, false);
     if (!bodyJson.is_discarded() && bodyJson.is_object() &&
         bodyJson.contains("permissions_config")) {
+      if (const auto error =
+              validate_permissions_config(bodyJson["permissions_config"])) {
+        return http_response(
+            R"({"success":false,"error":{"code":"INVALID_PERMISSION_CONFIG","message":")" +
+                json_escape(*error) + R"("}})",
+            "400 Bad Request");
+      }
       permissions_config = bodyJson["permissions_config"].dump();
     }
   } catch (...) {

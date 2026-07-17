@@ -1,5 +1,6 @@
 #include "ToolSystem.h"
 #include "infrastructure/filesystem/WorkspaceManager.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -333,6 +334,13 @@ ToolResult ToolSystem::callTool(const std::string &name,
 ToolResult ToolSystem::callToolWithPermission(const std::string &name,
                                               const ToolContext &context,
                                               const json &arguments) {
+  if (!isToolEnabled(name)) {
+    ToolResult result = ToolResult::Err("工具已被管理员禁用: " + name);
+    result.metadata["tool_name"] = name;
+    result.metadata["failure_reason"] = "TOOL_DISABLED";
+    return result;
+  }
+
   // 1. 获取工具并检测风险等级
   Tool *tool = registry_->getTool(name);
   if (!tool) {
@@ -467,7 +475,17 @@ bool ToolSystem::isDebuggerEnabled() const {
 // ============================================================
 json ToolSystem::getToolSchemas() const {
   std::shared_lock lock(mutex_);
-  return registry_->listSchemas();
+  json schemas = registry_->listSchemas();
+  json enabled = json::array();
+  for (const auto &schema : schemas.value("tools", json::array())) {
+    const std::string name = schema.value("function", json::object())
+                                 .value("name", "");
+    const auto configured = configOverrides_.find(name);
+    if (configured == configOverrides_.end() || configured->second.enabled)
+      enabled.push_back(schema);
+  }
+  schemas["tools"] = enabled;
+  return schemas;
 }
 
 // ============================================================
@@ -475,7 +493,16 @@ json ToolSystem::getToolSchemas() const {
 // ============================================================
 json ToolSystem::getToolSummaries() const {
   std::shared_lock lock(mutex_);
-  return registry_->listSummaries();
+  json summaries = registry_->listSummaries();
+  json enabled = json::array();
+  for (const auto &summary : summaries.value("tools", json::array())) {
+    const std::string name = summary.value("name", "");
+    const auto configured = configOverrides_.find(name);
+    if (configured == configOverrides_.end() || configured->second.enabled)
+      enabled.push_back(summary);
+  }
+  summaries["tools"] = enabled;
+  return summaries;
 }
 
 // ============================================================
@@ -483,7 +510,13 @@ json ToolSystem::getToolSummaries() const {
 // ============================================================
 std::vector<std::string> ToolSystem::listToolNames() const {
   std::shared_lock lock(mutex_);
-  return registry_->listToolNames();
+  auto names = registry_->listToolNames();
+  names.erase(std::remove_if(names.begin(), names.end(), [this](const auto &name) {
+                const auto it = configOverrides_.find(name);
+                return it != configOverrides_.end() && !it->second.enabled;
+              }),
+              names.end());
+  return names;
 }
 
 // ============================================================
@@ -561,6 +594,12 @@ bool ToolSystem::isToolEnabled(const std::string &name) const {
     return true; // 未配置覆盖时默认启用
   }
   return it->second.enabled;
+}
+
+std::string ToolSystem::configuredRiskLevel(const std::string &name) const {
+  std::shared_lock lock(mutex_);
+  const auto it = configOverrides_.find(name);
+  return it == configOverrides_.end() ? "" : it->second.riskLevelOverride;
 }
 
 } // namespace codepilot

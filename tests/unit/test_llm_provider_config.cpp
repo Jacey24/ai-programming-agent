@@ -120,6 +120,18 @@ int main(int argc, char **argv) {
     require(local["providers"]["beta"]["api_key"] == "beta-secret",
             "beta key was not stored independently");
 
+    auto selected = responseBody(controller.updateLlmProvider(request(
+        "PUT", "/api/v1/config/llm/providers/beta",
+        {{"id", "beta"},
+         {"base_url", "https://beta.invalid/v1"},
+         {"model", "beta-model"},
+         {"set_default", true}})));
+    require(selected.value("success", false), "selecting default provider failed");
+    require(readJson("config/llm.json").value("default", "") == "beta",
+            "default provider was not persisted");
+    require(facade.getDefaultProvider() == "beta",
+            "default provider was not hot loaded");
+
     auto maskedUpdate = responseBody(controller.updateLlmProvider(request(
         "PUT", "/api/v1/config/llm/providers/alpha",
         {{"id", "alpha"},

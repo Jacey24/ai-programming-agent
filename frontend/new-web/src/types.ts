@@ -13,7 +13,7 @@ export interface WorkspaceRecord {
   name: string;
   description?: string;
   path?: string;
-  permissions_config?: string;
+  permissions_config?: string | Record<string, PermissionPolicy>;
   created_at?: string;
   updated_at?: string;
 }
@@ -59,14 +59,13 @@ export interface ToolInfo {
   name: string;
   description: string;
   risk_level: string;
-  /**
-   * 后端 listToolInfo 未返回 enabled，前端默认 true；后端加字段后改为来自 API
-   */
+  /** 运行时配置中的实际启用状态。 */
   enabled: boolean;
-  /** 工具提示词（后端待加字段） */
+  /** 可选工具提示词。 */
   prompt?: string;
+  /** 后端工具 schema 的只读参数元数据。 */
   params: Record<string, unknown>;
-  /** 后端字段名是 group，前端映射为 category */
+  /** 后端字段名是 group，API 适配层映射为 category。 */
   category: string;
 }
 
@@ -212,7 +211,10 @@ export interface LlmProvider {
   api_key_env?: string;
   api_key?: string;
   api_key_masked?: boolean;
+  set_default?: boolean;
 }
+
+export type PermissionPolicy = 'ask' | 'auto_approve' | 'deny';
 
 // Debug
 export interface DebugConsoleMessage {

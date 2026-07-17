@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ThemeMode, WorkspaceRecord } from '../types';
-import { getFileTree, getFileContent } from '../api/api';
+import { getFileTree, getFileContent, revealWorkspaceFile } from '../api/api';
+import { ApiClientError } from '../api/client';
 
 interface Props {
   workspace: WorkspaceRecord | null;
@@ -75,12 +76,15 @@ export function FileTree({ workspace, theme }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [animOpen, setAnimOpen] = useState(false);
+  const [fileActionMessage, setFileActionMessage] = useState('');
   const loadedWorkspace = useRef('');
   const listRef = useRef<HTMLDivElement>(null);
   const activeRowRef = useRef<HTMLButtonElement | null>(null);
   const animFrame = useRef(0);
   const exitTimer = useRef(0);
   const panelRectRef = useRef<DOMRect | null>(null);
+  const previewRequest = useRef(0);
+  const previewAbort = useRef<AbortController | null>(null);
 
   const loadRoot = useCallback(async () => {
     if (!workspace?.id) return;
@@ -112,6 +116,8 @@ export function FileTree({ workspace, theme }: Props) {
   };
 
   const closePreview = useCallback(() => {
+    previewAbort.current?.abort();
+    ++previewRequest.current;
     clearTimeout(exitTimer.current);
     setAnimOpen(false);
     exitTimer.current = window.setTimeout(() => {
@@ -130,35 +136,49 @@ export function FileTree({ workspace, theme }: Props) {
       return;
     }
 
-    // 切换文件：关→换数据→开，无缝过渡
-    if (preview && animOpen) {
-      setAnimOpen(false);
-      const rect = rowEl.getBoundingClientRect();
-      setTimeout(() => {
-        setPreview({
-          filePath, content: '', loading: true, error: '',
-          targetRect: { top: rect.top, right: rect.right, bottom: rect.bottom },
-        });
-        activeRowRef.current = rowEl;
-        requestAnimationFrame(() => setAnimOpen(true));
-      }, 160);
-    } else {
-      const rect = rowEl.getBoundingClientRect();
-      setPreview({
-        filePath, content: '', loading: true, error: '',
-        targetRect: { top: rect.top, right: rect.right, bottom: rect.bottom },
-      });
-      activeRowRef.current = rowEl;
-      requestAnimationFrame(() => setAnimOpen(true));
-    }
+    previewAbort.current?.abort();
+    const controller = new AbortController();
+    previewAbort.current = controller;
+    const requestId = ++previewRequest.current;
+    const rect = rowEl.getBoundingClientRect();
+    setPreview({
+      filePath, content: '', loading: true, error: '',
+      targetRect: { top: rect.top, right: rect.right, bottom: rect.bottom },
+    });
+    activeRowRef.current = rowEl;
+    setAnimOpen(true);
 
     try {
-      const res = await getFileContent(workspace?.id || '', filePath);
+      const res = await getFileContent(workspace?.id || '', filePath, controller.signal);
+      if (requestId !== previewRequest.current || controller.signal.aborted) return;
       setPreview(prev => prev?.filePath === filePath ? { ...prev, content: res.content || '', loading: false } : prev);
-    } catch {
-      setPreview(prev => prev?.filePath === filePath ? { ...prev, error: '加载失败', loading: false } : prev);
+    } catch (error) {
+      if (controller.signal.aborted || requestId !== previewRequest.current) return;
+      let message = '文件读取失败';
+      if (error instanceof ApiClientError) {
+        const code = (error.data as { error?: { code?: string } })?.error?.code;
+        if (code === 'BINARY_FILE' || code === 'UNSUPPORTED_FILE_TYPE') message = '暂不支持预览此文件类型';
+        else if (code === 'FILE_TOO_LARGE') message = '文件过大，预览上限为 10 MB';
+        else if (code === 'FILE_NOT_FOUND') message = '文件已移动或删除';
+        else message = `文件读取失败：${error.message}`;
+      } else if (error instanceof Error) {
+        message = `文件读取失败：${error.message}`;
+      }
+      setPreview(prev => prev?.filePath === filePath ? { ...prev, error: message, loading: false } : prev);
     }
   }, [preview?.filePath, animOpen, closePreview, workspace?.id]);
+
+  const revealFile = useCallback(async (filePath: string) => {
+    setFileActionMessage('');
+    try {
+      await revealWorkspaceFile(workspace?.id || '', filePath);
+      setFileActionMessage('已在资源管理器中定位文件');
+    } catch (error) {
+      setFileActionMessage(error instanceof Error ? error.message : '无法在资源管理器中定位文件');
+    }
+  }, [workspace?.id]);
+
+  useEffect(() => () => previewAbort.current?.abort(), []);
 
   // 滚动追踪：行离开 panel → 关闭
   useEffect(() => {
@@ -208,6 +228,7 @@ export function FileTree({ workspace, theme }: Props) {
       <div className="shrink-0 border-b border-[var(--glass-border-strong)]" style={{ padding: '12px 20px' }}>
         <div className="text-xs font-medium text-[var(--text-primary)] truncate">📁 {workspace?.name || '文件浏览'}</div>
         <div className="text-[10px] text-[var(--text-secondary)] truncate" style={{ marginTop: 4 }}>{workspace?.path || ''}</div>
+        {fileActionMessage && <div className="text-[10px] text-[var(--accent-lighter)] truncate" style={{ marginTop: 3 }}>{fileActionMessage}</div>}
       </div>
       <div className="flex-1 overflow-y-auto" ref={listRef} style={{ padding: '8px 0' }}>
         {loading ? (
@@ -219,6 +240,7 @@ export function FileTree({ workspace, theme }: Props) {
             <FileTreeNode
               key={node.path} node={node} depth={0} expanded={expanded} onToggle={toggleDir}
               onPreview={openPreview} activePath={preview?.filePath ?? null}
+              onReveal={revealFile}
             />
           ))
         )}
@@ -260,25 +282,38 @@ export function FileTree({ workspace, theme }: Props) {
 
 // ====== 树节点 ======
 function FileTreeNode({
-  node, depth, expanded, onToggle, onPreview, activePath,
+  node, depth, expanded, onToggle, onPreview, onReveal, activePath,
 }: {
   node: TreeNode; depth: number; expanded: Set<string>;
   onToggle: (path: string) => void;
   onPreview: (path: string, el: HTMLButtonElement) => void;
+  onReveal: (path: string) => void;
   activePath: string | null;
 }) {
   const isDir = node.type === 'directory';
   const isOpen = expanded.has(node.path);
   const rowRef = useRef<HTMLButtonElement>(null);
+  const clickTimer = useRef(0);
 
   const handleClick = () => {
     if (isDir) { onToggle(node.path); return; }
-    if (rowRef.current) onPreview(node.path, rowRef.current);
+    clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => {
+      if (rowRef.current) onPreview(node.path, rowRef.current);
+    }, 180);
   };
+
+  const handleDoubleClick = () => {
+    if (isDir) return;
+    clearTimeout(clickTimer.current);
+    onReveal(node.path);
+  };
+
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
 
   return (
     <div>
-      <button ref={rowRef} type="button" onClick={handleClick}
+      <button ref={rowRef} type="button" onClick={handleClick} onDoubleClick={handleDoubleClick}
         className="w-full text-left flex items-center rounded hover:bg-[var(--accent)]/10 transition-colors"
         style={{ height: 32, paddingLeft: 8 + depth * 14, paddingRight: 8, gap: 6 }}>
         <span className="text-xs shrink-0" style={{ width: 14, textAlign: 'center', opacity: isDir ? 1 : 0 }}>
@@ -291,7 +326,7 @@ function FileTreeNode({
       </button>
       {isDir && isOpen && node.children.map(child => (
         <FileTreeNode key={child.path} node={child} depth={depth + 1}
-          expanded={expanded} onToggle={onToggle} onPreview={onPreview} activePath={activePath} />
+          expanded={expanded} onToggle={onToggle} onPreview={onPreview} onReveal={onReveal} activePath={activePath} />
       ))}
     </div>
   );

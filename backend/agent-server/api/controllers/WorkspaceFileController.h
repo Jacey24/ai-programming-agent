@@ -10,6 +10,7 @@ public:
 
     std::string getTree(const std::string& request);
     std::string getFileContent(const std::string& request);
+    std::string revealInFileManager(const std::string& request);
 
 private:
     std::string databasePath_;

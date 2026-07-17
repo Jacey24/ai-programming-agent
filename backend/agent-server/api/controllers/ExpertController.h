@@ -36,7 +36,7 @@ public:
 
   // ── 画布位置 ──
   std::string savePositions(const std::string &request) const;
-  std::string getPositions() const;
+  std::string getPositions(const std::string &request) const;
 
   // ── 全局 LLM 默认值 ──
   std::string getGlobalLlmDefaults() const;

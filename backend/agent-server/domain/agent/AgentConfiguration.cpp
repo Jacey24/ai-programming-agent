@@ -179,9 +179,15 @@ bool AgentConfiguration::importJson(const std::string &jsonStr) {
 bool AgentConfiguration::saveToFile() const { return saveToFile(configPath_); }
 
 bool AgentConfiguration::saveToFile(const std::string &targetPath) const {
-  std::lock_guard<std::mutex> lock(mutex_);
-
-  std::string content = exportJson();
+  std::string content;
+  {
+    // rawJson_ is rebuilt by every mutating operation and also preserves
+    // top-level UI/default metadata.  Snapshot it under the lock, then do I/O
+    // without holding the mutex.  Calling exportJson() here used to lock the
+    // same non-recursive mutex twice and deadlock every Expert save.
+    std::lock_guard<std::mutex> lock(mutex_);
+    content = rawJson_;
+  }
   std::ofstream file(targetPath);
   if (!file.is_open())
     return false;

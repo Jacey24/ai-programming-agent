@@ -390,6 +390,8 @@ int HttpServer::run(const std::atomic_bool &running) {
         WorkspaceFileController, getTree, "GET " + req.target);
   ROUTE(Get, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/content)",
         WorkspaceFileController, getFileContent, "GET " + req.target);
+  ROUTE(Post, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+)/files/reveal)",
+        WorkspaceFileController, revealInFileManager, "POST " + req.target);
   ROUTE(Put, R"(/api/v1/workspaces/([a-zA-Z0-9\-_]+))", WorkspaceController,
         updateWorkspace,
         "PUT /api/v1/workspaces/" + req.matches[1].str() + " \r\n\r\n" +
@@ -433,6 +435,7 @@ int HttpServer::run(const std::atomic_bool &running) {
 
   // Tools
   ROUTE_NODB0(Get, "/api/v1/tools", ToolController, listTools);
+  ROUTE_NODB0(Post, "/api/v1/tools/reload", ToolController, reloadConfig);
   ROUTE_NODB(Get, R"(/api/v1/tools/([a-zA-Z0-9\-_]+))", ToolController,
              getToolDetail, "GET /api/v1/tools/" + req.matches[1].str());
 
@@ -455,11 +458,11 @@ int HttpServer::run(const std::atomic_bool &running) {
   // Expert
   ROUTE_NODB(Get, "/api/v1/experts/graph", ExpertController, getGraph,
              "GET /api/v1/experts/graph");
-  ROUTE_NODB0(Get, "/api/v1/experts/graph/positions", ExpertController,
-              getPositions);
+  ROUTE_NODB(Get, "/api/v1/experts/graph/positions", ExpertController,
+             getPositions, "GET " + req.target);
   ROUTE_NODB(Put, "/api/v1/experts/graph/positions", ExpertController,
              savePositions,
-             "PUT /api/v1/experts/graph/positions \r\n\r\n" + req.body);
+             "PUT " + req.target + " \r\n\r\n" + req.body);
   ROUTE_NODB0(Get, "/api/v1/experts/export", ExpertController, exportConfig);
   ROUTE_NODB(Post, "/api/v1/experts/import", ExpertController, importConfig,
              "POST /api/v1/experts/import \r\n\r\n" + req.body);

@@ -60,6 +60,17 @@ endif()
 add_test(NAME llm-provider-config-test COMMAND llm-provider-config-test)
 set_tests_properties(llm-provider-config-test PROPERTIES LABELS "unit;llm")
 
+add_executable(agent-configuration-save-test
+    unit/test_agent_configuration_save.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/domain/agent/AgentConfiguration.cpp
+)
+target_include_directories(agent-configuration-save-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/backend/agent-server
+    ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+)
+add_test(NAME agent-configuration-save-test COMMAND agent-configuration-save-test)
+set_tests_properties(agent-configuration-save-test PROPERTIES LABELS "unit;agent-config")
+
 if(WIN32)
     add_executable(sqlite-integrity-check
         integration/sqlite_integrity_check.cpp

@@ -127,6 +127,13 @@ json ToolRegistry::listToolInfo() const {
     item["group"] = tool->group();
     json dummy;
     item["risk_level"] = riskLevelToString(tool->riskLevel(dummy));
+    item["params"] = json::object();
+    for (const auto &param : tool->schema().params) {
+      item["params"][param.name] = {
+          {"type", param.type},
+          {"description", param.description},
+          {"required", param.required}};
+    }
     result["items"].push_back(item);
   }
   return result;
@@ -143,6 +150,13 @@ json ToolRegistry::listToolInfo(const std::string &group) const {
       item["group"] = tool->group();
       json dummy;
       item["risk_level"] = riskLevelToString(tool->riskLevel(dummy));
+      item["params"] = json::object();
+      for (const auto &param : tool->schema().params) {
+        item["params"][param.name] = {
+            {"type", param.type},
+            {"description", param.description},
+            {"required", param.required}};
+      }
       result["items"].push_back(item);
     }
   }

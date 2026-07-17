@@ -17,6 +17,7 @@ type TimelineItem =
   | { kind: 'msg'; data: MessageRecord; time: string }
   | { kind: 'tool'; data: { toolName: string; status: 'running' | 'success' | 'failed'; arguments?: unknown; output?: string; id: string }; time: string }
   | { kind: 'status'; data: { title: string; detail?: string; status: 'running' | 'success' | 'failed'; id: string }; time: string }
+  | { kind: 'phase'; data: { source: string; content: string; id: string }; time: string }
   | { kind: 'perm'; data: { permissionId: string; toolName: string; detail: string; id: string }; time: string }
   | { kind: 'streaming'; data: { taskId: string; content: string }; time: string }
   | { kind: 'loading' }
@@ -44,6 +45,25 @@ function stripToolCalls(content: string): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n') // 压缩多行空行
     .trim();
+}
+
+function publicAgentContent(event: TaskEventRecord): { source: string; content: string } | null {
+  if (event.type !== 'agent_message') return null;
+  const metadata = objMeta(event.metadata);
+  const channel = strMeta(metadata, 'channel');
+  const stage = strMeta(metadata, 'stage');
+  const isFinal = metadata.done === true || metadata.stream_end === true || stage === 'final';
+  // Debug events may contain prompts, raw tool results or model internals. Only
+  // explicitly public dialog/status channels are eligible for the chat view.
+  if (isFinal || channel === 'debug' || (channel !== 'dialog' && channel !== 'status')) return null;
+  // A status event with no stage/source is commonly a legacy final answer.
+  if (channel === 'status' && !stage && !strMeta(metadata, 'source') && !strMeta(metadata, 'expert')) return null;
+  const content = stripToolCalls(event.content || '');
+  if (!content) return null;
+  return {
+    source: strMeta(metadata, 'expert') || strMeta(metadata, 'source') || (stage ? stage.replaceAll('_', ' ') : 'Agent'),
+    content,
+  };
 }
 
 const TOOL_EVENT_TYPES = ['tool_started', 'tool_output', 'tool_finished'];
@@ -445,7 +465,10 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
         }
         items.push({ kind: 'tool', data: { toolName, status, arguments: meta.arguments, output: evt.content || undefined, id }, time });
       } else if (type === 'task_planning') {
-        items.push({ kind: 'status', data: { title: 'Planning', detail: evt.content || 'Agent is planning the task.', status: 'success', id }, time });
+        items.push({ kind: 'status', data: { title: '正在分析任务', detail: evt.content || 'Agent 正在规划任务。', status: strMeta(meta, 'status') === 'running' ? 'running' : 'success', id }, time });
+      } else if (type === 'agent_message') {
+        const phase = publicAgentContent(evt);
+        if (phase) items.push({ kind: 'phase', data: { ...phase, id }, time });
       } else if (type === 'permission_required') {
         const permId = strMeta(meta, 'permission_id') || strMeta(meta, 'request_id') || '';
         const toolName = strMeta(meta, 'tool_name') || 'tool';
@@ -578,6 +601,23 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
 
           if (item.kind === 'tool') {
             return <ToolCallCard key={item.data.id} {...item.data} />;
+          }
+
+          if (item.kind === 'phase') {
+            return (
+              <div key={item.data.id} className="flex justify-start anim-slide-up">
+                <div className="max-w-[85%] rounded-lg border" style={{
+                  padding: '7px 11px',
+                  background: 'color-mix(in srgb, var(--accent) 7%, transparent)',
+                  borderColor: 'var(--glass-border)',
+                }}>
+                  <div className="text-[10px] font-semibold text-[var(--accent-lighter)]">{item.data.source}</div>
+                  <div className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap" style={{ marginTop: 2 }}>
+                    {item.data.content}
+                  </div>
+                </div>
+              </div>
+            );
           }
 
           if (item.kind === 'perm') {
