@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Exponent, ExpertEdge, ExpertGraph, ExpertRouteRule } from '../types';
+import type { WorkflowEdgeStatus, WorkflowNodeStatus, WorkflowTaskState } from '../workflowState';
+import { normalizeExpertName, workflowEdgeKey } from '../workflowState';
 import {
   getExpert,
   getExpertGraph,
@@ -14,6 +16,7 @@ import { ExpertEditModal } from './ExpertEditModal';
 
 interface Props {
   theme: 'dark' | 'light';
+  workflowState?: WorkflowTaskState;
 }
 
 interface NodePosition { x: number; y: number; }
@@ -56,6 +59,9 @@ const CONDITION_COLORS: Record<string, string> = {
   on_fail: '#ef4444',
 };
 const RISK_COLORS: Record<string, string> = { safe: '#22c55e', medium: '#f59e0b', dangerous: '#ef4444' };
+const WORKFLOW_COLORS: Record<Exclude<WorkflowNodeStatus, 'idle'>, string> = {
+  pending: '#f59e0b', running: '#3b82f6', completed: '#22c55e', failed: '#ef4444',
+};
 
 // ── Helpers ──
 function getNodeSize(nodeId: string, isExpanded: boolean) {
@@ -272,7 +278,7 @@ function EdgeEditorPanel({
 // Main Component
 // ══════════════════════════════════════════════
 
-export function ExpertGraphCanvas({ theme }: Props) {
+export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   const [graph, setGraph] = useState<ExpertGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
@@ -778,7 +784,7 @@ export function ExpertGraphCanvas({ theme }: Props) {
   }, [reloadGraph]);
   const removeTool = useCallback((nodeId: string, tn: string) => { const d = expandedDataRef.current[nodeId]; if (d) saveTools(nodeId, d.tools.filter(t => t !== tn)); }, [saveTools]);
   // ── Edge paths ──
-  const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges);
+  const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges, workflowState);
 
   if (loading || !graph) return null;
   const tr = `scale(${zoomRendered}) translate(${cumPan.x}px, ${cumPan.y}px)`;
@@ -808,9 +814,11 @@ export function ExpertGraphCanvas({ theme }: Props) {
                 stroke={ep.color}
                 strokeWidth={ep.isActive ? 3 : 1.8}
                 strokeOpacity={ep.isActive ? 0.95 : 0.5}
-                strokeDasharray={ep.conditionType === 'default' ? '6 3' : undefined}
+                strokeDasharray={ep.status === 'pending' ? '8 5' : ep.status === 'failed' ? '3 3' : ep.conditionType === 'default' ? '6 3' : undefined}
                 style={{ pointerEvents: 'none', transition: 'stroke-opacity 0.15s, stroke-width 0.15s' }}
-              />
+              >
+                {(ep.status === 'pending' || ep.status === 'running') && <animate attributeName="stroke-dashoffset" from="26" to="0" dur="0.8s" repeatCount="indefinite" />}
+              </path>
               {ep.label && (
                 <text
                   x={ep.labelX} y={ep.labelY - 6}
@@ -918,6 +926,13 @@ export function ExpertGraphCanvas({ theme }: Props) {
           const ed = expandedDataMap[node.id];
           const dragHL = draggingTool;
           const isCollapsed = !isExpanded;
+          const runtimeStatus = workflowState?.nodeStates[normalizeExpertName(node.id)] || 'idle';
+          const runtimeColor = runtimeStatus === 'idle' ? null : WORKFLOW_COLORS[runtimeStatus];
+          const runtimeBackground = runtimeStatus === 'pending' ? 'rgba(245,158,11,0.12)'
+            : runtimeStatus === 'running' ? 'rgba(59,130,246,0.14)'
+              : runtimeStatus === 'completed' ? 'rgba(34,197,94,0.12)'
+                : runtimeStatus === 'failed' ? 'rgba(239,68,68,0.13)' : null;
+          const runtimeShadow = runtimeColor ? `0 0 28px ${runtimeColor}55` : null;
           return (
             <div key={node.id} data-node={node.id} draggable={false}
               className={isExpanded ? 'glass-panel' : undefined}
@@ -926,14 +941,14 @@ export function ExpertGraphCanvas({ theme }: Props) {
               onMouseEnter={e => {
                 handleNodeHoverEnter(node.id);
                 if (!dragHL && !isExpanded) {
-                  e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)';
+                  e.currentTarget.style.boxShadow = runtimeShadow || (theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)');
                 }
               }}
               onMouseLeave={e => {
                 handleNodeHoverLeave(node.id);
                 e.currentTarget.style.boxShadow = dragHL && isCollapsed
                   ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
-                  : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
+                  : runtimeShadow || (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
               }}
               onDragOver={e => handleNodeDragOver(node.id, e)}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) handleNodeDragLeave(node.id); }}
@@ -948,14 +963,14 @@ export function ExpertGraphCanvas({ theme }: Props) {
                 pointerEvents: 'auto', userSelect: 'none',
                 background: isExpanded
                   ? (theme === 'dark' ? 'rgba(10,14,23,0.92)' : 'rgba(253,252,251,0.92)')
-                  : (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
-                border: `2px solid ${isExpanded || dragHL ? 'var(--accent-light)' : 'var(--glass-border-strong)'}`,
+                  : runtimeBackground || (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
+                border: `2px solid ${isExpanded || dragHL ? 'var(--accent-light)' : runtimeColor || 'var(--glass-border-strong)'}`,
                 color: 'var(--text-primary)', backdropFilter: isExpanded ? 'blur(24px)' : 'blur(20px)',
                 boxShadow: isExpanded
                   ? (theme === 'dark' ? '0 8px 48px rgba(99,147,235,0.35)' : '0 8px 48px rgba(99,147,235,0.2)')
                   : dragHL
                     ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
-                    : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
+                    : runtimeShadow || (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
                 transition: 'width 0.12s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), min-height 0.12s cubic-bezier(0.4, 0, 0.2, 1)',
                 zIndex: isExpanded ? 10 : 0,
                 padding: isExpanded ? '16px 18px' : 0,
@@ -965,7 +980,10 @@ export function ExpertGraphCanvas({ theme }: Props) {
               }}
             >
               {isCollapsed ? (
-                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>{node.label}</span>
+                <>
+                  {runtimeColor && <span title={runtimeStatus} style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: '50%', background: runtimeColor, boxShadow: runtimeStatus === 'running' ? `0 0 10px ${runtimeColor}` : 'none' }} />}
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>{node.label}</span>
+                </>
               ) : ed ? (
                 <>
                   <div className="flex items-center justify-between shrink-0" data-no-close>
@@ -1180,9 +1198,9 @@ function useMemoEdges(routesMap: RoutesMap, graph: ExpertGraph | null, version: 
   return edges;
 }
 
-interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; edge: ExpertEdge; }
+interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; status: WorkflowEdgeStatus; edge: ExpertEdge; }
 
-function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>, displayEdges: ExpertEdge[]) {
+function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>, displayEdges: ExpertEdge[], workflowState?: WorkflowTaskState) {
   const [paths, setPaths] = useState<EdgePath[]>([]);
   useEffect(() => {
     if (!graph) { setPaths([]); return; }
@@ -1203,7 +1221,18 @@ function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, N
       const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
       const lx = (sx + tx) / 2 + co * 0.5;
       const ly = (sy + ty) / 2 - 2 + (pi - 1) * 14;
-      const col = CONDITION_COLORS[e.condition_type] || '#6b7280';
+      let status = workflowState?.edgeStates[workflowEdgeKey(e.source, e.target)] || 'idle';
+      if (status === 'idle' && e.source === '_user') {
+        const targetStatus = workflowState?.nodeStates[normalizeExpertName(e.target)] || 'idle';
+        if (targetStatus === 'running') status = 'running';
+        if (targetStatus === 'completed') status = 'completed';
+        if (targetStatus === 'failed') status = 'failed';
+      }
+      const col = status === 'pending' ? '#f59e0b'
+        : status === 'running' ? '#3b82f6'
+          : status === 'completed' ? '#22c55e'
+            : status === 'failed' ? '#ef4444'
+              : CONDITION_COLORS[e.condition_type] || '#6b7280';
       r.push({
         id: e.id,
         d,
@@ -1212,11 +1241,12 @@ function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, N
         labelX: lx,
         labelY: ly,
         conditionType: e.condition_type,
-        isActive: false,
+        isActive: status !== 'idle',
+        status,
         edge: e,
       });
     }
     setPaths(r);
-  }, [graph, positions, displayEdges]);
+  }, [graph, positions, displayEdges, workflowState]);
   return paths;
 }

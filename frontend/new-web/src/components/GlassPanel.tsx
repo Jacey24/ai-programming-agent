@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GlassTab, SessionRecord, ThemeMode, WorkspaceRecord } from '../types';
+import type { GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, WorkspaceRecord } from '../types';
 import { SessionList } from './SessionList';
 import { ChatView } from './ChatView';
 import { FileTree } from './FileTree';
@@ -14,6 +14,8 @@ interface Props {
   onSelectSession: (s: SessionRecord) => void;
   onBackToSessions: () => void;
   onExitWorkspace: () => void;
+  onWorkflowTaskSelected: (task: TaskRecord | null) => void;
+  onWorkflowEvents: (task: TaskRecord, events: TaskEventRecord[]) => void;
   scale: number;
 }
 
@@ -30,6 +32,8 @@ export function GlassPanel({
   onSelectSession,
   onBackToSessions,
   onExitWorkspace,
+  onWorkflowTaskSelected,
+  onWorkflowEvents,
   scale,
 }: Props) {
   const [size, setSize] = useState(() => {
@@ -242,6 +246,8 @@ export function GlassPanel({
                 workspaceId={workspace?.id || ''}
                 session={activeSession}
                 onBack={onBackToSessions}
+                onWorkflowTaskSelected={onWorkflowTaskSelected}
+                onWorkflowEvents={onWorkflowEvents}
               />
             ) : (
               <SessionList

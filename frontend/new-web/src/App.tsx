@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AppPhase, GlassTab, SessionRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import type { AppPhase, GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
 import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools } from './api/api';
 import { GlassPanel } from './components/GlassPanel';
 import { StatusPills } from './components/StatusPills';
@@ -7,6 +7,7 @@ import { ToolPanel } from './components/ToolPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ExpertGraphCanvas } from './components/ExpertGraphCanvas';
 import { AmbientBubbles } from './components/AmbientBubbles';
+import { initialWorkflowStoreState, workflowStoreReducer } from './workflowState';
 
 const PANEL_WIDTH = 420;
 
@@ -48,6 +49,7 @@ export default function App() {
   const [scale, setScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  const [workflowStore, dispatchWorkflow] = useReducer(workflowStoreReducer, initialWorkflowStoreState);
   // ★ 阶段过渡锁：过渡期间忽视重复点击
   const [transitioning, setTransitioning] = useState(false);
   const timerRef = useRef<number>(0);
@@ -60,6 +62,27 @@ export default function App() {
   }, []);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  useEffect(() => {
+    dispatchWorkflow({
+      type: 'context_changed',
+      workspaceId: activeWorkspace?.id || null,
+      sessionId: activeSession?.id || null,
+    });
+  }, [activeSession?.id, activeWorkspace?.id]);
+
+  const handleWorkflowTaskSelected = useCallback((task: TaskRecord | null) => {
+    dispatchWorkflow({ type: 'task_selected', taskId: task?.id || null });
+  }, []);
+
+  const handleWorkflowEvents = useCallback((task: TaskRecord, events: TaskEventRecord[]) => {
+    dispatchWorkflow({ type: 'events_received', taskId: task.id, events });
+  }, []);
+
+  const workflowState = workflowStore.workspaceId === (activeWorkspace?.id || null) &&
+    workflowStore.sessionId === (activeSession?.id || null) && workflowStore.activeTaskId
+    ? workflowStore.tasks[workflowStore.activeTaskId]
+    : undefined;
 
   const restoreFromLocation = useCallback(async () => {
     const requestId = ++restoreRequest.current;
@@ -203,7 +226,7 @@ export default function App() {
       <AmbientBubbles />
 
       {/* Expert 画布 — 背景层，在所有面板之下 */}
-      <ExpertGraphCanvas theme={theme} />
+      <ExpertGraphCanvas theme={theme} workflowState={workflowState} />
 
       {/* 顶部栏 — StatusPills + 圆形按钮 */}
       <header
@@ -269,6 +292,8 @@ export default function App() {
           onSelectSession={selectSession}
           onBackToSessions={backToSessions}
           onExitWorkspace={exitWorkspace}
+          onWorkflowTaskSelected={handleWorkflowTaskSelected}
+          onWorkflowEvents={handleWorkflowEvents}
           scale={scale}
         />
       </main>
