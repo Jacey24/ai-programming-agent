@@ -2,6 +2,7 @@ import type {ActiveTaskState, ConfigMergeView, ExpertGraph, ExpertRouteRule, Exp
 
 import {requestJson} from './client';
 import {endpoints} from './endpoints';
+import {fileContentRequestUrl} from '../fileLoading';
 
 // ==================== Health ====================
 export const getHealth = () => requestJson<HealthResponse>(endpoints.health);
@@ -29,13 +30,14 @@ export const deleteWorkspace = (id: string) => requestJson<{deleted: boolean}>(
     endpoints.workspace(id), {method: 'DELETE'});
 
 // ==================== Workspace Files ====================
-export const getFileTree = (workspaceId: string) =>
-    requestJson<{tree: FileTreeNode}>(endpoints.workspaceFiles(workspaceId));
+export const getFileTree = (workspaceId: string, signal?: AbortSignal) =>
+    requestJson<{workspace_id: string; root: string; items: FileTreeNode[]}>(
+        endpoints.workspaceFiles(workspaceId), {signal});
 
 export const getFileContent = (workspaceId: string, filePath: string, signal?: AbortSignal) =>
     requestJson<{content: string; path: string}>(
-        `${endpoints.workspaceFileContent(workspaceId)}?path=${
-            encodeURIComponent(filePath)}`, {signal});
+        fileContentRequestUrl(
+            endpoints.workspaceFileContent(workspaceId), filePath), {signal});
 
 export const revealWorkspaceFile = (workspaceId: string, filePath: string) =>
     requestJson<{revealed: boolean; path: string}>(

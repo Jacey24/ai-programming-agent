@@ -2,7 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import type { ThemeMode, WorkspaceRecord } from '../types';
 import { getFileTree, getFileContent, revealWorkspaceFile } from '../api/api';
-import { ApiClientError } from '../api/client';
+import {
+  canApplyFileResponse,
+  filePreviewErrorMessage,
+  type FileRequestToken,
+} from '../fileLoading';
 
 interface Props {
   workspace: WorkspaceRecord | null;
@@ -62,6 +66,7 @@ function sortNodes(nodes: TreeNode[]): TreeNode[] {
 
 // ====== 预览状态 ======
 interface PreviewState {
+  workspaceId: string;
   filePath: string;
   content: string;
   loading: boolean;
@@ -85,19 +90,53 @@ export function FileTree({ workspace, theme }: Props) {
   const panelRectRef = useRef<DOMRect | null>(null);
   const previewRequest = useRef(0);
   const previewAbort = useRef<AbortController | null>(null);
+  const treeRequest = useRef(0);
+  const treeAbort = useRef<AbortController | null>(null);
+  const workspaceId = workspace?.id || '';
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
+
+  useEffect(() => {
+    treeAbort.current?.abort();
+    treeAbort.current = null;
+    ++treeRequest.current;
+    previewAbort.current?.abort();
+    previewAbort.current = null;
+    ++previewRequest.current;
+    clearTimeout(exitTimer.current);
+    cancelAnimationFrame(animFrame.current);
+    loadedWorkspace.current = '';
+    setRootNodes([]);
+    setExpanded(new Set());
+    setPreview(null);
+    setAnimOpen(false);
+    setFileActionMessage('');
+    activeRowRef.current = null;
+  }, [workspaceId]);
 
   const loadRoot = useCallback(async () => {
     if (!workspace?.id) return;
     if (workspace.id === loadedWorkspace.current) return;
+    treeAbort.current?.abort();
+    const controller = new AbortController();
+    treeAbort.current = controller;
+    const requestId = ++treeRequest.current;
+    const requestWorkspaceId = workspace.id;
     loadedWorkspace.current = workspace.id;
     setLoading(true);
     try {
-      const res = await getFileTree(workspace.id);
-      const data = (res as unknown as { items?: FlatEntry[]; tree?: unknown }).items;
-      if (Array.isArray(data)) setRootNodes(buildTree(data as FlatEntry[]));
+      const res = await getFileTree(requestWorkspaceId, controller.signal);
+      if (controller.signal.aborted || requestId !== treeRequest.current ||
+          workspaceIdRef.current !== requestWorkspaceId) return;
+      const data = res.items;
+      if (Array.isArray(data)) setRootNodes(buildTree(data));
       else setRootNodes([]);
-    } catch { setRootNodes([]); }
-    setLoading(false);
+    } catch {
+      if (!controller.signal.aborted && requestId === treeRequest.current &&
+          workspaceIdRef.current === requestWorkspaceId) setRootNodes([]);
+    }
+    if (!controller.signal.aborted && requestId === treeRequest.current &&
+        workspaceIdRef.current === requestWorkspaceId) setLoading(false);
   }, [workspace?.id]);
 
   useEffect(() => { loadRoot(); }, [loadRoot]);
@@ -140,8 +179,15 @@ export function FileTree({ workspace, theme }: Props) {
     const controller = new AbortController();
     previewAbort.current = controller;
     const requestId = ++previewRequest.current;
+    const requestWorkspaceId = workspaceId;
+    const token: FileRequestToken = {
+      requestId,
+      workspaceId: requestWorkspaceId,
+      filePath,
+    };
     const rect = rowEl.getBoundingClientRect();
     setPreview({
+      workspaceId: requestWorkspaceId,
       filePath, content: '', loading: true, error: '',
       targetRect: { top: rect.top, right: rect.right, bottom: rect.bottom },
     });
@@ -149,24 +195,27 @@ export function FileTree({ workspace, theme }: Props) {
     setAnimOpen(true);
 
     try {
-      const res = await getFileContent(workspace?.id || '', filePath, controller.signal);
-      if (requestId !== previewRequest.current || controller.signal.aborted) return;
-      setPreview(prev => prev?.filePath === filePath ? { ...prev, content: res.content || '', loading: false } : prev);
+      const res = await getFileContent(requestWorkspaceId, filePath, controller.signal);
+      if (!canApplyFileResponse(
+        token, previewRequest.current, workspaceIdRef.current, filePath,
+        controller.signal.aborted,
+      )) return;
+      setPreview(prev => prev && canApplyFileResponse(
+        token, previewRequest.current, prev.workspaceId, prev.filePath,
+        controller.signal.aborted,
+      ) ? { ...prev, content: res.content || '', loading: false } : prev);
     } catch (error) {
-      if (controller.signal.aborted || requestId !== previewRequest.current) return;
-      let message = '文件读取失败';
-      if (error instanceof ApiClientError) {
-        const code = (error.data as { error?: { code?: string } })?.error?.code;
-        if (code === 'BINARY_FILE' || code === 'UNSUPPORTED_FILE_TYPE') message = '暂不支持预览此文件类型';
-        else if (code === 'FILE_TOO_LARGE') message = '文件过大，预览上限为 10 MB';
-        else if (code === 'FILE_NOT_FOUND') message = '文件已移动或删除';
-        else message = `文件读取失败：${error.message}`;
-      } else if (error instanceof Error) {
-        message = `文件读取失败：${error.message}`;
-      }
-      setPreview(prev => prev?.filePath === filePath ? { ...prev, error: message, loading: false } : prev);
+      if (!canApplyFileResponse(
+        token, previewRequest.current, workspaceIdRef.current, filePath,
+        controller.signal.aborted,
+      )) return;
+      const message = filePreviewErrorMessage(error);
+      setPreview(prev => prev && canApplyFileResponse(
+        token, previewRequest.current, prev.workspaceId, prev.filePath,
+        controller.signal.aborted,
+      ) ? { ...prev, error: message, loading: false } : prev);
     }
-  }, [preview?.filePath, animOpen, closePreview, workspace?.id]);
+  }, [preview?.filePath, animOpen, closePreview, workspaceId]);
 
   const revealFile = useCallback(async (filePath: string) => {
     setFileActionMessage('');
@@ -178,7 +227,10 @@ export function FileTree({ workspace, theme }: Props) {
     }
   }, [workspace?.id]);
 
-  useEffect(() => () => previewAbort.current?.abort(), []);
+  useEffect(() => () => {
+    treeAbort.current?.abort();
+    previewAbort.current?.abort();
+  }, []);
 
   // 滚动追踪：行离开 panel → 关闭
   useEffect(() => {
@@ -293,23 +345,16 @@ function FileTreeNode({
   const isDir = node.type === 'directory';
   const isOpen = expanded.has(node.path);
   const rowRef = useRef<HTMLButtonElement>(null);
-  const clickTimer = useRef(0);
-
-  const handleClick = () => {
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isDir) { onToggle(node.path); return; }
-    clearTimeout(clickTimer.current);
-    clickTimer.current = window.setTimeout(() => {
-      if (rowRef.current) onPreview(node.path, rowRef.current);
-    }, 180);
+    if (event.detail > 1) return;
+    if (rowRef.current) onPreview(node.path, rowRef.current);
   };
 
   const handleDoubleClick = () => {
     if (isDir) return;
-    clearTimeout(clickTimer.current);
     onReveal(node.path);
   };
-
-  useEffect(() => () => clearTimeout(clickTimer.current), []);
 
   return (
     <div>

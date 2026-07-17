@@ -228,6 +228,7 @@ export interface FileTreeNode {
   name: string;
   path: string;
   type: 'file'|'directory';
+  size: number;
   children?: FileTreeNode[];
 }
 
