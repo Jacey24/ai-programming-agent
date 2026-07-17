@@ -1,5 +1,5 @@
 {
-  "default": "DeepSeek",
+  "default": "deepseek",
   "providers": {
     "doubao": {
       "name": "豆包 (Doubao)",
@@ -10,7 +10,7 @@
     },
     "deepseek": {
       "name": "DeepSeek",
-      "base_url": "https://api.deepseek.com/v1",
+      "base_url": "https://api.deepseek.com",
       "model": "deepseek-chat",
       "api_key_env": "DEEPSEEK_API_KEY",
       "timeout_seconds": 120

@@ -66,6 +66,40 @@ std::string sanitizeUtf8(const std::string &input) {
   return result;
 }
 
+std::string redactSecret(std::string value, const std::string &secret) {
+  if (secret.empty()) {
+    return value;
+  }
+  std::size_t position = 0;
+  while ((position = value.find(secret, position)) != std::string::npos) {
+    value.replace(position, secret.size(), "[REDACTED]");
+    position += 10;
+  }
+  return value;
+}
+
+std::string extractApiError(const std::string &body,
+                            const std::string &apiKey) {
+  const json parsed = json::parse(body, nullptr, false);
+  if (parsed.is_discarded() || !parsed.is_object() ||
+      !parsed.contains("error") || !parsed["error"].is_object()) {
+    return "";
+  }
+  const json &error = parsed["error"];
+  std::string code;
+  if (error.contains("code") && !error["code"].is_null()) {
+    code = error["code"].is_string() ? error["code"].get<std::string>()
+                                      : error["code"].dump();
+  }
+  const std::string message = error.value("message", "");
+  std::string detail = code.empty() ? message : code + ": " + message;
+  detail = redactSecret(sanitizeUtf8(detail), apiKey);
+  if (detail.size() > 512) {
+    detail.resize(512);
+  }
+  return detail;
+}
+
 // ── 文件 I/O 工具 (保留，供 loadConfig 使用) ──
 
 std::string readTextFile(const std::string &path) {
@@ -263,15 +297,17 @@ bool OpenAICompatibleClient::isConfigured(
 
 std::string
 OpenAICompatibleClient::resolveApiKey(const OpenAICompatibleConfig &config) {
+  // Explicit local configuration is the user-controlled override. Fall back
+  // to the environment only when no local key was configured.
+  if (!config.apiKey.empty()) {
+    return trimWhitespace(config.apiKey);
+  }
+
   if (!config.apiKeyEnv.empty()) {
     const char *key = std::getenv(config.apiKeyEnv.c_str());
     if (key && *key) {
       return trimWhitespace(key);
     }
-  }
-
-  if (!config.apiKey.empty()) {
-    return trimWhitespace(config.apiKey);
   }
 
   if (!config.apiKeyFile.empty()) {
@@ -407,6 +443,10 @@ LlmResponse OpenAICompatibleClient::chat(const LlmRequest &request) {
     result.errorKind = LlmErrorKind::Http;
     result.httpStatus = status;
     result.error = "LLM API returned HTTP " + std::to_string(status);
+    const std::string detail = extractApiError(responseBody, apiKey);
+    if (!detail.empty()) {
+      result.error += ": " + detail;
+    }
     LOG_ERROR("[LLM DEBUG] chat() FAILED: HTTP status={}", status);
     return result;
   }

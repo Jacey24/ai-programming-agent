@@ -32,6 +32,34 @@ target_link_libraries(task-recovery-test PRIVATE sqlite3)
 add_test(NAME task-recovery-test COMMAND task-recovery-test)
 set_tests_properties(task-recovery-test PROPERTIES LABELS "unit;storage")
 
+find_package(OpenSSL REQUIRED)
+add_executable(llm-provider-config-test
+    unit/test_llm_provider_config.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/ConfigController.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/facade/LlmClientFacade.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/LlmClient.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/llm/OpenAICompatibleClient.cpp
+    ${CMAKE_SOURCE_DIR}/modules/common/logging/LogConfig.cpp
+    ${CMAKE_SOURCE_DIR}/modules/common/logging/Logger.cpp
+)
+target_include_directories(llm-provider-config-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/backend/agent-server
+    ${CMAKE_SOURCE_DIR}/third_party/nlohmann_json
+    ${CMAKE_SOURCE_DIR}/third_party/spdlog/include
+    ${CMAKE_SOURCE_DIR}/modules
+)
+target_link_libraries(llm-provider-config-test PRIVATE
+    httplib::httplib OpenSSL::SSL OpenSSL::Crypto
+)
+target_compile_definitions(llm-provider-config-test PRIVATE
+    CPPHTTPLIB_OPENSSL_SUPPORT
+)
+if(WIN32)
+    target_link_libraries(llm-provider-config-test PRIVATE ws2_32)
+endif()
+add_test(NAME llm-provider-config-test COMMAND llm-provider-config-test)
+set_tests_properties(llm-provider-config-test PROPERTIES LABELS "unit;llm")
+
 if(WIN32)
     add_executable(sqlite-integrity-check
         integration/sqlite_integrity_check.cpp

@@ -233,13 +233,21 @@ export const setConfigLlm = (data: Record<string, unknown>) =>
     requestJson<Record<string, unknown>>(
         endpoints.configLlm, {method: 'PUT', body: JSON.stringify(data)});
 
-export const testLlmConnection = (prompt: string) =>
+export const testLlmConnection =
+    (data: {
+      id: string;
+      base_url: string;
+      model: string;
+      api_key?: string;
+      prompt?: string;
+    }) =>
     requestJson<{response: string; model: string; latency_ms: number}>(
         endpoints.configLlmTest,
-        {method: 'POST', body: JSON.stringify({prompt})});
+        {method: 'POST', body: JSON.stringify(data)});
 
 export const listLlmProviders = () =>
-    requestJson<{items: LlmProvider[]}>(endpoints.configLlmProviders);
+    requestJson<{providers: LlmProvider[]; default: string}>(
+        endpoints.configLlmProviders);
 
 export const addLlmProvider = (data: LlmProvider) => requestJson<LlmProvider>(
     endpoints.configLlmProviders, {method: 'POST', body: JSON.stringify(data)});

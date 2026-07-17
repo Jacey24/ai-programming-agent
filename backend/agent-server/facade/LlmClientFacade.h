@@ -62,6 +62,14 @@ public:
                    const std::string &model = "", int timeout = 0,
                    std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr);
 
+  // Test an editor draft without mutating the registered runtime clients.
+  // Empty apiKey reuses only this provider's currently loaded secret.
+  LlmResponse testConnection(const std::string &provider,
+                             const std::string &baseUrl,
+                             const std::string &model,
+                             const std::string &apiKey,
+                             const std::string &prompt);
+
   // ============================================================
   // 流式 chat（第 1 点优化）
   //   默认行为等同于先 chat() 再一次性回调全部内容。

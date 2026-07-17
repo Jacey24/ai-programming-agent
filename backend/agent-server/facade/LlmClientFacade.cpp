@@ -124,14 +124,16 @@ void LlmClientFacade::loadLocalOverrides(const std::string &configPath) {
     return;
   }
 
-  // 格式 1：{ "api_key": "sk-xxx" } → 覆盖所有 provider
+  // Legacy format: scope the old global key to the default provider only.
+  // Applying one secret to every provider caused cross-provider key leakage.
   if (localConfig.contains("api_key") && localConfig["api_key"].is_string()) {
     const std::string globalKey =
         trimWhitespace(localConfig["api_key"].get<std::string>());
     for (auto &pc : configs_) {
-      pc.apiKey = globalKey;
+      if (pc.key == defaultProvider_) {
+        pc.apiKey = globalKey;
+      }
     }
-    return;
   }
 
   // 格式 2：{ "providers": { "doubao": {"api_key": "sk-xxx"} } }
@@ -268,6 +270,46 @@ LlmResponse LlmClientFacade::chat(const std::string &prompt,
   req.timeoutSeconds = timeout > 0 ? timeout : 0;
 
   return it->second->chat(req);
+}
+
+LlmResponse LlmClientFacade::testConnection(const std::string &provider,
+                                            const std::string &baseUrl,
+                                            const std::string &model,
+                                            const std::string &apiKey,
+                                            const std::string &prompt) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  OpenAICompatibleConfig config;
+  if (const auto *saved = findProvider(provider)) {
+    config.baseUrl = saved->baseUrl;
+    config.model = saved->model;
+    config.apiKeyEnv = saved->apiKeyEnv;
+    config.apiKey = saved->apiKey;
+    config.timeoutSeconds = saved->timeoutSeconds;
+  }
+  if (!baseUrl.empty()) {
+    config.baseUrl = baseUrl;
+  }
+  if (!model.empty()) {
+    config.model = model;
+  }
+  if (!apiKey.empty()) {
+    config.apiKey = apiKey;
+    config.apiKeyEnv.clear();
+  }
+
+  if (!OpenAICompatibleClient::isConfigured(config)) {
+    LlmResponse response;
+    response.errorKind = LlmErrorKind::NotConfigured;
+    response.error = "API Key 为空或 Provider 配置不完整";
+    return response;
+  }
+
+  OpenAICompatibleClient client(config);
+  LlmRequest request;
+  request.prompt = prompt;
+  request.model = config.model;
+  request.timeoutSeconds = config.timeoutSeconds;
+  return client.chat(request);
 }
 
 // ============================================================

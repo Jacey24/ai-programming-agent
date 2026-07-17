@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom';
 import type { LlmProvider } from '../types';
 import {
   testLlmConnection,
-  listLlmProviders, addLlmProvider, deleteLlmProvider,
-  getConfigLlmLocal, setConfigLlmLocal,
+  listLlmProviders, addLlmProvider, updateLlmProvider, deleteLlmProvider,
   getConfigWorkspace, setConfigWorkspace,
   getConfigLogging, setConfigLogging,
   getExpertLlmDefaults, setExpertLlmDefaults,
@@ -74,9 +73,6 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, onClose }: Pr
           {/* ── LLM Providers ── */}
           <LlmProvidersSection />
 
-          {/* ── API Key ── */}
-          <ApiKeySection />
-
           {/* ── Workspace ── */}
           <ConfigFieldSection
             title="工作区配置"
@@ -115,8 +111,7 @@ function LlmSection() {
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState('');
+  const [saveResult, setSaveResult] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -132,22 +127,14 @@ function LlmSection() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveResult('');
     try {
       await setExpertLlmDefaults({ provider, model });
-    } catch {}
-    setSaving(false);
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult('');
-    try {
-      const res = await testLlmConnection('ping');
-      setTestResult(`✅ 成功 | ${res.model} | ${res.latency_ms}ms`);
-    } catch {
-      setTestResult('❌ 连接失败');
+      setSaveResult('✅ 已保存');
+    } catch (error) {
+      setSaveResult(`❌ ${error instanceof Error ? error.message : '保存失败'}`);
     }
-    setTesting(false);
+    setSaving(false);
   };
 
   return (
@@ -162,10 +149,9 @@ function LlmSection() {
           placeholder="deepseek-chat / doubao-pro-32k"
           className="form-input" style={{ width: '100%' }} />
       </Field>
-      {testResult && <div className="text-[10px] text-[var(--text-secondary)]">{testResult}</div>}
+      {saveResult && <div className="text-[10px] text-[var(--text-secondary)]">{saveResult}</div>}
       <div className="flex items-center gap-2">
         <Btn label="保存" primary loading={saving} onClick={handleSave} />
-        <Btn label="测试连接" loading={testing} onClick={handleTest} />
       </div>
     </Section>
   );
@@ -175,30 +161,107 @@ function LlmSection() {
 function LlmProvidersSection() {
   const [providers, setProviders] = useState<LlmProvider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newId, setNewId] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [newModel, setNewModel] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [providerId, setProviderId] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const res = await listLlmProviders();
-      setProviders(res.items || []);
-    } catch {}
+      setProviders(res.providers || []);
+    } catch (error) {
+      setMessage(`❌ ${error instanceof Error ? error.message : 'Provider 加载失败'}`);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleAdd = async () => {
-    if (!newId.trim()) return;
-    try { await addLlmProvider({ id: newId.trim(), base_url: newUrl.trim(), model: newModel.trim() }); setShowAdd(false); setNewId(''); setNewUrl(''); setNewModel(''); refresh(); }
-    catch {}
+  const clearForm = () => {
+    setEditingId(null);
+    setProviderId('');
+    setBaseUrl('');
+    setModel('');
+    setApiKey('');
+  };
+
+  const validate = (isNew: boolean) => {
+    if (!providerId.trim()) return 'Provider ID 不能为空';
+    if (!baseUrl.trim()) return 'Base URL 不能为空';
+    if (!model.trim()) return 'Model 不能为空';
+    if (isNew && !apiKey.trim()) return '新 Provider 必须提供 API Key';
+    if (/^(\*+|•+)$/.test(apiKey.trim())) return 'API Key 不能是掩码值';
+    if (isNew && providers.some(p => p.id === providerId.trim())) {
+      return `Provider [${providerId.trim()}] 已存在`;
+    }
+    return '';
+  };
+
+  const handleSave = async () => {
+    const isNew = editingId === '';
+    const error = validate(isNew);
+    if (error) { setMessage(`❌ ${error}`); return; }
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = {
+        id: providerId.trim(), base_url: baseUrl.trim(), model: model.trim(),
+        api_key: apiKey.trim(),
+      };
+      if (isNew) await addLlmProvider(payload);
+      else await updateLlmProvider(editingId!, payload);
+      await refresh();
+      clearForm();
+      setMessage(`✅ Provider ${isNew ? '已添加' : '已保存并热加载'}`);
+    } catch (error) {
+      setMessage(`❌ ${error instanceof Error ? error.message : '保存失败'}`);
+    }
+    setBusy(false);
+  };
+
+  const handleTest = async () => {
+    const error = validate(editingId === '');
+    if (error) { setMessage(`❌ ${error}`); return; }
+    setBusy(true);
+    setMessage('');
+    try {
+      const res = await testLlmConnection({
+        id: providerId.trim(), base_url: baseUrl.trim(), model: model.trim(),
+        api_key: apiKey.trim(), prompt: 'Reply with OK',
+      });
+      setMessage(`✅ 连接成功 | ${res.model} | ${res.latency_ms}ms`);
+    } catch (error) {
+      setMessage(`❌ ${error instanceof Error ? error.message : '连接测试失败'}`);
+    }
+    setBusy(false);
   };
 
   const handleDelete = async (id: string) => {
-    try { await deleteLlmProvider(id); refresh(); } catch {}
+    setBusy(true);
+    setMessage('');
+    try {
+      await deleteLlmProvider(id);
+      await refresh();
+      if (editingId === id) clearForm();
+      setMessage('✅ Provider 已删除并从运行时移除');
+    } catch (error) {
+      setMessage(`❌ ${error instanceof Error ? error.message : '删除失败'}`);
+    }
+    setBusy(false);
+  };
+
+  const beginEdit = (provider: LlmProvider) => {
+    setEditingId(provider.id);
+    setProviderId(provider.id);
+    setBaseUrl(provider.base_url);
+    setModel(provider.model);
+    setApiKey('');
+    setMessage('');
   };
 
   return (
@@ -209,7 +272,11 @@ function LlmProvidersSection() {
             <div key={p.id} className="flex items-center gap-2" style={{ padding: '4px 0' }}>
               <span className="text-[10px] text-[var(--text-primary)] font-medium flex-1">{p.id}</span>
               <span className="text-[9px] text-[var(--text-secondary)] truncate max-w-[120px]">{p.model}</span>
+              <button onClick={() => beginEdit(p)} disabled={busy}
+                className="text-[9px] text-[var(--accent-lighter)]"
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}>编辑</button>
               <button onClick={() => handleDelete(p.id)}
+                disabled={busy}
                 style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--glass-border)',
                   background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 10,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
@@ -218,67 +285,33 @@ function LlmProvidersSection() {
           ))}
         </div>
       )}
-      {!showAdd ? (
-        <button onClick={() => setShowAdd(true)}
+      {editingId === null ? (
+        <button onClick={() => { clearForm(); setEditingId(''); setMessage(''); }}
           className="text-[10px] text-[var(--accent-lighter)]"
           style={{ background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start' }}
         >+ 添加 Provider</button>
       ) : (
         <div className="flex flex-col gap-1.5">
-          <input value={newId} onChange={e => setNewId(e.target.value)} placeholder="ID"
+          <input value={providerId} onChange={e => setProviderId(e.target.value)}
+            disabled={editingId !== ''} placeholder="Provider ID"
             className="form-input text-[10px]" style={{ width: '100%' }} />
-          <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="Base URL"
+          <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="Base URL"
             className="form-input text-[10px]" style={{ width: '100%' }} />
-          <input value={newModel} onChange={e => setNewModel(e.target.value)} placeholder="Model"
+          <input value={model} onChange={e => setModel(e.target.value)} placeholder="Model"
+            className="form-input text-[10px]" style={{ width: '100%' }} />
+          <input value={apiKey} onChange={e => setApiKey(e.target.value)} type="password"
+            placeholder={editingId === '' ? 'API Key' : 'API Key（留空表示不修改）'}
             className="form-input text-[10px]" style={{ width: '100%' }} />
           <div className="flex gap-2">
-            <Btn label="添加" onClick={handleAdd} />
-            <button onClick={() => setShowAdd(false)}
+            <Btn label={editingId === '' ? '添加' : '保存'} primary loading={busy} onClick={handleSave} />
+            <Btn label="测试连接" loading={busy} onClick={handleTest} />
+            <button onClick={clearForm} disabled={busy}
               className="text-[10px] text-[var(--text-secondary)]"
               style={{ background: 'none', border: 'none', cursor: 'pointer' }}>取消</button>
           </div>
         </div>
       )}
-    </Section>
-  );
-}
-
-// ---- API Key ----
-function ApiKeySection() {
-  const [masked, setMasked] = useState('••••••••');
-  const [newKey, setNewKey] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await getConfigLlmLocal();
-        setMasked(res.api_key || '••••••••');
-      } catch {}
-    };
-    load();
-  }, []);
-
-  const handleSave = async () => {
-    if (!newKey.trim()) return;
-    setSaving(true);
-    try {
-      await setConfigLlmLocal({ api_key: newKey.trim() });
-      setNewKey('');
-      setMasked('••••••••');
-    } catch {}
-    setSaving(false);
-  };
-
-  return (
-    <Section title="API Key">
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-[var(--text-secondary)] font-mono">{masked}</span>
-      </div>
-      <input value={newKey} onChange={e => setNewKey(e.target.value)}
-        type="password" placeholder="输入新 API Key"
-        className="form-input" style={{ width: '100%' }} />
-      <Btn label="更新" loading={saving} onClick={handleSave} />
+      {message && <div className="text-[10px] text-[var(--text-secondary)]">{message}</div>}
     </Section>
   );
 }
