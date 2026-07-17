@@ -210,6 +210,8 @@ export interface LlmProvider {
   base_url: string;
   model: string;
   api_key_env?: string;
+  api_key?: string;
+  api_key_masked?: boolean;
 }
 
 // Debug

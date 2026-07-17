@@ -43,10 +43,13 @@ bool AgentConfiguration::reconfigure() {
     }
 
     // 如果 JSON 有顶层 llm_provider 等字段，注入到每个 Expert（全局默认降级）
-    std::string globalProvider = j.value("llm_provider", "");
-    std::string globalModel = j.value("llm_model", "");
-    int globalTimeout = j.value("llm_timeout", 0);
-    double globalTemperature = j.value("llm_temperature", -1.0);
+    std::string globalProvider =
+        j.value("llm_provider", j.value("_llm_provider", ""));
+    std::string globalModel =
+        j.value("llm_model", j.value("_llm_model", ""));
+    int globalTimeout = j.value("llm_timeout", j.value("_llm_timeout", 0));
+    double globalTemperature =
+        j.value("llm_temperature", j.value("_llm_temperature", -1.0));
 
     for (auto &expert : experts_) {
       if (expert.llmProvider.empty() && !globalProvider.empty())
@@ -435,10 +438,11 @@ AgentConfiguration::getGlobalLlmDefaults() const {
   // 从 rawJson_ 解析顶层字段（不对应任何 Expert）
   try {
     json j = json::parse(rawJson_);
-    g.provider = j.value("llm_provider", "");
-    g.model = j.value("llm_model", "");
-    g.timeout = j.value("llm_timeout", 0);
-    g.temperature = j.value("llm_temperature", -1.0);
+    g.provider = j.value("llm_provider", j.value("_llm_provider", ""));
+    g.model = j.value("llm_model", j.value("_llm_model", ""));
+    g.timeout = j.value("llm_timeout", j.value("_llm_timeout", 0));
+    g.temperature =
+        j.value("llm_temperature", j.value("_llm_temperature", -1.0));
   } catch (...) {
   }
   return g;
@@ -450,13 +454,17 @@ bool AgentConfiguration::setGlobalLlmDefaults(
   try {
     json j = json::parse(rawJson_);
     if (!defaults.provider.empty())
-      j["llm_provider"] = defaults.provider;
+      j["_llm_provider"] = defaults.provider;
     if (!defaults.model.empty())
-      j["llm_model"] = defaults.model;
+      j["_llm_model"] = defaults.model;
     if (defaults.timeout > 0)
-      j["llm_timeout"] = defaults.timeout;
+      j["_llm_timeout"] = defaults.timeout;
     if (defaults.temperature >= 0)
-      j["llm_temperature"] = defaults.temperature;
+      j["_llm_temperature"] = defaults.temperature;
+    j.erase("llm_provider");
+    j.erase("llm_model");
+    j.erase("llm_timeout");
+    j.erase("llm_temperature");
     rawJson_ = j.dump(2);
     return true;
   } catch (...) {
