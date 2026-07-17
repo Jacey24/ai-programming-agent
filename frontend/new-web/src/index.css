@@ -228,11 +228,19 @@ body {
 .workspace-main {
   position: relative;
   z-index: 10;
-  display: grid;
-  grid-template-columns: minmax(360px, 1.25fr) minmax(340px, 0.85fr);
-  gap: clamp(10px, 1.4vw, 18px);
+  display: flex;
   padding: clamp(10px, 1.4vw, 18px);
   padding-top: 8px;
+}
+
+.workspace-tool-pane {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 0;
+  margin-right: clamp(8px, 1vw, 14px);
+  overflow: hidden;
+  border-radius: 16px;
 }
 
 .workspace-graph-pane,
@@ -245,6 +253,8 @@ body {
 }
 
 .workspace-graph-pane {
+  flex: 1 1 auto;
+  min-width: 320px;
   min-height: 300px;
   border: 1px solid var(--glass-border-strong);
   background: color-mix(in srgb, var(--bg) 35%, transparent);
@@ -252,17 +262,51 @@ body {
 }
 
 .workspace-session-pane {
+  flex: 0 0 auto;
+  min-width: 320px;
   display: flex;
 }
 
-@media (max-width: 960px) {
-  .workspace-main {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(240px, 0.85fr) minmax(280px, 1.15fr);
+.workspace-pane-resizer {
+  position: relative;
+  z-index: 40;
+  flex: 0 0 14px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.workspace-pane-resizer::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  left: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--glass-border-strong);
+  transition: width 0.15s, left 0.15s, background-color 0.15s;
+}
+
+.workspace-pane-resizer:hover::before,
+.workspace-main.is-resizing .workspace-pane-resizer::before {
+  left: 5px;
+  width: 4px;
+  background: var(--accent-light);
+}
+
+.workspace-main.is-resizing,
+.workspace-main.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+@media (max-width: 760px) {
+  .workspace-graph-pane {
+    min-width: 280px;
   }
 
-  .workspace-graph-pane {
-    min-height: 240px;
+  .workspace-session-pane {
+    min-width: 280px;
   }
 }
 
@@ -273,19 +317,8 @@ body {
   }
 
   .workspace-main {
-    gap: 8px;
     padding: 8px;
     padding-top: 4px;
-  }
-}
-
-@media (max-height: 650px) and (max-width: 960px) {
-  .workspace-main {
-    grid-template-rows: minmax(170px, 0.7fr) minmax(220px, 1.3fr);
-  }
-
-  .workspace-graph-pane {
-    min-height: 170px;
   }
 }
 

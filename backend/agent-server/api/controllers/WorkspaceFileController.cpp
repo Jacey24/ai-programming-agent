@@ -8,6 +8,7 @@
 #include <cctype>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -35,7 +36,7 @@ std::string http_response(const std::string &body,
   response << "HTTP/1.1 " << status << "\r\n"
            << "Content-Type: application/json; charset=utf-8\r\n"
            << "Access-Control-Allow-Origin: *\r\n"
-           << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+           << "Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS\r\n"
            << "Access-Control-Allow-Headers: Content-Type\r\n"
            << "Connection: close\r\n"
            << "Content-Length: " << body.size() << "\r\n\r\n"
@@ -64,6 +65,11 @@ std::string request_target(const std::string &request) {
   const std::size_t effective_end =
       (target_end == std::string::npos) ? request_line.size() : target_end;
   return request_line.substr(target_start, effective_end - target_start);
+}
+
+std::string request_body(const std::string &request) {
+  const std::size_t separator = request.find("\r\n\r\n");
+  return separator == std::string::npos ? "" : request.substr(separator + 4);
 }
 
 std::string url_decode(const std::string &input) {
@@ -145,9 +151,14 @@ std::string extract_workspace_id(const std::string &request) {
 }
 
 std::string language_from_path(const std::string &path) {
+  const std::string name = std::filesystem::path(path).filename().string();
   const std::string ext = std::filesystem::path(path).extension().string();
+  if (name == "CMakeLists.txt" || ext == ".cmake")
+    return "cmake";
   if (ext == ".py")
     return "python";
+  if (ext == ".c")
+    return "c";
   if (ext == ".cpp" || ext == ".cc" || ext == ".cxx" || ext == ".h" ||
       ext == ".hpp")
     return "cpp";
@@ -165,11 +176,28 @@ std::string language_from_path(const std::string &path) {
     return "html";
   if (ext == ".yml" || ext == ".yaml")
     return "yaml";
+  if (ext == ".xml")
+    return "xml";
+  if (ext == ".ini")
+    return "ini";
+  if (ext == ".toml")
+    return "toml";
   return "plaintext";
 }
 
 std::string filename_from_path(const std::string &path) {
   return std::filesystem::path(path).filename().string();
+}
+
+bool is_known_binary_path(const std::string &path) {
+  std::string ext = std::filesystem::path(path).extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return ext == ".exe" || ext == ".dll" || ext == ".pdb" ||
+         ext == ".obj" || ext == ".lib" || ext == ".zip" ||
+         ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+         ext == ".gif" || ext == ".pdf";
 }
 
 bool is_valid_utf8(const std::string &value) {
@@ -224,6 +252,13 @@ std::string normalize_text_encoding(const std::string &content) {
   return safe;
 }
 
+std::string read_file_bytes(const std::string &path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input.is_open()) return "";
+  return std::string(std::istreambuf_iterator<char>(input),
+                     std::istreambuf_iterator<char>());
+}
+
 #ifdef _WIN32
 std::wstring utf8_to_wide(const std::string &value) {
   const int length = MultiByteToWideChar(
@@ -258,6 +293,43 @@ bool reveal_file(const std::string &path) {
   return SUCCEEDED(result);
 }
 #endif
+
+bool encode_for_save(const std::string &content, const std::string &encoding,
+                     std::string &encoded) {
+  if (!is_valid_utf8(content)) return false;
+  if (encoding == "utf-8") {
+    encoded = content;
+    return true;
+  }
+  if (encoding == "utf-8-bom") {
+    encoded = "\xef\xbb\xbf" + content;
+    return true;
+  }
+  if (encoding != "system") return false;
+#ifdef _WIN32
+  const std::wstring wide = utf8_to_wide(content);
+  if (content.size() > 0 && wide.empty()) return false;
+  BOOL usedDefault = FALSE;
+  const int length = WideCharToMultiByte(
+      CP_ACP, WC_NO_BEST_FIT_CHARS, wide.data(), static_cast<int>(wide.size()),
+      nullptr, 0, nullptr, &usedDefault);
+  if (length < 0 || usedDefault) return false;
+  encoded.assign(static_cast<std::size_t>(length), '\0');
+  if (length > 0) {
+    usedDefault = FALSE;
+    if (WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, wide.data(),
+                            static_cast<int>(wide.size()), encoded.data(),
+                            length, nullptr, &usedDefault) <= 0 || usedDefault) {
+      return false;
+    }
+  }
+  return true;
+#else
+  (void)content;
+  (void)encoded;
+  return false;
+#endif
+}
 
 } // namespace
 
@@ -374,14 +446,22 @@ WorkspaceFileController::getFileContent(const std::string &request) {
                             "file exceeds maximum readable size",
                             "413 Payload Too Large");
     }
-    if (workspace.isBinaryFile(relative_path)) {
+    if (is_known_binary_path(relative_path) ||
+        workspace.isBinaryFile(relative_path)) {
       sqlite3_close(db);
       return error_response("BINARY_FILE", "binary files cannot be read",
                             "415 Unsupported Media Type");
     }
 
-    const std::string content =
-        normalize_text_encoding(workspace.readFile(relative_path, 1, -1));
+    std::string raw = read_file_bytes(full_path);
+    std::string encoding = "utf-8";
+    if (raw.size() >= 3 && raw.compare(0, 3, "\xef\xbb\xbf") == 0) {
+      encoding = "utf-8-bom";
+      raw.erase(0, 3);
+    } else if (!is_valid_utf8(raw)) {
+      encoding = "system";
+    }
+    const std::string content = normalize_text_encoding(raw);
     json body;
     body["success"] = true;
     body["data"] = {{"path", relative_path},
@@ -389,12 +469,114 @@ WorkspaceFileController::getFileContent(const std::string &request) {
                     {"language", language_from_path(relative_path)},
                     {"content", content},
                     {"size", size},
-                    {"readonly", true}};
+                    {"readonly", false},
+                    {"encoding", encoding}};
     sqlite3_close(db);
     return http_response(body.dump());
   } catch (const std::exception &error) {
     sqlite3_close(db);
     return error_response("DATABASE_ERROR", error.what(),
+                          "500 Internal Server Error");
+  }
+}
+
+std::string
+WorkspaceFileController::saveFileContent(const std::string &request) {
+  const std::string workspace_id = extract_workspace_id(request);
+  const std::string relative_path = extract_query_string(request, "path");
+  if (workspace_id.empty() || relative_path.empty()) {
+    return error_response("INVALID_REQUEST",
+                          "workspace_id and path are required");
+  }
+
+  json payload;
+  try {
+    payload = json::parse(request_body(request));
+  } catch (const std::exception &) {
+    return error_response("INVALID_REQUEST", "request body must be valid JSON");
+  }
+  if (!payload.contains("content") || !payload["content"].is_string()) {
+    return error_response("INVALID_REQUEST", "content must be a string");
+  }
+  const std::string content = payload["content"].get<std::string>();
+  const std::string encoding = payload.value("encoding", "utf-8");
+  if (content.size() > static_cast<std::size_t>(kMaxReadableFileSize)) {
+    return error_response("FILE_TOO_LARGE", "file exceeds maximum writable size",
+                          "413 Payload Too Large");
+  }
+
+  sqlite3 *db = nullptr;
+  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
+    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+    if (db) sqlite3_close(db);
+    return error_response("DATABASE_ERROR", error, "500 Internal Server Error");
+  }
+
+  try {
+    WorkspaceService service(db);
+    const auto record = service.getWorkspaceById(workspace_id);
+    if (!record) {
+      sqlite3_close(db);
+      return error_response("WORKSPACE_NOT_FOUND", "workspace not found",
+                            "404 Not Found");
+    }
+    Workspace workspace(record->path);
+    if (!workspace.isPathSafe(relative_path)) {
+      sqlite3_close(db);
+      return error_response("INVALID_PATH", "path is not allowed");
+    }
+    const std::string full_path = workspace.resolvePath(relative_path);
+    if (!std::filesystem::exists(full_path) ||
+        !std::filesystem::is_regular_file(full_path)) {
+      sqlite3_close(db);
+      return error_response("FILE_NOT_FOUND", "file not found", "404 Not Found");
+    }
+    if (is_known_binary_path(relative_path) ||
+        workspace.isBinaryFile(relative_path)) {
+      sqlite3_close(db);
+      return error_response("BINARY_FILE", "binary files cannot be written",
+                            "415 Unsupported Media Type");
+    }
+
+    std::string encoded;
+    if (!encode_for_save(content, encoding, encoded)) {
+      sqlite3_close(db);
+      return error_response("ENCODING_ERROR",
+                            "content cannot be represented in the original encoding");
+    }
+    if (encoded.size() > static_cast<std::size_t>(kMaxReadableFileSize)) {
+      sqlite3_close(db);
+      return error_response("FILE_TOO_LARGE", "file exceeds maximum writable size",
+                            "413 Payload Too Large");
+    }
+    std::ofstream output(full_path, std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+      sqlite3_close(db);
+      return error_response("WRITE_FAILED", "file could not be opened for writing",
+                            "500 Internal Server Error");
+    }
+    output.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
+    output.close();
+    if (!output) {
+      sqlite3_close(db);
+      return error_response("WRITE_FAILED", "file could not be written",
+                            "500 Internal Server Error");
+    }
+
+    json body;
+    body["success"] = true;
+    body["data"] = {{"path", relative_path},
+                    {"name", filename_from_path(relative_path)},
+                    {"language", language_from_path(relative_path)},
+                    {"content", content},
+                    {"size", encoded.size()},
+                    {"readonly", false},
+                    {"encoding", encoding}};
+    sqlite3_close(db);
+    return http_response(body.dump());
+  } catch (const std::exception &error) {
+    sqlite3_close(db);
+    return error_response("WRITE_FAILED", error.what(),
                           "500 Internal Server Error");
   }
 }
