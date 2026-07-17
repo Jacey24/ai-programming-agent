@@ -133,6 +133,7 @@ public:
 
   // --- 查询工具配置覆盖 ---
   bool isToolEnabled(const std::string &name) const;
+  std::string configuredRiskLevel(const std::string &name) const;
 
 private:
   ToolSystem() = default;

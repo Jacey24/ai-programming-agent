@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ToolInfo } from '../types';
+import { getConfigTools, reloadToolsConfig, setConfigTools } from '../api/api';
 import { GlassWindow } from './GlassWindow';
 
 const RISK_COLORS: Record<string, string> = {
   safe: '#22c55e',
   medium: '#f59e0b',
   dangerous: '#ef4444',
+  blocked: '#991b1b',
 };
 
 const RISK_LABELS: Record<string, string> = {
   safe: '安全',
   medium: '中危',
   dangerous: '高危',
+  blocked: '已阻止',
 };
 
 const PANEL_WIDTH = 240;
@@ -30,18 +33,7 @@ interface ToolEditModalProps {
 
 function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
   const [enabled, setEnabled] = useState(tool.enabled);
-  const [params, setParams] = useState<Record<string, { type: string; required: boolean }>>(
-    () => {
-      const copy: Record<string, { type: string; required: boolean }> = {};
-      for (const [key, val] of Object.entries(tool.params || {})) {
-        copy[key] = {
-          type: String((val as Record<string, unknown>).type || 'string'),
-          required: !!(val as Record<string, unknown>).required,
-        };
-      }
-      return copy;
-    }
-  );
+  const params = tool.params || {};
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -49,15 +41,22 @@ function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
     setSaving(true);
     setSaveError('');
     try {
-      // 后端暂不支持 PATCH /api/v1/tools/:name，前端仅做本地状态更新。
-      // enabled/prompt 的持久化需后端添加端点后对接。
+      const current = await getConfigTools();
+      const existing = current[tool.name];
+      const previous = existing && typeof existing === 'object'
+        ? existing as Record<string, unknown> : {};
+      await setConfigTools({
+        ...current,
+        [tool.name]: { ...previous, enabled },
+      });
+      await reloadToolsConfig();
       onSaved();
       onClose();
-    } catch {
-      setSaveError('保存失败，请稍后重试');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '保存失败，请稍后重试');
     }
     setSaving(false);
-  }, [onSaved, onClose]);
+  }, [enabled, tool.name, onSaved, onClose]);
 
   const dotColor = RISK_COLORS[tool.risk_level] || '#6b7280';
 
@@ -128,37 +127,22 @@ function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-[10px] text-[var(--text-secondary)] font-medium">参数配置</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-medium">参数 schema（只读）</span>
           <div className="flex flex-col gap-2 max-h-48 overflow-y-auto" style={{ paddingRight: 4 }}>
             {Object.keys(params).length === 0 ? (
               <span className="text-[10px] text-[var(--text-secondary)] italic">此工具无配置参数</span>
             ) : (
-              Object.entries(params).map(([key, val]) => (
+              Object.entries(params).map(([key, raw]) => {
+                const val = raw as Record<string, unknown>;
+                return (
                 <div key={key} className="flex items-center gap-2"
                   style={{ padding: '6px 8px', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--glass-border)' }}
                 >
                   <span className="text-[11px] font-medium text-[var(--accent-lighter)] min-w-0 truncate flex-1">{key}</span>
-                  <select
-                    value={val.type}
-                    onChange={e => setParams(p => ({ ...p, [key]: { ...p[key], type: e.target.value } }))}
-                    className="text-[10px] rounded px-1 py-0.5"
-                    style={{
-                      background: 'var(--surface)', color: 'var(--text-primary)',
-                      border: '1px solid var(--glass-border)', outline: 'none',
-                    }}
-                  >
-                    <option value="string">string</option>
-                    <option value="integer">integer</option>
-                    <option value="boolean">boolean</option>
-                  </select>
-                  <label className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] cursor-pointer">
-                    <input type="checkbox" checked={val.required}
-                      onChange={e => setParams(p => ({ ...p, [key]: { ...p[key], required: e.target.checked } }))}
-                      style={{ width: 12, height: 12 }} />
-                    必填
-                  </label>
+                  <span className="text-[10px] text-[var(--text-secondary)]">{String(val.type || 'string')}</span>
+                  {val.required === true && <span className="text-[10px] text-[var(--accent-lighter)]">必填</span>}
                 </div>
-              ))
+              );})
             )}
           </div>
         </div>
@@ -280,8 +264,6 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme,
   const handleToggle = useCallback(() => setExpanded(prev => !prev), []);
 
   const handleConfigRefresh = useCallback(async () => {
-    // 当前 enabled/prompt 持久化需要后端添加 PATCH /api/v1/config/tools 端点。
-    // 前端暂时只做本地刷新，从 /api/v1/tools 重新拉取。
     setLoading(true);
     try {
       const { listTools } = await import('../api/api');

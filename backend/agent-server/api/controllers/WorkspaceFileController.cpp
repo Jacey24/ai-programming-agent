@@ -13,6 +13,13 @@
 #include <sstream>
 #include <utility>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <shlobj.h>
+#include <windows.h>
+#endif
 
 #include <sqlite3.h>
 
@@ -165,6 +172,93 @@ std::string filename_from_path(const std::string &path) {
   return std::filesystem::path(path).filename().string();
 }
 
+bool is_valid_utf8(const std::string &value) {
+  for (std::size_t i = 0; i < value.size();) {
+    const unsigned char lead = static_cast<unsigned char>(value[i]);
+    std::size_t count = 0;
+    if (lead <= 0x7f) count = 1;
+    else if (lead >= 0xc2 && lead <= 0xdf) count = 2;
+    else if (lead >= 0xe0 && lead <= 0xef) count = 3;
+    else if (lead >= 0xf0 && lead <= 0xf4) count = 4;
+    else return false;
+    if (i + count > value.size()) return false;
+    for (std::size_t offset = 1; offset < count; ++offset) {
+      const unsigned char ch = static_cast<unsigned char>(value[i + offset]);
+      if ((ch & 0xc0) != 0x80) return false;
+    }
+    if ((lead == 0xe0 && static_cast<unsigned char>(value[i + 1]) < 0xa0) ||
+        (lead == 0xed && static_cast<unsigned char>(value[i + 1]) >= 0xa0) ||
+        (lead == 0xf0 && static_cast<unsigned char>(value[i + 1]) < 0x90) ||
+        (lead == 0xf4 && static_cast<unsigned char>(value[i + 1]) >= 0x90))
+      return false;
+    i += count;
+  }
+  return true;
+}
+
+std::string normalize_text_encoding(const std::string &content) {
+  if (is_valid_utf8(content)) return content;
+#ifdef _WIN32
+  const int wideLength = MultiByteToWideChar(
+      CP_ACP, 0, content.data(), static_cast<int>(content.size()), nullptr, 0);
+  if (wideLength > 0) {
+    std::wstring wide(static_cast<std::size_t>(wideLength), L'\0');
+    MultiByteToWideChar(CP_ACP, 0, content.data(),
+                        static_cast<int>(content.size()), wide.data(), wideLength);
+    const int utf8Length = WideCharToMultiByte(
+        CP_UTF8, 0, wide.data(), wideLength, nullptr, 0, nullptr, nullptr);
+    if (utf8Length > 0) {
+      std::string utf8(static_cast<std::size_t>(utf8Length), '\0');
+      WideCharToMultiByte(CP_UTF8, 0, wide.data(), wideLength, utf8.data(),
+                          utf8Length, nullptr, nullptr);
+      return utf8;
+    }
+  }
+#endif
+  std::string safe;
+  safe.reserve(content.size());
+  for (const unsigned char ch : content) {
+    if (ch <= 0x7f) safe.push_back(static_cast<char>(ch));
+    else safe += "\xef\xbf\xbd";
+  }
+  return safe;
+}
+
+#ifdef _WIN32
+std::wstring utf8_to_wide(const std::string &value) {
+  const int length = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0);
+  if (length <= 0) return {};
+  std::wstring result(static_cast<std::size_t>(length), L'\0');
+  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                      static_cast<int>(value.size()), result.data(), length);
+  return result;
+}
+
+bool reveal_file(const std::string &path) {
+  const std::wstring widePath = utf8_to_wide(path);
+  if (widePath.empty()) return false;
+  const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const bool uninitialize = SUCCEEDED(initialized);
+  PIDLIST_ABSOLUTE filePidl = nullptr;
+  HRESULT result = SHParseDisplayName(widePath.c_str(), nullptr, &filePidl, 0, nullptr);
+  if (SUCCEEDED(result) && filePidl) {
+    PIDLIST_ABSOLUTE folderPidl = ILCloneFull(filePidl);
+    if (folderPidl && ILRemoveLastID(folderPidl)) {
+      PCUITEMID_CHILD child = ILFindLastID(filePidl);
+      result = SHOpenFolderAndSelectItems(folderPidl, 1, &child, 0);
+    } else {
+      result = E_FAIL;
+    }
+    if (folderPidl) ILFree(folderPidl);
+    CoTaskMemFree(filePidl);
+  }
+  if (uninitialize) CoUninitialize();
+  return SUCCEEDED(result);
+}
+#endif
+
 } // namespace
 
 namespace codepilot {
@@ -286,7 +380,8 @@ WorkspaceFileController::getFileContent(const std::string &request) {
                             "415 Unsupported Media Type");
     }
 
-    const std::string content = workspace.readFile(relative_path, 1, -1);
+    const std::string content =
+        normalize_text_encoding(workspace.readFile(relative_path, 1, -1));
     json body;
     body["success"] = true;
     body["data"] = {{"path", relative_path},
@@ -302,6 +397,65 @@ WorkspaceFileController::getFileContent(const std::string &request) {
     return error_response("DATABASE_ERROR", error.what(),
                           "500 Internal Server Error");
   }
+}
+
+std::string
+WorkspaceFileController::revealInFileManager(const std::string &request) {
+#ifndef _WIN32
+  (void)request;
+  return error_response("UNSUPPORTED_PLATFORM",
+                        "file location reveal is only supported on Windows",
+                        "501 Not Implemented");
+#else
+  const std::string workspace_id = extract_workspace_id(request);
+  const std::string relative_path = extract_query_string(request, "path");
+  if (workspace_id.empty() || relative_path.empty())
+    return error_response("INVALID_REQUEST",
+                          "workspace_id and path are required");
+
+  sqlite3 *db = nullptr;
+  if (openSqliteConnection(databasePath_.c_str(), &db) != SQLITE_OK) {
+    const std::string error = db ? sqlite3_errmsg(db) : "sqlite open failed";
+    if (db) sqlite3_close(db);
+    return error_response("DATABASE_ERROR", error, "500 Internal Server Error");
+  }
+  try {
+    WorkspaceService service(db);
+    const auto record = service.getWorkspaceById(workspace_id);
+    if (!record) {
+      sqlite3_close(db);
+      return error_response("WORKSPACE_NOT_FOUND", "workspace not found",
+                            "404 Not Found");
+    }
+    Workspace workspace(record->path);
+    if (!workspace.isPathSafe(relative_path)) {
+      sqlite3_close(db);
+      return error_response("INVALID_PATH", "path is not allowed",
+                            "403 Forbidden");
+    }
+    const std::string full_path = workspace.resolvePath(relative_path);
+    if (!std::filesystem::exists(full_path) ||
+        !std::filesystem::is_regular_file(full_path)) {
+      sqlite3_close(db);
+      return error_response("FILE_NOT_FOUND", "file not found",
+                            "404 Not Found");
+    }
+    const bool revealed = reveal_file(full_path);
+    sqlite3_close(db);
+    if (!revealed)
+      return error_response("REVEAL_FAILED",
+                            "Windows Explorer could not locate the file",
+                            "500 Internal Server Error");
+    json body;
+    body["success"] = true;
+    body["data"] = {{"revealed", true}, {"path", relative_path}};
+    return http_response(body.dump());
+  } catch (const std::exception &error) {
+    sqlite3_close(db);
+    return error_response("REVEAL_FAILED", error.what(),
+                          "500 Internal Server Error");
+  }
+#endif
 }
 
 } // namespace codepilot

@@ -50,6 +50,14 @@ std::string ToolController::listTools() const {
     }
 
     nlohmann::json data = sys.registry().listToolInfo();
+    for (auto &item : data["items"]) {
+        const std::string name = item.value("name", "");
+        item["enabled"] = sys.isToolEnabled(name);
+        const std::string configuredRisk = sys.configuredRiskLevel(name);
+        if (!configuredRisk.empty()) item["risk_level"] = configuredRisk;
+        const auto detail = sys.registry().getToolDetail(name);
+        if (detail.contains("schema")) item["schema"] = detail["schema"];
+    }
     nlohmann::json body;
     body["success"] = true;
     body["data"] = data;
@@ -83,11 +91,33 @@ std::string ToolController::getToolDetail(const std::string& request) const {
         body["error"]["message"] = "tool not found";
         return http_response(body.dump(), "404 Not Found");
     }
+    detail["enabled"] = sys.isToolEnabled(tool_name);
+    const std::string configuredRisk = sys.configuredRiskLevel(tool_name);
+    if (!configuredRisk.empty()) detail["risk_level"] = configuredRisk;
 
     nlohmann::json body;
     body["success"] = true;
     body["data"] = detail;
     return http_response(body.dump());
+}
+
+std::string ToolController::reloadConfig() const {
+    auto& sys = ToolSystem::getInstance();
+    if (!sys.isInitialized()) {
+        nlohmann::json body;
+        body["success"] = false;
+        body["error"]["code"] = "INTERNAL_ERROR";
+        body["error"]["message"] = "Tool system not initialized";
+        return http_response(body.dump(), "500 Internal Server Error");
+    }
+    if (!sys.reloadConfig()) {
+        nlohmann::json body;
+        body["success"] = false;
+        body["error"]["code"] = "TOOL_RELOAD_FAILED";
+        body["error"]["message"] = "工具配置已保存，但运行时热加载失败";
+        return http_response(body.dump(), "500 Internal Server Error");
+    }
+    return http_response(R"({"success":true})");
 }
 
 } // namespace codepilot

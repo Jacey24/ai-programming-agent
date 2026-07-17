@@ -118,7 +118,7 @@ target_compile_definitions(codepilot-agent-server PRIVATE
 message(STATUS "OpenSSL found: ${OPENSSL_VERSION} - LLM HTTPS Client enabled")
 
 if(WIN32)
-    target_link_libraries(codepilot-agent-server PRIVATE ws2_32)
+    target_link_libraries(codepilot-agent-server PRIVATE ws2_32 shell32 ole32)
 
     if(CMAKE_VERSION VERSION_LESS 3.21)
         message(FATAL_ERROR
