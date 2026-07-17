@@ -1,5 +1,5 @@
 // ============================================================
-// 新前端数据类型
+// CodePilot 前端数据类型
 // ============================================================
 
 export interface ApiEnvelope<T> {
@@ -54,14 +54,8 @@ export interface ToolInfo {
   name: string;
   description: string;
   risk_level: string;
-  /**
-   * 后端 listToolInfo 未返回 enabled，前端默认 true；后端加字段后改为来自 API
-   */
   enabled: boolean;
-  /** 工具提示词（后端待加字段） */
-  prompt?: string;
   params: Record<string, unknown>;
-  /** 后端字段名是 group，前端映射为 category */
   category: string;
 }
 
@@ -69,8 +63,8 @@ export interface HealthResponse {
   status: string;
   service?: string;
   version?: string;
-  database?: {type: string; connected: boolean; path: string;};
-  llm?: {provider: string; model: string;};
+  database?: {type: string; connected: boolean; path: string};
+  llm?: {provider: string; model: string};
 }
 
 export interface ActiveTaskState {
@@ -126,7 +120,7 @@ export interface ExpertSummary {
   context_isolation: boolean;
 }
 
-export interface Exponent extends ExpertSummary {
+export interface ExpertDetail extends ExpertSummary {
   context_template: string;
   visible_tools: string[];
   can_modify_plan: boolean;
@@ -161,8 +155,8 @@ export interface ExpertNode {
     can_modify_plan: boolean; can_write_summary: boolean;
     read_global_actively: boolean;
   };
-  llm: {provider: string; model: string; temperature: number; timeout: number;};
-  limits: {max_internal_rounds: number; tool_timeout_seconds: number;};
+  llm: {provider: string; model: string; temperature: number; timeout: number};
+  limits: {max_internal_rounds: number; tool_timeout_seconds: number};
   on_fail: string;
   position?: {x: number; y: number};
 }
@@ -229,7 +223,7 @@ export interface PillStatus {
   tone: PillTone;
 }
 
-// 前端 UI 状态
+// UI state types
 export type AppPhase = 'workspace_select'|'normal';
 export type GlassTab = 'chat'|'files';
 export type ThemeMode = 'dark'|'light';

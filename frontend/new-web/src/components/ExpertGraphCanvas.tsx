@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Exponent, ExpertGraph } from '../types';
-import { getExpert, getExpertGraph, getExpertGraphPositions, saveExpertGraphPositions, setExpertTools, updateExpert } from '../api/api';
+import type { Exponent, ExpertEdge, ExpertGraph, ExpertRouteRule } from '../types';
+import {
+  getExpert,
+  getExpertGraph,
+  getExpertGraphPositions,
+  saveExpertGraphPositions,
+  setExpertRoutes,
+  updateExpert,
+  patchExpert,
+  setExpertTools,
+} from '../api/api';
 import { ExpertEditModal } from './ExpertEditModal';
 
 interface Props {
@@ -10,15 +19,261 @@ interface Props {
 
 interface NodePosition { x: number; y: number; }
 
-interface MousedownInfo { nodeId: string; clientX: number; clientY: number; time: number; }
+interface MousedownInfo { nodeId: string; clientX: number; clientY: number; time: number; zoom: number; panX: number; panY: number; }
 
+interface WiringState {
+  sourceNodeId: string;
+  sourceX: number;
+  sourceY: number;
+  currentScreenX: number;
+  currentScreenY: number;
+}
+
+interface EdgeEditorState {
+  edgeId: string;
+  source: string;
+  target: string;
+  conditionType: string;
+  conditionValue: string;
+  priority: number;
+  isNew: boolean;
+  anchorX: number; // screen position for panel
+  anchorY: number;
+}
+
+interface PortCoords { x: number; y: number; }
+
+// ── Constants ──
 const NODE_W = 180; const NODE_H = 60; const EXPANDED_W = 300;
-const VNODE_W = 90; const VNODE_H = 36; const PORT_RADIUS = 6;
+const VNODE_W = 90; const VNODE_H = 36;
+const PORT_RADIUS = 7; const PORT_HIT = 14;
 const VERTICAL_GAP = 120; const INITIAL_TOP = 100; const INITIAL_LEFT = 80;
-const DRAG_THRESHOLD = 4; const LONG_PRESS_MS = 180;
+const DRAG_THRESHOLD = 5;
 const CREATE_MODE = '<<CREATE>>';
 
+const CONDITION_COLORS: Record<string, string> = {
+  tag_exists: '#6393eb',
+  tag_value_match: '#22c55e',
+  plan_state: '#f59e0b',
+  default: '#6b7280',
+  on_fail: '#ef4444',
+};
 const RISK_COLORS: Record<string, string> = { safe: '#22c55e', medium: '#f59e0b', dangerous: '#ef4444' };
+
+// ── Helpers ──
+function getNodeSize(nodeId: string, isExpanded: boolean) {
+  if (nodeId.startsWith('_')) return { w: VNODE_W, h: VNODE_H };
+  return { w: isExpanded ? EXPANDED_W : NODE_W, h: NODE_H };
+}
+
+function screenToGraph(sx: number, sy: number, zoom: number, pan: { x: number; y: number }) {
+  return { x: (sx - pan.x) / zoom, y: (sy - pan.y) / zoom };
+}
+function graphToScreen(gx: number, gy: number, zoom: number, pan: { x: number; y: number }) {
+  return { x: gx * zoom + pan.x, y: gy * zoom + pan.y };
+}
+
+function edgeLabel(type: string, value: string): string {
+  switch (type) {
+    case 'tag_exists': return `输出 <${value || '?'}>`;
+    case 'tag_value_match': return `匹配 ${value || '?'}`;
+    case 'plan_state': return `计划: ${value || '?'}`;
+    case 'default': return '兜底路由';
+    case 'on_fail': return '失败兜底';
+    default: return value || type;
+  }
+}
+
+// ── Routes ↔ Edges conversion ──
+interface ExpertRoutes { rules: ExpertRouteRule[]; on_fail: string; }
+type RoutesMap = Record<string, ExpertRoutes>;
+
+function routesMapFromGraph(graph: ExpertGraph): RoutesMap {
+  const map: RoutesMap = {};
+  for (const n of graph.nodes) {
+    map[n.id] = { rules: [], on_fail: n.on_fail || '' };
+  }
+  // Fill from edges (on_fail edges are stored on the node, not as separate edges)
+  for (const e of graph.edges || []) {
+    if (e.condition_type === 'on_fail') {
+      if (map[e.source]) map[e.source].on_fail = e.target;
+      continue;
+    }
+    if (!map[e.source]) map[e.source] = { rules: [], on_fail: '' };
+    map[e.source].rules.push({
+      type: e.condition_type,
+      value: e.condition_value,
+      route_to: e.target,
+      priority: e.priority,
+    });
+  }
+  return map;
+}
+
+function edgesFromRoutesMap(map: RoutesMap, graph: ExpertGraph): ExpertEdge[] {
+  const edges: ExpertEdge[] = [];
+  let id = 0;
+  for (const [source, er] of Object.entries(map)) {
+    if (source.startsWith('_')) continue;
+    for (const r of er.rules) {
+      edges.push({
+        id: `e_${++id}`,
+        source,
+        target: r.route_to,
+        condition_type: r.type,
+        condition_value: r.value,
+        priority: r.priority,
+        label: edgeLabel(r.type, r.value),
+      });
+    }
+    if (er.on_fail) {
+      edges.push({
+        id: `e_${++id}`,
+        source,
+        target: er.on_fail,
+        condition_type: 'on_fail',
+        condition_value: '',
+        priority: 0,
+        label: '失败兜底',
+      });
+    }
+  }
+  // Add synthetic entry edge
+  const entryNode = graph.nodes?.find(n => n.is_entry);
+  if (entryNode) {
+    edges.push({
+      id: 'se',
+      source: '_user',
+      target: entryNode.id,
+      condition_type: 'tag_exists',
+      condition_value: '',
+      priority: 0,
+      label: '任务输入',
+    });
+  }
+  return edges;
+}
+
+// ── EdgeEditorPanel ──
+function EdgeEditorPanel({
+  state, theme, onSave, onDelete, onClose,
+}: {
+  state: EdgeEditorState;
+  theme: 'dark' | 'light';
+  onSave: (s: EdgeEditorState) => void;
+  onDelete: (s: EdgeEditorState) => void;
+  onClose: () => void;
+}) {
+  const [ct, setCt] = useState(state.conditionType);
+  const [cv, setCv] = useState(state.conditionValue);
+  const [pri, setPri] = useState(state.priority);
+  const isOnFail = ct === 'on_fail';
+  const isDark = theme === 'dark';
+
+  const panelW = 260;
+  const left = Math.min(state.anchorX, window.innerWidth - panelW - 16);
+  const top = Math.max(8, Math.min(state.anchorY - 80, window.innerHeight - 280));
+
+  return createPortal(
+    <div
+      className={`theme-${theme}`}
+      style={{
+        position: 'fixed', left, top, zIndex: 2100, width: panelW,
+        padding: '16px 18px', borderRadius: 14,
+        background: isDark ? 'rgba(10,14,23,0.95)' : 'rgba(253,252,251,0.95)',
+        border: '1.5px solid var(--glass-border-strong)',
+        backdropFilter: 'blur(20px)',
+        boxShadow: isDark ? '0 8px 40px rgba(0,0,0,0.5)' : '0 8px 40px rgba(0,0,0,0.15)',
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold" style={{ letterSpacing: '0.03em' }}>
+          {state.isNew ? '新连线' : '编辑连线'}
+        </span>
+        <button onClick={onClose} style={{
+          width: 20, height: 20, borderRadius: '50%', border: '1px solid var(--glass-border)',
+          background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>✕</button>
+      </div>
+
+      <div className="text-[10px] text-[var(--text-secondary)]">
+        {state.source} → {state.target}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">条件类型</span>
+        <select
+          value={ct}
+          onChange={e => setCt(e.target.value)}
+          className="form-input text-[11px]"
+          style={{ padding: '4px 6px', borderRadius: 6 }}
+        >
+          <option value="tag_exists">tag_exists (检测标签)</option>
+          <option value="tag_value_match">tag_value_match (匹配值)</option>
+          <option value="plan_state">plan_state (计划状态)</option>
+          <option value="default">default (兜底)</option>
+          <option value="on_fail">on_fail (失败兜底)</option>
+        </select>
+      </div>
+
+      {!isOnFail && (
+        <div className="flex flex-col gap-1">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">条件值</span>
+          <input
+            value={cv}
+            onChange={e => setCv(e.target.value)}
+            placeholder={ct === 'tag_exists' ? 'done / fail / plan' : '值'}
+            className="form-input text-[11px]"
+            style={{ padding: '4px 6px', borderRadius: 6 }}
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1">
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">优先级</span>
+        <input
+          type="number" min={0} max={100}
+          value={String(pri)}
+          onChange={e => setPri(Number(e.target.value) || 0)}
+          className="form-input text-[11px]"
+          style={{ width: 60, padding: '4px 6px', borderRadius: 6 }}
+        />
+      </div>
+
+      <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+        <button
+          onClick={() => {
+            onSave({ ...state, conditionType: ct, conditionValue: cv, priority: pri });
+            onClose();
+          }}
+          style={{
+            flex: 1, height: 28, borderRadius: 7, border: 'none',
+            background: 'var(--accent)', color: '#fff', cursor: 'pointer',
+            fontSize: 11, fontWeight: 600,
+          }}
+        >{state.isNew ? '创建' : '保存'}</button>
+        {!state.isNew && (
+          <button
+            onClick={() => { onDelete(state); onClose(); }}
+            style={{
+              height: 28, padding: '0 10px', borderRadius: 7,
+              border: '1px solid rgba(239,68,68,0.4)', background: 'transparent',
+              color: '#ef4444', cursor: 'pointer', fontSize: 11,
+            }}
+          >删除</button>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ══════════════════════════════════════════════
+// Main Component
+// ══════════════════════════════════════════════
 
 export function ExpertGraphCanvas({ theme }: Props) {
   const [graph, setGraph] = useState<ExpertGraph | null>(null);
@@ -26,33 +281,46 @@ export function ExpertGraphCanvas({ theme }: Props) {
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
   const interactionRef = useRef<HTMLDivElement>(null);
 
+  // ── Zoom / Pan ──
   const [cumPan, setCumPan] = useState({ x: 0, y: 0 });
   const panning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const panBase = useRef({ x: 0, y: 0 });
-
   const [zoomTarget, setZoomTarget] = useState(0.85);
   const [zoomRendered, setZoomRendered] = useState(0.85);
 
+  // ── Refs ──
   const positionRef = useRef(positions); positionRef.current = positions;
   const zoomRenderedRef = useRef(zoomRendered); zoomRenderedRef.current = zoomRendered;
   const cumPanRef = useRef(cumPan); cumPanRef.current = cumPan;
+  const zoomTargetRef = useRef(zoomTarget); zoomTargetRef.current = zoomTarget;
 
+  // ── Expand / Pin ──
   const [editExpertName, setEditExpertName] = useState<string | null>(null);
   const [graphVersion, setGraphVersion] = useState(0);
-
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
   const [pinnedNodeIds, setPinnedNodeIds] = useState<Set<string>>(new Set());
-  const [expandedDataMap, setExpandedDataMap] = useState<Record<string, { prompt: string; tools: string[] }>>({});
+  const [expandedDataMap, setExpandedDataMap] = useState<Record<string, { prompt: string; description: string; tools: string[] }>>({});
   const hoverTimerMap = useRef<Record<string, number>>({});
   const expandedDataRef = useRef(expandedDataMap); expandedDataRef.current = expandedDataMap;
 
+  // ── Node Drag ──
   const mousedownRef = useRef<MousedownInfo | null>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const isDraggingNode = useRef(false);
   const suppressLeaveUntil = useRef<Record<string, number>>({});
   const dragOverCount = useRef<Record<string, number>>({});
   const [draggingTool, setDraggingTool] = useState(false);
+
+  // ── Wiring ──
+  const wiringRef = useRef<WiringState | null>(null);
+  const [wiring, setWiring] = useState<WiringState | null>(null);
+  const [hoveredPort, setHoveredPort] = useState<string | null>(null); // nodeId of hovered input port
+  const [edgeEditor, setEdgeEditor] = useState<EdgeEditorState | null>(null);
+
+  // ── Optimistic routes cache ──
+  const routesMapRef = useRef<RoutesMap>({});
+  const [routesVersion, setRoutesVersion] = useState(0);
 
   const reloadGraph = useCallback(() => setGraphVersion(v => v + 1), []);
 
@@ -70,12 +338,36 @@ export function ExpertGraphCanvas({ theme }: Props) {
   }, [zoomTarget]);
 
   // Load graph
-  useEffect(() => { (async () => { try { const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]); setGraph(g); if (pos) setPositions(pos); } catch {} setLoading(false); })(); }, []);
-  useEffect(() => { if (graphVersion === 0) return; (async () => { try { const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]); setGraph(g); if (pos) setPositions(pos); } catch {} })(); }, [graphVersion]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]);
+        setGraph(g);
+        if (pos) setPositions(pos);
+        routesMapRef.current = routesMapFromGraph(g);
+        setRoutesVersion(v => v + 1);
+      } catch { }
+      setLoading(false);
+    })();
+  }, []);
+  useEffect(() => {
+    if (graphVersion === 0) return;
+    (async () => {
+      try {
+        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]);
+        setGraph(g);
+        if (pos) setPositions(pos);
+        routesMapRef.current = routesMapFromGraph(g);
+        setRoutesVersion(v => v + 1);
+      } catch { }
+    })();
+  }, [graphVersion]);
 
   const nodePositions = useMemoNodePositions(graph, positions);
+  // Compute display edges from routes cache
+  const displayEdges = useMemoEdges(routesMapRef.current, graph, routesVersion);
 
-  // Global tool drag
+  // ── Global tool drag ──
   useEffect(() => {
     const onOver = (e: DragEvent) => e.preventDefault();
     const onStart = (e: DragEvent) => { if (e.dataTransfer?.getData('application/tool-name')) setDraggingTool(true); };
@@ -84,29 +376,71 @@ export function ExpertGraphCanvas({ theme }: Props) {
     return () => { window.removeEventListener('dragover', onOver); window.removeEventListener('dragstart', onStart); window.removeEventListener('dragend', onEnd); };
   }, []);
 
-  // Zoom
-  const zoomHandler = useCallback((e: WheelEvent) => {
-    e.preventDefault();
-    const o = zoomTarget; const raw = o - e.deltaY * 0.0008;
-    const z = Math.min(2, Math.max(0.3, raw));
-    const cp = cumPanRef.current;
-    setCumPan({ x: e.clientX - (e.clientX - cp.x) / o * z, y: e.clientY - (e.clientY - cp.y) / o * z });
-    setZoomTarget(z);
-  }, []);
-  useEffect(() => { const el = interactionRef.current; if (!el) return; el.addEventListener('wheel', zoomHandler, { passive: false }); return () => el.removeEventListener('wheel', zoomHandler); }, [zoomHandler]);
+  // ── Zoom handler (wheel on any element in the canvas area) ──
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      // Allow wheel inside form elements (textarea, input, select) to work normally
+      if ((e.target as HTMLElement)?.closest('textarea, input, select')) return;
+      // Ignore inside the edge editor panel (it's portaled to body, not in the container)
+      if ((e.target as HTMLElement)?.closest('[data-edge-editor]')) return;
+      e.preventDefault();
 
-  // Global mousemove/mouseup for node drag detection
+      const oldZoom = zoomTargetRef.current;
+      const delta = -e.deltaY * 0.0008;
+      const newZoom = Math.min(2, Math.max(0.3, oldZoom + delta * oldZoom));
+      const cp = cumPanRef.current;
+
+      // Zoom toward mouse position: world point under cursor stays fixed
+      const mx = e.clientX, my = e.clientY;
+      const worldX = (mx - cp.x) / oldZoom;
+      const worldY = (my - cp.y) / oldZoom;
+      setCumPan({
+        x: mx - worldX * newZoom,
+        y: my - worldY * newZoom,
+      });
+      setZoomTarget(newZoom);
+    };
+
+    const container = interactionRef.current;
+    if (!container) return;
+
+    // Capture phase so we get wheel before nodes/textarea do
+    container.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => container.removeEventListener('wheel', onWheel, { capture: true });
+  }, []);
+
+  // ── Global mousemove/mouseup ──
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
+      // Wiring
+      const wr = wiringRef.current;
+      if (wr) {
+        wr.currentScreenX = e.clientX;
+        wr.currentScreenY = e.clientY;
+        setWiring({ ...wr });
+
+        // Check hovered input port
+        const z = zoomRenderedRef.current;
+        const cp = cumPanRef.current;
+        const g = screenToGraph(e.clientX, e.clientY, z, cp);
+        const ports = getAllPorts(graph, nodePositions, expandedNodeIds);
+        const hit = findInputPort(g.x, g.y, ports, wr.sourceNodeId);
+        setHoveredPort(hit?.nodeId || null);
+        return;
+      }
+
+      // Node drag
       const md = mousedownRef.current;
       if (!md) return;
       const dx = e.clientX - md.clientX, dy = e.clientY - md.clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (!isDraggingNode.current && (dist > DRAG_THRESHOLD || Date.now() - md.time > LONG_PRESS_MS)) {
+      if (!isDraggingNode.current && dist > DRAG_THRESHOLD) {
         isDraggingNode.current = true;
-        const z = zoomRenderedRef.current, cp = cumPanRef.current;
-        const pos = positionRef.current[md.nodeId] || { x: 0, y: 0 };
-        dragOffset.current = { x: (md.clientX - cp.x) / z - pos.x, y: (md.clientY - cp.y) / z - pos.y };
+        // 使用 mousedown 时记录的 zoom/pan 计算初始偏移，防止拖拽瞬移
+        dragOffset.current = {
+          x: (md.clientX - md.panX) / md.zoom - positionRef.current[md.nodeId]?.x || 0,
+          y: (md.clientY - md.panY) / md.zoom - positionRef.current[md.nodeId]?.y || 0,
+        };
       }
       if (isDraggingNode.current) {
         const z = zoomRenderedRef.current, cp = cumPanRef.current;
@@ -116,7 +450,26 @@ export function ExpertGraphCanvas({ theme }: Props) {
         }));
       }
     };
+
     const onUp = (e: MouseEvent) => {
+      // Wiring complete
+      const wr = wiringRef.current;
+      if (wr) {
+        wiringRef.current = null;
+        setWiring(null);
+        const z = zoomRenderedRef.current;
+        const cp = cumPanRef.current;
+        const g = screenToGraph(e.clientX, e.clientY, z, cp);
+        const ports = getAllPorts(graph, nodePositions, expandedNodeIds);
+        const hit = findInputPort(g.x, g.y, ports, wr.sourceNodeId);
+        if (hit) {
+          handleCreateEdge(wr.sourceNodeId, hit.nodeId, e.clientX, e.clientY, e.shiftKey);
+        }
+        setHoveredPort(null);
+        return;
+      }
+
+      // Node drag up
       const md = mousedownRef.current;
       if (!md) return;
       if (!isDraggingNode.current) {
@@ -129,18 +482,34 @@ export function ExpertGraphCanvas({ theme }: Props) {
           }
         }
       } else {
-        saveExpertGraphPositions(positionRef.current).catch(() => {});
+        saveExpertGraphPositions(positionRef.current).catch(() => { });
       }
       mousedownRef.current = null;
       isDraggingNode.current = false;
     };
-    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [expandedNodeIds]);
 
-  // Pan
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && wiringRef.current) {
+        wiringRef.current = null;
+        setWiring(null);
+        setHoveredPort(null);
+      }
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [expandedNodeIds, graph, nodePositions]);
+
+  // ── Pan ──
   const handleBgMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('[data-node]')) return;
+    if (wiringRef.current) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest('[data-node], [data-port]')) return;
     panning.current = true; panStart.current = { x: e.clientX, y: e.clientY }; panBase.current = { ...cumPanRef.current };
   }, []);
   useEffect(() => {
@@ -150,39 +519,248 @@ export function ExpertGraphCanvas({ theme }: Props) {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
+  // ── Node mouse down ──
   const handleNodeMouseDown = useCallback((nodeId: string, e: React.MouseEvent) => {
+    if (wiringRef.current) return;
     e.stopPropagation(); if (e.button !== 0) return;
-    mousedownRef.current = { nodeId, clientX: e.clientX, clientY: e.clientY, time: Date.now() };
+    const z = zoomRenderedRef.current;
+    const cp = cumPanRef.current;
+    mousedownRef.current = { nodeId, clientX: e.clientX, clientY: e.clientY, time: Date.now(), zoom: z, panX: cp.x, panY: cp.y };
     isDraggingNode.current = false;
   }, []);
 
-  // Expand/collapse
+  // ── Port mouse down (start wiring) ──
+  const handlePortMouseDown = useCallback((nodeId: string, portType: 'input' | 'output', e: React.MouseEvent) => {
+    if (portType !== 'output') return;
+    e.stopPropagation(); e.preventDefault();
+    if (e.button !== 0) return;
+    const z = zoomRenderedRef.current;
+    const cp = cumPanRef.current;
+    const sizes = getNodeSize(nodeId, expandedNodeIds.has(nodeId));
+    const pos = nodePositions[nodeId] || { x: 0, y: 0 };
+    const ox = pos.x + sizes.w;
+    const oy = pos.y + sizes.h / 2;
+    const screen = graphToScreen(ox, oy, z, cp);
+    const ws: WiringState = {
+      sourceNodeId: nodeId,
+      sourceX: ox,
+      sourceY: oy,
+      currentScreenX: screen.x,
+      currentScreenY: screen.y,
+    };
+    wiringRef.current = ws;
+    setWiring(ws);
+  }, [nodePositions, expandedNodeIds]);
+
+  // ── Create edge ──
+  const handleCreateEdge = useCallback(async (sourceId: string, targetId: string, screenX: number, screenY: number, isShiftKey: boolean) => {
+    // Special: _user → node means set entry expert
+    if (sourceId === '_user') {
+      const prevEntry = graph?.nodes?.find(n => n.is_entry);
+      if (prevEntry && prevEntry.id !== targetId) {
+        // Update local graph optimistically
+        if (graph) {
+          const newNodes = graph.nodes.map(n => ({
+            ...n,
+            is_entry: n.id === targetId ? true : (n.id === prevEntry.id ? false : n.is_entry),
+          }));
+          setGraph({ ...graph, nodes: newNodes });
+        }
+        // API calls
+        try {
+          await Promise.all([
+            updateExpert(targetId, { is_entry: true } as Partial<Exponent>),
+            updateExpert(prevEntry.id, { is_entry: false } as Partial<Exponent>),
+          ]);
+          reloadGraph();
+        } catch { reloadGraph(); }
+      }
+      return;
+    }
+
+    // Normal edge creation
+    const rm = routesMapRef.current;
+    const er = rm[sourceId] || { rules: [], on_fail: '' };
+
+    // Check for duplicate
+    const exists = er.rules.some(r => r.route_to === targetId);
+    if (exists) {
+      // Open editor for existing edge
+      const existingEdge = displayEdges.find(e => e.source === sourceId && e.target === targetId);
+      if (existingEdge) {
+        setEdgeEditor({
+          edgeId: existingEdge.id,
+          source: sourceId,
+          target: targetId,
+          conditionType: existingEdge.condition_type,
+          conditionValue: existingEdge.condition_value,
+          priority: existingEdge.priority,
+          isNew: false,
+          anchorX: screenX,
+          anchorY: screenY,
+        });
+      }
+      return;
+    }
+
+    // Determine next priority
+    const maxPri = er.rules.reduce((m, r) => Math.max(m, r.priority), 0);
+
+    const newRule: ExpertRouteRule = isShiftKey
+      ? { type: 'on_fail', value: '', route_to: targetId, priority: 0 }
+      : { type: 'tag_exists', value: '', route_to: targetId, priority: maxPri + 5 };
+
+    if (newRule.type === 'on_fail') {
+      er.on_fail = targetId;
+    } else {
+      er.rules.push(newRule);
+    }
+    rm[sourceId] = er;
+    routesMapRef.current = { ...rm };
+    setRoutesVersion(v => v + 1);
+
+    // Open editor
+    const newEdgeId = `new_${sourceId}_${targetId}_${Date.now()}`;
+    setEdgeEditor({
+      edgeId: newEdgeId,
+      source: sourceId,
+      target: targetId,
+      conditionType: newRule.type,
+      conditionValue: newRule.value,
+      priority: newRule.priority,
+      isNew: true,
+      anchorX: screenX,
+      anchorY: screenY,
+    });
+
+    // Background save
+    try {
+      if (newRule.type === 'on_fail') {
+        await updateExpert(sourceId, { on_fail: targetId } as Partial<Exponent>);
+      } else {
+        await setExpertRoutes(sourceId, er.rules);
+      }
+      reloadGraph();
+    } catch {
+      // Revert on failure
+      const restored = routesMapFromGraph(graph!);
+      routesMapRef.current = restored;
+      setRoutesVersion(v => v + 1);
+    }
+  }, [graph, displayEdges, reloadGraph]);
+
+  // ── Edge editor actions ──
+  const handleEdgeSave = useCallback(async (s: EdgeEditorState) => {
+    const rm = routesMapRef.current;
+    const er = rm[s.source] || { rules: [], on_fail: '' };
+
+    if (s.conditionType === 'on_fail') {
+      er.on_fail = s.target;
+      er.rules = er.rules.filter(r => r.route_to !== s.target);
+    } else {
+      // Remove old on_fail if target matches
+      if (er.on_fail === s.target) er.on_fail = '';
+      const ruleIdx = er.rules.findIndex(r => r.route_to === s.target);
+      const newRule: ExpertRouteRule = {
+        type: s.conditionType,
+        value: s.conditionValue,
+        route_to: s.target,
+        priority: s.priority,
+      };
+      if (ruleIdx >= 0) {
+        er.rules[ruleIdx] = newRule;
+      } else {
+        // New rule (it was previously on_fail, now normal)
+        er.on_fail = '';
+        er.rules.push(newRule);
+      }
+    }
+
+    rm[s.source] = er;
+    routesMapRef.current = { ...rm };
+    setRoutesVersion(v => v + 1);
+
+    try {
+      if (s.conditionType === 'on_fail') {
+        await updateExpert(s.source, { on_fail: s.target } as Partial<Exponent>);
+      } else {
+        await setExpertRoutes(s.source, er.rules);
+      }
+      reloadGraph();
+    } catch {
+      reloadGraph();
+    }
+  }, [reloadGraph]);
+
+  const handleEdgeDelete = useCallback(async (s: EdgeEditorState) => {
+    const rm = routesMapRef.current;
+    const er = rm[s.source];
+    if (!er) return;
+
+    if (s.conditionType === 'on_fail') {
+      er.on_fail = '';
+    } else {
+      er.rules = er.rules.filter(r => r.route_to !== s.target);
+    }
+    rm[s.source] = { ...er };
+    routesMapRef.current = { ...rm };
+    setRoutesVersion(v => v + 1);
+
+    try {
+      if (s.conditionType === 'on_fail') {
+        await updateExpert(s.source, { on_fail: '' } as Partial<Exponent>);
+      } else {
+        await setExpertRoutes(s.source, er.rules);
+      }
+      reloadGraph();
+    } catch {
+      reloadGraph();
+    }
+  }, [reloadGraph]);
+
+  const handleEdgeClick = useCallback((edge: ExpertEdge, e: React.MouseEvent) => {
+    if (wiringRef.current) return;
+    e.stopPropagation();
+    setEdgeEditor({
+      edgeId: edge.id,
+      source: edge.source,
+      target: edge.target,
+      conditionType: edge.condition_type,
+      conditionValue: edge.condition_value,
+      priority: edge.priority,
+      isNew: false,
+      anchorX: e.clientX,
+      anchorY: e.clientY,
+    });
+  }, []);
+
+  // ── Expand / collapse ──
   const openExpanded = useCallback(async (nodeId: string, mode: 'click' | 'hover' | 'drag' = 'hover') => {
     setExpandedNodeIds(prev => new Set(prev).add(nodeId));
     if (mode === 'click') setPinnedNodeIds(prev => new Set(prev).add(nodeId));
     suppressLeaveUntil.current[nodeId] = Date.now() + 200;
-    try { const e = await getExpert(nodeId); setExpandedDataMap(prev => ({ ...prev, [nodeId]: { prompt: e.context_template || '', tools: e.visible_tools || [] } })); } catch {}
+    try { const e = await getExpert(nodeId); setExpandedDataMap(prev => ({ ...prev, [nodeId]: { prompt: e.context_template || '', description: e.description || '', tools: e.visible_tools || [] } })); } catch { }
   }, []);
   const closeExpanded = useCallback((nodeId: string) => {
     setExpandedNodeIds(prev => { const n = new Set(prev); n.delete(nodeId); return n; });
     setPinnedNodeIds(prev => { const n = new Set(prev); n.delete(nodeId); return n; });
   }, []);
   const isPinned = useCallback((nodeId: string) => pinnedNodeIds.has(nodeId), [pinnedNodeIds]);
-
   const handleNodeHoverEnter = useCallback((nodeId: string) => {
-    if (nodeId.startsWith('_') || mousedownRef.current || expandedNodeIds.has(nodeId)) return;
+    if (nodeId.startsWith('_') || mousedownRef.current || wiringRef.current || expandedNodeIds.has(nodeId)) return;
     clearTimeout(hoverTimerMap.current[nodeId]);
-    hoverTimerMap.current[nodeId] = window.setTimeout(() => { if (!mousedownRef.current && !expandedNodeIds.has(nodeId)) openExpanded(nodeId, 'hover'); }, 300);
+    hoverTimerMap.current[nodeId] = window.setTimeout(() => { if (!mousedownRef.current && !wiringRef.current && !expandedNodeIds.has(nodeId)) openExpanded(nodeId, 'hover'); }, 300);
   }, [expandedNodeIds, openExpanded]);
-  const handleNodeHoverLeave = useCallback((nodeId: string) => {
+  const handleNodeHoverLeave = useCallback((nodeId: string, e?: React.MouseEvent) => {
     clearTimeout(hoverTimerMap.current[nodeId]);
     if (Date.now() < (suppressLeaveUntil.current[nodeId] || 0)) return;
+    // Don't close if mouse moved to a child element within the same node
+    if (e && e.relatedTarget instanceof Node && (e.currentTarget as Node).contains(e.relatedTarget)) return;
     if (expandedNodeIds.has(nodeId) && !pinnedNodeIds.has(nodeId)) closeExpanded(nodeId);
   }, [expandedNodeIds, pinnedNodeIds, closeExpanded]);
-
   const handleNodeDoubleClick = useCallback((nodeId: string) => { if (nodeId.startsWith('_')) return; closeExpanded(nodeId); setEditExpertName(nodeId); }, [closeExpanded]);
 
-  // Tool drag onto nodes
+  // ── Tool drag onto nodes ──
   const handleNodeDragOver = useCallback((nodeId: string, e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy';
     dragOverCount.current[nodeId] = (dragOverCount.current[nodeId] || 0) + 1;
@@ -197,43 +775,149 @@ export function ExpertGraphCanvas({ theme }: Props) {
     const tn = e.dataTransfer.getData('application/tool-name');
     if (tn) { const d = expandedDataRef.current[nodeId]; if (d && !d.tools.includes(tn)) saveTools(nodeId, [...d.tools, tn]); }
   }, []);
-
   const saveTools = useCallback(async (nodeId: string, newTools: string[]) => {
     setExpandedDataMap(prev => ({ ...prev, [nodeId]: { ...prev[nodeId], tools: newTools } }));
-    try { await setExpertTools(nodeId, newTools); reloadGraph(); } catch { try { const e = await getExpert(nodeId); setExpandedDataMap(prev => ({ ...prev, [nodeId]: { prompt: e.context_template || '', tools: e.visible_tools || [] } })); } catch {} }
+    try { await setExpertTools(nodeId, newTools); reloadGraph(); } catch { try { const e = await getExpert(nodeId); setExpandedDataMap(prev => ({ ...prev, [nodeId]: { prompt: e.context_template || '', description: e.description || '', tools: e.visible_tools || [] } })); } catch { } }
   }, [reloadGraph]);
   const removeTool = useCallback((nodeId: string, tn: string) => { const d = expandedDataRef.current[nodeId]; if (d) saveTools(nodeId, d.tools.filter(t => t !== tn)); }, [saveTools]);
-  const savePrompt = useCallback(async (nodeId: string, prompt: string) => { try { await updateExpert(nodeId, { context_template: prompt }); } catch {} }, []);
+  const savePrompt = useCallback(async (nodeId: string, prompt: string) => { try { await patchExpert(nodeId, { context_template: prompt }); } catch { } }, []);
 
-  const edgePaths = useMemoEdgePaths(graph, nodePositions);
+  // ── Edge paths ──
+  const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges);
+
   if (loading || !graph) return null;
   const tr = `scale(${zoomRendered}) translate(${cumPan.x}px, ${cumPan.y}px)`;
+  const z = zoomRendered;
+  const cp = cumPan;
+
+  // Compute all port positions for rendering
+  const allPorts = computeRenderPorts(graph, nodePositions, expandedNodeIds);
 
   return (
     <div className={`expert-canvas theme-${theme}`} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <div ref={interactionRef} onMouseDown={handleBgMouseDown} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'auto', cursor: panning.current ? 'grabbing' : 'default' }} />
+
+      {/* SVG layer: edges + temporary wire */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <g style={{ transform: tr, transformOrigin: '0 0' }}>
           {edgePaths.map(ep => (
             <g key={ep.id}>
-              <path d={ep.d} fill="none" stroke={ep.color} strokeWidth={ep.isActive ? 2.5 : 1.5} strokeOpacity={ep.isActive ? 0.9 : 0.45} strokeDasharray={ep.conditionType === 'default' ? '6 3' : undefined} />
-              {ep.label && <text x={ep.labelX} y={ep.labelY - 6} textAnchor="middle" fill={theme === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'} fontSize={10} fontFamily="monospace" style={{ pointerEvents: 'none', userSelect: 'none' }}>{ep.label}</text>}
+              {/* Invisible wide hit area */}
+              <path
+                d={ep.d} fill="none" stroke="transparent" strokeWidth={14}
+                style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                onClick={e => handleEdgeClick(ep.edge, e)}
+              />
+              <path
+                d={ep.d} fill="none"
+                stroke={ep.color}
+                strokeWidth={ep.isActive ? 3 : 1.8}
+                strokeOpacity={ep.isActive ? 0.95 : 0.5}
+                strokeDasharray={ep.conditionType === 'default' ? '6 3' : undefined}
+                style={{ pointerEvents: 'none', transition: 'stroke-opacity 0.15s, stroke-width 0.15s' }}
+              />
+              {ep.label && (
+                <text
+                  x={ep.labelX} y={ep.labelY - 6}
+                  textAnchor="middle"
+                  fill={theme === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'}
+                  fontSize={10} fontFamily="monospace"
+                  style={{ pointerEvents: 'none', userSelect: 'none' }}
+                >{ep.label}</text>
+              )}
             </g>
           ))}
+
+          {/* Temporary wiring line */}
+          {wiring && (
+            <line
+              x1={wiring.sourceX} y1={wiring.sourceY}
+              x2={screenToGraph(wiring.currentScreenX, wiring.currentScreenY, z, cp).x}
+              y2={screenToGraph(wiring.currentScreenX, wiring.currentScreenY, z, cp).y}
+              stroke="var(--accent-light)"
+              strokeWidth={2}
+              strokeDasharray="8 4"
+              strokeOpacity={0.8}
+              style={{ pointerEvents: 'none' }}
+            >
+              <animate attributeName="stroke-dashoffset" from="24" to="0" dur="0.6s" repeatCount="indefinite" />
+            </line>
+          )}
         </g>
       </svg>
+
+      {/* Node + Port layer */}
       <div style={{ position: 'absolute', inset: 0, transform: tr, transformOrigin: '0 0', pointerEvents: 'none' }}>
-        {graph.virtual_nodes?.map(vn => {
-          const pos = nodePositions[vn.id] || { x: 0, y: 0 };
+        {/* Port circles (render behind nodes but with pointer events) */}
+        {allPorts.map(p => {
+          const isHighlight = wiring && hoveredPort === p.nodeId;
+          const isInput = p.type === 'input';
+          const sc = graphToScreen(p.x, p.y, z, cp);
           return (
-            <div key={vn.id} data-node={vn.id} onMouseDown={e => handleNodeMouseDown(vn.id, e)}
-              style={{ position: 'absolute', left: pos.x, top: pos.y, width: VNODE_W, height: VNODE_H, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', cursor: 'grab', pointerEvents: 'auto', userSelect: 'none',
-                background: vn.type === 'entry' ? (theme === 'dark' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.08)') : (theme === 'dark' ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)'),
-                border: `1.5px solid ${vn.type === 'entry' ? (theme === 'dark' ? 'rgba(34,197,94,0.5)' : 'rgba(34,197,94,0.4)') : (theme === 'dark' ? 'rgba(239,68,68,0.5)' : 'rgba(239,68,68,0.4)')}`,
-                color: vn.type === 'entry' ? (theme === 'dark' ? 'rgba(34,197,94,0.9)' : 'rgba(34,197,94,0.8)') : (theme === 'dark' ? 'rgba(239,68,68,0.9)' : 'rgba(239,68,68,0.8)'),
-                backdropFilter: 'blur(12px)' }}>{vn.label}</div>
+            <div
+              key={`${p.nodeId}-${p.type}`}
+              data-port={p.nodeId}
+              data-port-type={p.type}
+              onMouseDown={e => handlePortMouseDown(p.nodeId, p.type, e)}
+              style={{
+                position: 'absolute',
+                left: p.x - PORT_RADIUS,
+                top: p.y - PORT_RADIUS,
+                width: PORT_RADIUS * 2,
+                height: PORT_RADIUS * 2,
+                borderRadius: '50%',
+                background: isHighlight
+                  ? 'var(--accent-light)'
+                  : isInput
+                    ? (theme === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)')
+                    : 'var(--accent)',
+                border: `2px solid ${
+                  isHighlight ? 'var(--accent-light)' :
+                  isInput ? (theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.25)') :
+                  'var(--accent)'
+                }`,
+                cursor: p.type === 'output' ? 'crosshair' : (wiring ? 'crosshair' : 'default'),
+                pointerEvents: 'auto',
+                zIndex: 5,
+                boxShadow: isHighlight ? '0 0 12px var(--accent-light)' : 'none',
+                transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+                transform: isHighlight ? 'scale(1.4)' : 'scale(1)',
+              }}
+            />
           );
         })}
+
+        {/* Virtual nodes */}
+        {graph.virtual_nodes?.map(vn => {
+          const pos = nodePositions[vn.id] || { x: 0, y: 0 };
+          const isEntry = vn.type === 'entry';
+          return (
+            <div key={vn.id} data-node={vn.id}
+              onMouseDown={e => handleNodeMouseDown(vn.id, e)}
+              style={{
+                position: 'absolute', left: pos.x, top: pos.y,
+                width: VNODE_W, height: VNODE_H,
+                borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 600, letterSpacing: '0.04em',
+                cursor: 'grab', pointerEvents: 'auto', userSelect: 'none',
+                background: isEntry
+                  ? (theme === 'dark' ? 'rgba(34,197,94,0.12)' : 'rgba(21,128,61,0.14)')
+                  : (theme === 'dark' ? 'rgba(239,68,68,0.12)' : 'rgba(185,28,28,0.14)'),
+                border: `1.5px solid ${
+                  isEntry
+                    ? (theme === 'dark' ? 'rgba(34,197,94,0.5)' : 'rgba(21,128,61,0.55)')
+                    : (theme === 'dark' ? 'rgba(239,68,68,0.5)' : 'rgba(185,28,28,0.55)')
+                }`,
+                color: isEntry
+                  ? (theme === 'dark' ? 'rgba(34,197,94,0.9)' : 'rgba(21,128,61,0.92)')
+                  : (theme === 'dark' ? 'rgba(239,68,68,0.9)' : 'rgba(185,28,28,0.92)'),
+                backdropFilter: 'blur(12px)',
+              }}
+            >{vn.label}</div>
+          );
+        })}
+
+        {/* Expert nodes */}
         {graph.nodes?.map(node => {
           const pos = nodePositions[node.id] || { x: 0, y: 0 };
           const isExpanded = expandedNodeIds.has(node.id);
@@ -247,29 +931,45 @@ export function ExpertGraphCanvas({ theme }: Props) {
               onMouseDown={e => handleNodeMouseDown(node.id, e)}
               onMouseEnter={e => {
                 handleNodeHoverEnter(node.id);
-                if (!dragHL && !isExpanded) { e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)'; }
+                if (!dragHL && !isExpanded) {
+                  e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)';
+                }
               }}
               onMouseLeave={e => {
                 handleNodeHoverLeave(node.id);
-                e.currentTarget.style.boxShadow = dragHL && isCollapsed ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)') : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
+                e.currentTarget.style.boxShadow = dragHL && isCollapsed
+                  ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
+                  : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
               }}
               onDragOver={e => handleNodeDragOver(node.id, e)}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) handleNodeDragLeave(node.id); }}
               onDrop={e => handleNodeDrop(node.id, e)}
               style={{
-                position: 'absolute', left: pos.x, top: pos.y, width: isExpanded ? EXPANDED_W : NODE_W,
+                position: 'absolute', left: pos.x, top: pos.y,
+                width: isExpanded ? EXPANDED_W : NODE_W,
                 ...(!isExpanded ? { height: NODE_H } : { minHeight: 280, maxHeight: 480 }),
                 borderRadius: isExpanded ? 16 : 12,
                 display: 'flex', flexDirection: 'column', overflow: isCollapsed ? 'hidden' : 'auto',
-                cursor: isDraggingNode.current ? 'grabbing' : 'pointer', pointerEvents: 'auto', userSelect: 'none',
-                background: isExpanded ? (theme === 'dark' ? 'rgba(10,14,23,0.92)' : 'rgba(253,252,251,0.92)') : (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
+                cursor: isDraggingNode.current ? 'grabbing' : 'pointer',
+                pointerEvents: 'auto', userSelect: 'none',
+                background: isExpanded
+                  ? (theme === 'dark' ? 'rgba(10,14,23,0.92)' : 'rgba(253,252,251,0.92)')
+                  : (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
                 border: `2px solid ${isExpanded || dragHL ? 'var(--accent-light)' : 'var(--glass-border-strong)'}`,
                 color: 'var(--text-primary)', backdropFilter: isExpanded ? 'blur(24px)' : 'blur(20px)',
-                boxShadow: isExpanded ? (theme === 'dark' ? '0 8px 48px rgba(99,147,235,0.35)' : '0 8px 48px rgba(99,147,235,0.2)') : dragHL ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)') : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
+                boxShadow: isExpanded
+                  ? (theme === 'dark' ? '0 8px 48px rgba(99,147,235,0.35)' : '0 8px 48px rgba(99,147,235,0.2)')
+                  : dragHL
+                    ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
+                    : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
                 transition: 'width 0.12s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), min-height 0.12s cubic-bezier(0.4, 0, 0.2, 1)',
-                zIndex: isExpanded ? 10 : 0, padding: isExpanded ? '16px 18px' : 0, gap: isExpanded ? 10 : 0,
-                alignItems: isCollapsed ? 'center' : undefined, justifyContent: isCollapsed ? 'center' : undefined,
-              }}>
+                zIndex: isExpanded ? 10 : 0,
+                padding: isExpanded ? '16px 18px' : 0,
+                gap: isExpanded ? 10 : 0,
+                alignItems: isCollapsed ? 'center' : undefined,
+                justifyContent: isCollapsed ? 'center' : undefined,
+              }}
+            >
               {isCollapsed ? (
                 <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>{node.label}</span>
               ) : ed ? (
@@ -282,8 +982,8 @@ export function ExpertGraphCanvas({ theme }: Props) {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5 shrink-0" data-no-close>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">提示词</span>
-                    <textarea value={ed.prompt} onChange={e => setExpandedDataMap(prev => ({ ...prev, [node.id]: { ...prev[node.id], prompt: e.target.value } }))} onBlur={e => savePrompt(node.id, e.target.value)} rows={3} className="form-input" style={{ resize: 'vertical', fontSize: 10, lineHeight: 1.55, fontFamily: 'monospace', padding: '6px 8px', borderRadius: 8, background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }} placeholder="输入 system prompt..." />
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">角色描述</span>
+                    <textarea value={ed.description || ed.prompt} readOnly rows={3} className="form-input" style={{ resize: 'none', fontSize: 10, lineHeight: 1.55, fontFamily: 'monospace', padding: '6px 8px', borderRadius: 8, background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)', cursor: 'default' }} placeholder="只读预览 · 点击「完整配置 ↗」编辑" />
                   </div>
                   <div className="flex flex-col gap-2 flex-1 min-h-0" data-no-close>
                     <div className="flex items-center justify-between shrink-0"><span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">可见工具</span><span className="text-[9px] text-[var(--text-secondary)]">{ed.tools.length}</span></div>
@@ -304,31 +1004,225 @@ export function ExpertGraphCanvas({ theme }: Props) {
           );
         })}
       </div>
+
+      {/* Edge editor panel */}
+      {edgeEditor && (
+        <EdgeEditorPanel
+          state={edgeEditor}
+          theme={theme}
+          onSave={handleEdgeSave}
+          onDelete={handleEdgeDelete}
+          onClose={() => setEdgeEditor(null)}
+        />
+      )}
+
       <AddExpertButton theme={theme} onCreate={() => setEditExpertName(CREATE_MODE)} />
       {editExpertName && <ExpertEditModal expertName={editExpertName === CREATE_MODE ? undefined : editExpertName} theme={theme} onClose={() => setEditExpertName(null)} onSaved={() => { reloadGraph(); setEditExpertName(null); }} />}
     </div>
   );
 }
 
-// AddExpertButton
-function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreate: () => void }) {
-  const [pos, setPos] = useState({ x: window.innerWidth - 160, y: 24 });
-  const dragging = useRef(false); const offset = useRef({ x: 0, y: 0 }); const posRef = useRef(pos); posRef.current = pos;
-  const onMD = useCallback((e: React.MouseEvent) => { if (e.button !== 0) return; dragging.current = true; offset.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y }; e.stopPropagation(); e.preventDefault(); }, []);
-  useEffect(() => { const onM = (e: MouseEvent) => { if (!dragging.current) return; setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y }); }; const onU = () => { dragging.current = false; }; window.addEventListener('mousemove', onM); window.addEventListener('mouseup', onU); return () => { window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); }; }, []);
-  const isDark = theme === 'dark';
-  return createPortal(<div onMouseDown={onMD} onClick={onCreate} style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 100, minWidth: 38, height: 38, padding: '0 14px', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 600, letterSpacing: '0.03em', cursor: 'grab', userSelect: 'none', background: isDark ? '#ffffff' : '#0a0e17', color: isDark ? '#0a0e17' : '#ffffff', border: 'none', boxShadow: isDark ? '0 4px 24px rgba(255,255,255,0.15)' : '0 4px 24px rgba(0,0,0,0.15)', transition: 'box-shadow 0.2s, transform 0.15s' }}><span style={{ fontSize: 16, lineHeight: 1 }}>+</span><span>Expert</span></div>, document.body);
+// ── Port computation ──
+interface PortRenderInfo { nodeId: string; type: 'input' | 'output'; x: number; y: number; }
+
+function computeRenderPorts(
+  graph: ExpertGraph | null,
+  positions: Record<string, NodePosition>,
+  expandedIds: Set<string>,
+): PortRenderInfo[] {
+  if (!graph) return [];
+  const ports: PortRenderInfo[] = [];
+  const allNodes = [...(graph.virtual_nodes || []).map(v => ({ id: v.id, isVirt: true })), ...(graph.nodes || []).map(n => ({ id: n.id, isVirt: false }))];
+
+  for (const n of allNodes) {
+    const pos = positions[n.id] || { x: 0, y: 0 };
+    const sizes = getNodeSize(n.id, expandedIds.has(n.id));
+    // _user (entry) only has output, _done (exit) only has input
+    if (n.id !== '_user') {
+      ports.push({ nodeId: n.id, type: 'input', x: pos.x, y: pos.y + sizes.h / 2 });
+    }
+    if (n.id !== '_done') {
+      ports.push({ nodeId: n.id, type: 'output', x: pos.x + sizes.w, y: pos.y + sizes.h / 2 });
+    }
+  }
+  return ports;
 }
 
-// Hooks
+function getAllPorts(
+  graph: ExpertGraph | null,
+  positions: Record<string, NodePosition>,
+  expandedIds: Set<string>,
+): { nodeId: string; type: 'input' | 'output'; x: number; y: number }[] {
+  if (!graph) return [];
+  const ports: { nodeId: string; type: 'input' | 'output'; x: number; y: number }[] = [];
+  const allNodes = [...(graph.virtual_nodes || []).map(v => ({ id: v.id, isVirt: true })), ...(graph.nodes || []).map(n => ({ id: n.id, isVirt: false }))];
+
+  for (const n of allNodes) {
+    const pos = positions[n.id] || { x: 0, y: 0 };
+    const sizes = getNodeSize(n.id, expandedIds.has(n.id));
+    ports.push({ nodeId: n.id, type: 'input', x: pos.x, y: pos.y + sizes.h / 2 });
+    ports.push({ nodeId: n.id, type: 'output', x: pos.x + sizes.w, y: pos.y + sizes.h / 2 });
+  }
+  return ports;
+}
+
+function findInputPort(gx: number, gy: number, ports: { nodeId: string; type: string; x: number; y: number }[], excludeNodeId: string) {
+  let best: { nodeId: string } | null = null;
+  let bestDist = PORT_HIT;
+  for (const p of ports) {
+    if (p.type !== 'input') continue;
+    if (p.nodeId === excludeNodeId) continue; // can't connect to self
+    const dx = p.x - gx, dy = p.y - gy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+    }
+  }
+  return best;
+}
+
+// ── AddExpertButton ──
+function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreate: () => void }) {
+  const [pos, setPos] = useState(() => {
+    // 初始化在入口虚拟节点右侧：入口节点在画布中央偏上，按钮对齐其右侧
+    const z = 0.85;
+    const entryGraphX = window.innerWidth / 2 / z - NODE_W / 2;
+    const entryScreenRight = entryGraphX * z + VNODE_W * z;
+    const defaultTotalH = (2 + 0) * VERTICAL_GAP + VNODE_H; // 默认 2 虚拟节点
+    const startGraphY = window.innerHeight / 2 / z - defaultTotalH / 2;
+    const entryScreenTop = startGraphY * z;
+    const buttonY = entryScreenTop + (VNODE_H * z - 38) / 2;
+    return { x: entryScreenRight + 16, y: Math.max(8, buttonY) };
+  });
+  const [hovered, setHovered] = useState(false);
+  const dragging = useRef(false);
+  const dragMoved = useRef(false);
+  const offset = useRef({ x: 0, y: 0 });
+  const startPos = useRef({ x: 0, y: 0 });
+  const posRef = useRef(pos); posRef.current = pos;
+  const onMD = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    dragging.current = true;
+    dragMoved.current = false;
+    startPos.current = { x: e.clientX, y: e.clientY };
+    offset.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
+    e.stopPropagation();
+    e.preventDefault();
+  }, []);
+  useEffect(() => {
+    const onM = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - startPos.current.x;
+      const dy = e.clientY - startPos.current.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved.current = true;
+      if (dragMoved.current) setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+    };
+    const onU = () => { dragging.current = false; };
+    window.addEventListener('mousemove', onM);
+    window.addEventListener('mouseup', onU);
+    return () => { window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
+  }, []);
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (dragMoved.current) return;
+    onCreate();
+  }, [onCreate]);
+  const isDark = theme === 'dark';
+  return createPortal(
+    <div
+      onMouseDown={onMD}
+      onClick={handleClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'fixed', left: pos.x, top: pos.y, zIndex: 100,
+        minWidth: 38, height: 38, padding: '0 14px', borderRadius: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        fontSize: 14, fontWeight: 600, letterSpacing: '0.03em',
+        cursor: 'grab', userSelect: 'none',
+        background: isDark ? '#ffffff' : '#0a0e17',
+        color: isDark ? '#0a0e17' : '#ffffff',
+        border: 'none',
+        boxShadow: isDark
+          ? (hovered ? '0 4px 32px rgba(255,255,255,0.35), 0 0 60px rgba(255,255,255,0.08)' : '0 4px 24px rgba(255,255,255,0.15)')
+          : (hovered ? '0 6px 28px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.18)'),
+        transform: hovered ? 'scale(1.06)' : 'scale(1)',
+        transition: 'box-shadow 0.2s, transform 0.2s',
+      }}
+    >
+      <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+      <span>Expert</span>
+    </div>,
+    document.body,
+  );
+}
+
+// ── Hooks ──
 function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, NodePosition>) {
   const [c, setC] = useState<Record<string, NodePosition>>({});
-  useEffect(() => { if (!graph) return; const r: Record<string, NodePosition> = { ...saved }; (graph.virtual_nodes || []).forEach(vn => { if (!r[vn.id]) r[vn.id] = { x: INITIAL_LEFT, y: INITIAL_TOP }; }); (graph.nodes || []).forEach((n, i) => { if (!r[n.id]) r[n.id] = { x: INITIAL_LEFT, y: INITIAL_TOP + (i + 1) * VERTICAL_GAP }; }); const ev = (graph.virtual_nodes || []).find(v => v.type === 'exit'); if (ev && !saved[ev.id]) r[ev.id] = { x: INITIAL_LEFT, y: INITIAL_TOP + (graph.nodes.length + 1) * VERTICAL_GAP }; setC(r); }, [graph, saved]);
+  useEffect(() => {
+    if (!graph) return;
+    const r: Record<string, NodePosition> = { ...saved };
+    const totalCount = (graph.virtual_nodes || []).length + (graph.nodes || []).length;
+    const totalHeight = totalCount * VERTICAL_GAP + VNODE_H;
+    const centerY = window.innerHeight / 2 / 0.85;
+    const startY = centerY - totalHeight / 2;
+    const centerX = window.innerWidth / 2 / 0.85 - NODE_W / 2;
+    (graph.virtual_nodes || []).forEach(vn => { if (!r[vn.id]) r[vn.id] = { x: centerX, y: startY }; });
+    (graph.nodes || []).forEach((n, i) => { if (!r[n.id]) r[n.id] = { x: centerX, y: startY + (i + 1) * VERTICAL_GAP }; });
+    const ev = (graph.virtual_nodes || []).find(v => v.type === 'exit');
+    if (ev && !saved[ev.id]) r[ev.id] = { x: centerX, y: startY + (graph.nodes.length + 1) * VERTICAL_GAP };
+    setC(r);
+  }, [graph, saved]);
   return Object.keys(c).length > 0 ? c : {};
 }
-interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; }
-function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>) {
+
+function useMemoEdges(routesMap: RoutesMap, graph: ExpertGraph | null, version: number): ExpertEdge[] {
+  const [edges, setEdges] = useState<ExpertEdge[]>([]);
+  useEffect(() => {
+    if (!graph) { setEdges([]); return; }
+    setEdges(edgesFromRoutesMap(routesMap, graph));
+  }, [graph, routesMap, version]);
+  return edges;
+}
+
+interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; edge: ExpertEdge; }
+
+function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>, displayEdges: ExpertEdge[]) {
   const [paths, setPaths] = useState<EdgePath[]>([]);
-  useEffect(() => { if (!graph) { setPaths([]); return; } const r: EdgePath[] = []; const ae = [...(graph.edges || [])]; const en = graph.nodes?.find(n => n.is_entry); if (en) ae.push({ id: 'se', source: '_user', target: en.id, condition_type: 'tag_exists', condition_value: '', priority: 0, label: '任务输入' }); const pc: Record<string, number> = {}; for (const e of ae) { const sp = positions[e.source], tp = positions[e.target]; if (!sp || !tp) continue; const sV = e.source.startsWith('_'), tV = e.target.startsWith('_'); const sx = sp.x + (sV ? VNODE_W : NODE_W) + PORT_RADIUS, sy = sp.y + (sV ? VNODE_H : NODE_H) / 2; const tx = tp.x - PORT_RADIUS, ty = tp.y + (tV ? VNODE_H : NODE_H) / 2; const pk = `${e.source}->${e.target}`; const pi = (pc[pk] = (pc[pk] || 0) + 1); const co = (pi - 1) * 32; const dx = Math.abs(tx - sx) * 0.5 + co; const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`; const lx = (sx + tx) / 2 + co * 0.5, ly = (sy + ty) / 2 - 2 + (pi - 1) * 14; let col: string; switch (e.condition_type) { case 'on_fail': col = '#ef4444'; break; case 'tag_exists': case 'tag_value_match': col = '#6393eb'; break; default: col = '#6b7280'; } r.push({ id: e.id, d, color: col, label: e.label || '', labelX: lx, labelY: ly, conditionType: e.condition_type, isActive: false }); } setPaths(r); }, [graph, positions]);
+  useEffect(() => {
+    if (!graph) { setPaths([]); return; }
+    const r: EdgePath[] = [];
+    const pc: Record<string, number> = {};
+    for (const e of displayEdges) {
+      const sp = positions[e.source], tp = positions[e.target];
+      if (!sp || !tp) continue;
+      const sSize = getNodeSize(e.source, false), tSize = getNodeSize(e.target, false);
+      const sx = sp.x + sSize.w + PORT_RADIUS;
+      const sy = sp.y + sSize.h / 2;
+      const tx = tp.x - PORT_RADIUS;
+      const ty = tp.y + tSize.h / 2;
+      const pk = `${e.source}->${e.target}`;
+      const pi = (pc[pk] = (pc[pk] || 0) + 1);
+      const co = (pi - 1) * 32;
+      const dx = Math.abs(tx - sx) * 0.5 + co;
+      const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+      const lx = (sx + tx) / 2 + co * 0.5;
+      const ly = (sy + ty) / 2 - 2 + (pi - 1) * 14;
+      const col = CONDITION_COLORS[e.condition_type] || '#6b7280';
+      r.push({
+        id: e.id,
+        d,
+        color: col,
+        label: e.label || '',
+        labelX: lx,
+        labelY: ly,
+        conditionType: e.condition_type,
+        isActive: false,
+        edge: e,
+      });
+    }
+    setPaths(r);
+  }, [graph, positions, displayEdges]);
   return paths;
 }

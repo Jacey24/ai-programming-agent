@@ -6,6 +6,7 @@ import { StatusPills } from './components/StatusPills';
 import { ToolPanel } from './components/ToolPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ExpertGraphCanvas } from './components/ExpertGraphCanvas';
+import { AmbientBubbles } from './components/AmbientBubbles';
 
 const PANEL_WIDTH = 420;
 
@@ -87,6 +88,9 @@ export default function App() {
         height: `${100 / scale}vh`,
       }}
     >
+      {/* 动态气泡背景 — 最底层 (z-index: -1) */}
+      <AmbientBubbles />
+
       {/* Expert 画布 — 背景层，在所有面板之下 */}
       <ExpertGraphCanvas theme={theme} />
 
@@ -140,58 +144,7 @@ export default function App() {
         </button>
       </header>
 
-      {/* 装饰元素 — 最底层 (z-index: 0，仅作毛玻璃模糊源) */}
-      {/* 元素1：彩虹渐变矩形 */}
-      <div className="stagger-item" style={{
-        position: 'absolute', top: '40%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 300, height: 200, zIndex: 0,
-        borderRadius: 32,
-        background: theme === 'dark'
-          ? 'linear-gradient(135deg, #ff6b6b 0%, #ffa726 25%, #4ecdc4 50%, #6c5ce7 75%, #e040fb 100%)'
-          : 'linear-gradient(135deg, #ff7664 0%, #ffb344 25%, #54e3c7 50%, #7b6cf6 100%, #f062e8 100%)',
-        opacity: 0.85,
-        pointerEvents: 'none',
-      }} />
-      {/* 元素2：大号装饰圆形 — 鲜艳色彩，边界分明，适合验证模糊 */}
-      <div className="stagger-item" style={{
-        position: 'absolute', top: '28%', left: '32%',
-        width: 220, height: 220, zIndex: 0,
-        borderRadius: '50%',
-        background: theme === 'dark'
-          ? 'radial-gradient(circle, #ff6b6b 0%, #e040fb 100%)'
-          : 'radial-gradient(circle, #ff7664 0%, #f062e8 100%)',
-        opacity: 0.7,
-        pointerEvents: 'none',
-      }} />
-      {/* 元素3：第二装饰圆 */}
-      <div className="stagger-item" style={{
-        position: 'absolute', top: '55%', left: '62%',
-        width: 180, height: 180, zIndex: 0,
-        borderRadius: '50%',
-        background: theme === 'dark'
-          ? 'radial-gradient(circle, #4ecdc4 0%, #6c5ce7 100%)'
-          : 'radial-gradient(circle, #54e3c7 0%, #7b6cf6 100%)',
-        opacity: 0.65,
-        pointerEvents: 'none',
-      }} />
-      {/* 元素4：条纹矩形 — 有清晰边缘供验证模糊 */}
-      <div className="stagger-item" style={{
-        position: 'absolute', top: '48%', left: '28%',
-        width: 160, height: 100, zIndex: 0,
-        borderRadius: 16,
-        background: `repeating-linear-gradient(
-          45deg,
-          transparent,
-          transparent 10px,
-          ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)'} 10px,
-          ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)'} 20px
-        )`,
-        border: `2px solid ${theme === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'}`,
-        pointerEvents: 'none',
-      }} />
-
-      {/* 主区域 — z-index: 10，位于装饰元素之上、header/toolpanel 之下 */}
+      {/* 主区域 — z-index: 10 */}
       <main
         className="flex-1 min-h-0 overflow-hidden stagger-item"
         style={{ position: 'relative', zIndex: 10, paddingTop: 16, paddingLeft: leftOffset, paddingRight: leftOffset, pointerEvents: 'none' }}
@@ -234,7 +187,19 @@ function ToolPanelWrapper({ theme }: { theme: 'dark' | 'light' }) {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      try { const res = await listTools(); setTools(res.items || []); } catch {}
+      try {
+        const res = await listTools();
+        // 后端 listToolInfo 返回字段：name, description, group, risk_level
+        // 没有 enabled/params/category，前端补齐默认值
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const items = ((res as any).items || []).map((item: any) => ({
+          ...item,
+          enabled: item.enabled != null ? Boolean(item.enabled) : true,
+          category: item.group || item.category || 'other',
+          params: item.params || {},
+        }));
+        setTools(items as ToolInfo[]);
+      } catch {}
       setLoading(false);
     };
     load();

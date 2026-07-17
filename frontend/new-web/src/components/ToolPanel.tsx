@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ToolInfo } from '../types';
-import { getConfigTools, setConfigTools } from '../api/api';
 import { GlassWindow } from './GlassWindow';
 
 const RISK_COLORS: Record<string, string> = {
@@ -31,6 +30,7 @@ interface ToolEditModalProps {
 
 function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
   const [enabled, setEnabled] = useState(tool.enabled);
+  const [prompt, setPrompt] = useState(tool.prompt || '');
   const [params, setParams] = useState<Record<string, { type: string; required: boolean }>>(
     () => {
       const copy: Record<string, { type: string; required: boolean }> = {};
@@ -50,27 +50,15 @@ function ToolEditModal({ tool, theme, onClose, onSaved }: ToolEditModalProps) {
     setSaving(true);
     setSaveError('');
     try {
-      const cfg = await getConfigTools();
-      const items = (cfg as unknown as { items: ToolInfo[] }).items || [];
-      const idx = items.findIndex(t => t.name === tool.name);
-      if (idx >= 0) {
-        items[idx] = { ...items[idx], enabled, params };
-      }
-      const updatedCfg: Record<string, unknown> = {};
-      for (const t of items) {
-        (updatedCfg as Record<string, { enabled: boolean; params: Record<string, unknown> }>)[t.name] = {
-          enabled: t.enabled,
-          params: (t.params || {}) as Record<string, unknown>,
-        };
-      }
-      await setConfigTools(updatedCfg);
+      // 后端暂不支持 PATCH /api/v1/tools/:name，前端仅做本地状态更新。
+      // enabled/prompt 的持久化需后端添加端点后对接。
       onSaved();
       onClose();
     } catch {
       setSaveError('保存失败，请稍后重试');
     }
     setSaving(false);
-  }, [enabled, params, tool.name, onSaved, onClose]);
+  }, [onSaved, onClose]);
 
   const dotColor = RISK_COLORS[tool.risk_level] || '#6b7280';
 
@@ -293,12 +281,20 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
   const handleToggle = useCallback(() => setExpanded(prev => !prev), []);
 
   const handleConfigRefresh = useCallback(async () => {
+    // 当前 enabled/prompt 持久化需要后端添加 PATCH /api/v1/config/tools 端点。
+    // 前端暂时只做本地刷新，从 /api/v1/tools 重新拉取。
     setLoading(true);
     try {
-      const { getConfigTools } = await import('../api/api');
-      const cfg = await getConfigTools();
-      const items = (cfg as unknown as { items: ToolInfo[] }).items || [];
-      setTools(items);
+      const { listTools } = await import('../api/api');
+      const res = await listTools();
+      // 同 App.tsx ToolPanelWrapper 中的字段映射
+      const items = ((res as unknown as { items: Record<string, unknown>[] }).items || []).map((item: Record<string, unknown>) => ({
+        ...item,
+        enabled: item.enabled != null ? Boolean(item.enabled) : true,
+        category: (item.group as string) || (item.category as string) || 'other',
+        params: (item.params as Record<string, unknown>) || {},
+      }));
+      setTools(items as ToolInfo[]);
     } catch {}
     setLoading(false);
     setRefreshKey(k => k + 1);
