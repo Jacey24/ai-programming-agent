@@ -326,6 +326,21 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
     }
   }
 
+  std::string assistantMessageId;
+  if (ownsTerminalState && !result.finalOutput.empty() &&
+      DataAccessFacade::getInstance().isInitialized()) {
+    try {
+      const auto message =
+          DataAccessFacade::getInstance().createFinalAssistantMessage(
+              taskId, dbStatus == "completed" ? "result" : "error",
+              result.finalOutput);
+      assistantMessageId = message.id;
+    } catch (const std::exception &error) {
+      LOG_ERROR("finalizeTask: failed to persist assistant message for task={}: {}",
+                taskId, error.what());
+    }
+  }
+
   // Only the thread that claimed and persisted the terminal state emits it.
   if (ownsTerminalState && SSEGateway::getInstance().isInitialized()) {
     if (!result.finalOutputSent && !result.finalOutput.empty()) {
@@ -337,6 +352,9 @@ void AgentOrchestrator::finalizeTask(const std::string &taskId,
     meta["final_output_size"] = static_cast<int>(result.finalOutput.size());
     meta["expert_chain"] = result.expertChain;
     meta["plan_version"] = result.finalPlan.version;
+    if (!assistantMessageId.empty()) {
+      meta["assistant_message_id"] = assistantMessageId;
+    }
     if (!result.summary.empty()) {
       meta["summary"] = result.summary;
     }

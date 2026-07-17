@@ -193,14 +193,16 @@ SELECT COUNT(*) || ':' || COUNT(DISTINCT version) || ':' ||
        COALESCE(group_concat(version, ','), '')
 FROM (SELECT version FROM schema_migrations ORDER BY version);
 '@
-    Assert-True ($summary -eq '5:5:1,2,3,4,5') `
+    Assert-True ($summary -eq '6:6:1,2,3,4,5,6') `
         "Unexpected migration records: '$summary'."
 }
 
 function Assert-RelationIndexes {
     param([string]$Database)
     foreach ($index in @('idx_sessions_workspace_id', 'idx_tasks_session_id',
-            'idx_tasks_workspace_id')) {
+            'idx_tasks_workspace_id', 'idx_messages_session_sequence',
+            'idx_messages_task_id', 'idx_messages_source_event_id',
+            'idx_messages_task_assistant_final')) {
         $count = Invoke-SqliteScalar $Database `
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='$index';"
         Assert-True ($count -eq '1') "Missing relation index $index."
@@ -225,7 +227,10 @@ function Assert-MigrationColumns {
             @('sessions', 'summary_updated_at'),
             @('sessions', 'last_active_at'),
             @('tasks', 'user_message_id'),
-            @('tasks', 'assistant_message_id'))) {
+            @('tasks', 'assistant_message_id'),
+            @('messages', 'message_type'),
+            @('messages', 'sequence_no'),
+            @('messages', 'source_event_id'))) {
         Assert-Column $Database $item[0] $item[1]
     }
 }
@@ -450,6 +455,11 @@ CREATE VIEW messages AS SELECT 'blocked' AS id;
     } | ConvertTo-Json -Depth 5 -Compress
     $task = Invoke-Json POST '/api/v1/tasks' $taskBody
     $taskId = [string]$task.data.id
+    $userMessageId = [string]$task.data.user_message.id
+    $messages = Invoke-Json GET "/api/v1/sessions/$([string]$session.data.id)/messages" $null
+    Assert-True (@($messages.data.items | Where-Object {
+                $_.id -eq $userMessageId -and $_.task_id -eq $taskId }).Count -eq 1) `
+        'Task user Message was not persisted exactly once.'
     $queried = Invoke-Json GET "/api/v1/tasks/$taskId" $null
     Assert-True ($queried.success -eq $true -and
         [string]$queried.data.id -eq $taskId) 'Created task could not be queried.'
@@ -460,6 +470,10 @@ CREATE VIEW messages AS SELECT 'blocked' AS id;
     Assert-True ($persisted.success -eq $true -and
         [string]$persisted.data.id -eq $taskId) `
         'Task did not persist after restart.'
+    $persistedMessages = Invoke-Json GET "/api/v1/sessions/$([string]$session.data.id)/messages" $null
+    Assert-True (@($persistedMessages.data.items | Where-Object {
+                $_.id -eq $userMessageId -and $_.task_id -eq $taskId }).Count -eq 1) `
+        'Task user Message did not persist exactly once after restart.'
     Stop-Backend $backend
     Assert-MigrationsComplete $rwDatabase
 }

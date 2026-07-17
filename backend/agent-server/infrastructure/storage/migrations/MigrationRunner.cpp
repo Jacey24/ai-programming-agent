@@ -436,6 +436,61 @@ std::vector<MigrationRunner::Migration> MigrationRunner::builtinMigrations() {
        "CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON "
        "tasks(workspace_id);")}});
 
+  // V006: Upgrade the unused V003 message draft into the authoritative,
+  // session-ordered chat model without deleting legacy columns or rows.
+  migrations.push_back({
+      6,
+      "persistent_session_messages",
+      {addColumnStep(
+           "ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL "
+           "DEFAULT 'normal';",
+           "messages", "message_type", "TEXT", true, "'normal'"),
+       addColumnStep(
+           "ALTER TABLE messages ADD COLUMN sequence_no INTEGER NOT NULL "
+           "DEFAULT 0;",
+           "messages", "sequence_no", "INTEGER", true, "0"),
+       addColumnStep(
+           "ALTER TABLE messages ADD COLUMN source_event_id TEXT;", "messages",
+           "source_event_id", "TEXT", false, ""),
+       sqlStep(
+           "INSERT OR IGNORE INTO messages "
+           "(id, session_id, task_id, role, message_type, content, "
+           "sequence_no, source_event_id, created_at, updated_at) "
+           "SELECT 'msg_migrated_user_' || tasks.id, tasks.session_id, "
+           "tasks.id, 'user', 'normal', tasks.goal, 0, NULL, "
+           "tasks.created_at, tasks.updated_at FROM tasks "
+           "WHERE tasks.session_id IS NOT NULL AND tasks.session_id <> '' "
+           "AND tasks.goal IS NOT NULL AND tasks.goal <> '' "
+           "AND NOT EXISTS (SELECT 1 FROM messages existing "
+           "WHERE existing.task_id = tasks.id AND existing.role = 'user' "
+           "AND existing.message_type = 'normal');"
+           "UPDATE tasks SET user_message_id = ("
+           "SELECT messages.id FROM messages WHERE messages.task_id = tasks.id "
+           "AND messages.role = 'user' AND messages.message_type = 'normal' "
+           "ORDER BY messages.created_at ASC, messages.id ASC LIMIT 1"
+           ") WHERE (user_message_id IS NULL OR user_message_id = '') "
+           "AND EXISTS (SELECT 1 FROM messages WHERE messages.task_id = tasks.id "
+           "AND messages.role = 'user' AND messages.message_type = 'normal');"
+           "UPDATE messages SET sequence_no = ("
+           "  SELECT COUNT(*) FROM messages AS earlier"
+           "  WHERE earlier.session_id = messages.session_id"
+           "    AND (earlier.created_at < messages.created_at"
+           "      OR (earlier.created_at = messages.created_at"
+           "          AND earlier.id <= messages.id))"
+           ") WHERE sequence_no = 0;"
+           "CREATE UNIQUE INDEX IF NOT EXISTS "
+           "idx_messages_session_sequence ON "
+           "messages(session_id, sequence_no);"
+           "CREATE INDEX IF NOT EXISTS idx_messages_task_id ON "
+           "messages(task_id);"
+           "CREATE UNIQUE INDEX IF NOT EXISTS "
+           "idx_messages_source_event_id ON messages(source_event_id) "
+           "WHERE source_event_id IS NOT NULL;"
+           "CREATE UNIQUE INDEX IF NOT EXISTS "
+           "idx_messages_task_assistant_final ON messages(task_id) "
+           "WHERE task_id IS NOT NULL AND task_id <> '' "
+           "AND role = 'assistant' AND message_type IN ('result','error');")}});
+
   return migrations;
 }
 

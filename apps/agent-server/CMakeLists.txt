@@ -40,6 +40,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/GlobalController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/api/controllers/DebugController.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/LogService.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/application/MessageService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/FileChangeService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/ReplayService.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/application/SessionService.cpp
@@ -81,6 +82,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/EventRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/FileChangeRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/LogRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/MessageRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/PermissionRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/ReplayRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/SessionRepository.cpp

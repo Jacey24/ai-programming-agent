@@ -333,6 +333,178 @@ TaskRecord DataAccessFacade::createTask(const std::string &sessionId,
                                         workspaceId, goal, now, now);
 }
 
+TaskMessageCreation DataAccessFacade::createTaskWithUserMessage(
+    const std::string &sessionId, const std::string &globalId,
+    const std::string &workspaceId, const std::string &goal) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!initialized_ || !db_) {
+    throw std::runtime_error("DataAccessFacade is not initialized");
+  }
+
+  char *error = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, &error) !=
+      SQLITE_OK) {
+    const std::string message = error ? error : sqlite3_errmsg(db_);
+    sqlite3_free(error);
+    throw std::runtime_error("failed to begin task/message transaction: " +
+                             message);
+  }
+
+  try {
+    const auto workspace = WorkspaceRepository(db_).findById(workspaceId);
+    const auto session = SessionRepository(db_).findById(sessionId);
+    if (!workspace) {
+      throw std::invalid_argument("workspace not found");
+    }
+    if (!session) {
+      throw std::invalid_argument("session not found");
+    }
+    if (session->workspace_id != workspaceId) {
+      throw std::invalid_argument("session does not belong to workspace");
+    }
+
+    const std::string now = iso8601Now();
+    TaskMessageCreation creation;
+    creation.task = TaskRepository(db_).createTask(
+        generateId("task"), sessionId, globalId, workspaceId, goal, now, now);
+    creation.user_message = MessageRepository(db_).createMessage(
+        generateId("msg"), sessionId, creation.task.id, "user", "normal",
+        goal, std::nullopt, now);
+
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(
+            db_, "UPDATE tasks SET user_message_id = ? WHERE id = ?;", -1,
+            &stmt, nullptr) != SQLITE_OK) {
+      throw std::runtime_error(sqlite3_errmsg(db_));
+    }
+    sqlite3_bind_text(stmt, 1, creation.user_message.id.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, creation.task.id.c_str(), -1,
+                      SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      const std::string updateError = sqlite3_errmsg(db_);
+      sqlite3_finalize(stmt);
+      throw std::runtime_error(updateError);
+    }
+    sqlite3_finalize(stmt);
+
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &error) != SQLITE_OK) {
+      const std::string message = error ? error : sqlite3_errmsg(db_);
+      sqlite3_free(error);
+      throw std::runtime_error("failed to commit task/message transaction: " +
+                               message);
+    }
+    return creation;
+  } catch (...) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    throw;
+  }
+}
+
+MessageRecord DataAccessFacade::createMessage(
+    const std::string &sessionId, const std::optional<std::string> &taskId,
+    const std::string &role, const std::string &messageType,
+    const std::string &content,
+    const std::optional<std::string> &sourceEventId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  char *error = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, &error) !=
+      SQLITE_OK) {
+    const std::string message = error ? error : sqlite3_errmsg(db_);
+    sqlite3_free(error);
+    throw std::runtime_error(message);
+  }
+  try {
+    auto message = MessageRepository(db_).createMessage(
+        generateId("msg"), sessionId, taskId, role, messageType, content,
+        sourceEventId, iso8601Now());
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &error) != SQLITE_OK) {
+      const std::string commitError = error ? error : sqlite3_errmsg(db_);
+      sqlite3_free(error);
+      throw std::runtime_error(commitError);
+    }
+    return message;
+  } catch (...) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    throw;
+  }
+}
+
+std::optional<MessageRecord>
+DataAccessFacade::getMessage(const std::string &id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return MessageRepository(db_).findById(id);
+}
+
+std::optional<MessageRecord> DataAccessFacade::getMessageBySourceEventId(
+    const std::string &sourceEventId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return MessageRepository(db_).findBySourceEventId(sourceEventId);
+}
+
+std::vector<MessageRecord>
+DataAccessFacade::listMessagesBySession(const std::string &sessionId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return MessageRepository(db_).findBySessionId(sessionId);
+}
+
+std::vector<MessageRecord>
+DataAccessFacade::listMessagesByTask(const std::string &taskId) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return MessageRepository(db_).findByTaskId(taskId);
+}
+
+MessageRecord DataAccessFacade::createFinalAssistantMessage(
+    const std::string &taskId, const std::string &messageType,
+    const std::string &content) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  char *error = nullptr;
+  if (sqlite3_exec(db_, "BEGIN IMMEDIATE;", nullptr, nullptr, &error) !=
+      SQLITE_OK) {
+    const std::string message = error ? error : sqlite3_errmsg(db_);
+    sqlite3_free(error);
+    throw std::runtime_error(message);
+  }
+  try {
+    MessageRepository repository(db_);
+    if (const auto existing = repository.findFinalAssistantMessage(taskId)) {
+      sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+      return *existing;
+    }
+    const auto task = TaskRepository(db_).findById(taskId);
+    if (!task) {
+      throw std::invalid_argument("task not found");
+    }
+    auto message = repository.createMessage(
+        generateId("msg"), task->session_id, taskId, "assistant", messageType,
+        content, std::nullopt, iso8601Now());
+
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(
+            db_, "UPDATE tasks SET assistant_message_id = ? WHERE id = ?;", -1,
+            &stmt, nullptr) != SQLITE_OK) {
+      throw std::runtime_error(sqlite3_errmsg(db_));
+    }
+    sqlite3_bind_text(stmt, 1, message.id.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, taskId.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      const std::string updateError = sqlite3_errmsg(db_);
+      sqlite3_finalize(stmt);
+      throw std::runtime_error(updateError);
+    }
+    sqlite3_finalize(stmt);
+    if (sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, &error) != SQLITE_OK) {
+      const std::string commitError = error ? error : sqlite3_errmsg(db_);
+      sqlite3_free(error);
+      throw std::runtime_error(commitError);
+    }
+    return message;
+  } catch (...) {
+    sqlite3_exec(db_, "ROLLBACK;", nullptr, nullptr, nullptr);
+    throw;
+  }
+}
+
 std::optional<TaskRecord> DataAccessFacade::getTask(const std::string &id) {
   std::lock_guard<std::mutex> lock(mutex_);
   return TaskRepository(db_).findById(id);
