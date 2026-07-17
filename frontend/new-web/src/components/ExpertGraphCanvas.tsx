@@ -13,6 +13,8 @@ import {
   setExpertTools,
 } from '../api/api';
 import { ExpertEditModal } from './ExpertEditModal';
+import type { CanvasSize, LayoutRect } from '../graphLayout';
+import { ADD_EXPERT_SIZE, correctControlIfOutside, defaultAddExpertPosition, findSafeNodePosition } from '../graphLayout';
 
 interface Props {
   theme: 'dark' | 'light';
@@ -283,6 +285,8 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   const [loading, setLoading] = useState(true);
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
   const interactionRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasSize = useElementSize(canvasRef);
 
   // ── Zoom / Pan ──
   const [cumPan, setCumPan] = useState({ x: 0, y: 0 });
@@ -366,7 +370,8 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
     })();
   }, [graphVersion]);
 
-  const nodePositions = useMemoNodePositions(graph, positions);
+  const nodePositions = useMemoNodePositions(graph, positions, canvasSize);
+  positionRef.current = { ...nodePositions, ...positions };
   // Compute display edges from routes cache
   const displayEdges = useMemoEdges(routesMapRef.current, graph, routesVersion);
 
@@ -795,7 +800,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   const allPorts = computeRenderPorts(graph, nodePositions, expandedNodeIds);
 
   return (
-    <div className={`expert-canvas theme-${theme}`} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div ref={canvasRef} className={`expert-canvas theme-${theme}`} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <div ref={interactionRef} onMouseDown={handleBgMouseDown} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'auto', cursor: panning.current ? 'grabbing' : 'default' }} />
 
       {/* SVG layer: edges + temporary wire */}
@@ -1028,7 +1033,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
         />
       )}
 
-      <AddExpertButton theme={theme} onCreate={() => setEditExpertName(CREATE_MODE)} />
+      <AddExpertButton theme={theme} canvasSize={canvasSize} onCreate={() => setEditExpertName(CREATE_MODE)} />
       {editExpertName && <ExpertEditModal expertName={editExpertName === CREATE_MODE ? undefined : editExpertName} theme={theme} onClose={() => setEditExpertName(null)} onSaved={() => { reloadGraph(); setEditExpertName(null); }} />}
     </div>
   );
@@ -1095,30 +1100,32 @@ function findInputPort(gx: number, gy: number, ports: { nodeId: string; type: st
 }
 
 // ── AddExpertButton ──
-function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreate: () => void }) {
-  const [pos, setPos] = useState(() => {
-    // 初始化在入口虚拟节点右侧：入口节点在画布中央偏上，按钮对齐其右侧
-    const z = 0.85;
-    const entryGraphX = window.innerWidth / 2 / z - NODE_W / 2;
-    const entryScreenRight = entryGraphX * z + VNODE_W * z;
-    const defaultTotalH = (2 + 0) * VERTICAL_GAP + VNODE_H; // 默认 2 虚拟节点
-    const startGraphY = window.innerHeight / 2 / z - defaultTotalH / 2;
-    const entryScreenTop = startGraphY * z;
-    const buttonY = entryScreenTop + (VNODE_H * z - 38) / 2;
-    return { x: entryScreenRight + 16, y: Math.max(8, buttonY) };
-  });
+function AddExpertButton({ theme, canvasSize, onCreate }: { theme: 'dark' | 'light'; canvasSize: CanvasSize; onCreate: () => void }) {
+  const [pos, setPos] = useState<NodePosition | null>(null);
   const [hovered, setHovered] = useState(false);
   const dragging = useRef(false);
   const dragMoved = useRef(false);
   const offset = useRef({ x: 0, y: 0 });
+  const canvasOrigin = useRef({ x: 0, y: 0 });
   const startPos = useRef({ x: 0, y: 0 });
   const posRef = useRef(pos); posRef.current = pos;
+  useEffect(() => {
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) return;
+    setPos(previous => previous
+      ? correctControlIfOutside(previous, canvasSize)
+      : defaultAddExpertPosition(canvasSize));
+  }, [canvasSize]);
   const onMD = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !posRef.current) return;
     dragging.current = true;
     dragMoved.current = false;
     startPos.current = { x: e.clientX, y: e.clientY };
-    offset.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
+    const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+    canvasOrigin.current = { x: rect?.left || 0, y: rect?.top || 0 };
+    offset.current = {
+      x: e.clientX - (rect?.left || 0) - posRef.current.x,
+      y: e.clientY - (rect?.top || 0) - posRef.current.y,
+    };
     e.stopPropagation();
     e.preventDefault();
   }, []);
@@ -1128,7 +1135,12 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
       const dx = e.clientX - startPos.current.x;
       const dy = e.clientY - startPos.current.y;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved.current = true;
-      if (dragMoved.current) setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+      if (dragMoved.current) {
+        setPos({
+          x: e.clientX - canvasOrigin.current.x - offset.current.x,
+          y: e.clientY - canvasOrigin.current.y - offset.current.y,
+        });
+      }
     };
     const onU = () => { dragging.current = false; };
     window.addEventListener('mousemove', onM);
@@ -1140,18 +1152,19 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
     onCreate();
   }, [onCreate]);
   const isDark = theme === 'dark';
-  return createPortal(
+  if (!pos) return null;
+  return (
     <div
       onMouseDown={onMD}
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        position: 'fixed', left: pos.x, top: pos.y, zIndex: 100,
-        minWidth: 38, height: 38, padding: '0 14px', borderRadius: 10,
+        position: 'absolute', left: pos.x, top: pos.y, zIndex: 100,
+        width: ADD_EXPERT_SIZE.width, height: ADD_EXPERT_SIZE.height, padding: '0 14px', borderRadius: 10,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         fontSize: 14, fontWeight: 600, letterSpacing: '0.03em',
-        cursor: 'grab', userSelect: 'none',
+        cursor: 'grab', userSelect: 'none', pointerEvents: 'auto',
         background: isDark ? '#ffffff' : '#0a0e17',
         color: isDark ? '#0a0e17' : '#ffffff',
         border: 'none',
@@ -1164,28 +1177,72 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
     >
       <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
       <span>Expert</span>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
 // ── Hooks ──
-function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, NodePosition>) {
+function useElementSize(ref: React.RefObject<HTMLElement | null>): CanvasSize {
+  const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      setSize(previous => previous.width === rect.width && previous.height === rect.height
+        ? previous : { width: rect.width, height: rect.height });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, NodePosition>, canvasSize: CanvasSize) {
   const [c, setC] = useState<Record<string, NodePosition>>({});
   useEffect(() => {
-    if (!graph) return;
+    if (!graph || canvasSize.width <= 0 || canvasSize.height <= 0) return;
     const r: Record<string, NodePosition> = { ...saved };
-    const totalCount = (graph.virtual_nodes || []).length + (graph.nodes || []).length;
-    const totalHeight = totalCount * VERTICAL_GAP + VNODE_H;
-    const centerY = window.innerHeight / 2 / 0.85;
-    const startY = centerY - totalHeight / 2;
-    const centerX = window.innerWidth / 2 / 0.85 - NODE_W / 2;
-    (graph.virtual_nodes || []).forEach(vn => { if (!r[vn.id]) r[vn.id] = { x: centerX, y: startY }; });
-    (graph.nodes || []).forEach((n, i) => { if (!r[n.id]) r[n.id] = { x: centerX, y: startY + (i + 1) * VERTICAL_GAP }; });
-    const ev = (graph.virtual_nodes || []).find(v => v.type === 'exit');
-    if (ev && !saved[ev.id]) r[ev.id] = { x: centerX, y: startY + (graph.nodes.length + 1) * VERTICAL_GAP };
+    const graphWidth = canvasSize.width / 0.85;
+    const graphHeight = canvasSize.height / 0.85;
+    const bounds: LayoutRect = {
+      x: 24,
+      y: 24,
+      width: Math.max(NODE_W, graphWidth * 0.72 - 48),
+      height: Math.max(NODE_H, graphHeight - 48),
+    };
+    const entryNodes = (graph.virtual_nodes || []).filter(node => node.type === 'entry');
+    const exitNodes = (graph.virtual_nodes || []).filter(node => node.type === 'exit');
+    const otherVirtualNodes = (graph.virtual_nodes || []).filter(node => node.type !== 'entry' && node.type !== 'exit');
+    const ordered = [
+      ...entryNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+      ...(graph.nodes || []).map(node => ({ id: node.id, width: NODE_W, height: NODE_H })),
+      ...exitNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+      ...otherVirtualNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+    ];
+    const gap = Math.max(88, Math.min(VERTICAL_GAP, (bounds.height - VNODE_H) / Math.max(1, ordered.length - 1)));
+    const totalHeight = Math.max(VNODE_H, (ordered.length - 1) * gap + VNODE_H);
+    const startY = Math.max(bounds.y, bounds.y + (bounds.height - totalHeight) / 2);
+    const centerX = bounds.x + Math.max(0, (bounds.width - NODE_W) / 2);
+    const occupied: LayoutRect[] = Object.entries(saved).map(([id, position]) => {
+      const size = getNodeSize(id, false);
+      return { ...position, width: size.w, height: size.h };
+    });
+    ordered.forEach((node, index) => {
+      if (r[node.id]) return;
+      const position = findSafeNodePosition(
+        { x: centerX, y: startY + index * gap },
+        occupied,
+        bounds,
+        { width: node.width, height: node.height },
+      );
+      r[node.id] = position;
+      occupied.push({ ...position, width: node.width, height: node.height });
+    });
     setC(r);
-  }, [graph, saved]);
+  }, [canvasSize, graph, saved]);
   return Object.keys(c).length > 0 ? c : {};
 }
 

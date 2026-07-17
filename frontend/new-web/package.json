@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --test src/workflowState.test.ts",
+    "test": "node --test src/*.test.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },
