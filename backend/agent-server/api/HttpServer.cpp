@@ -347,6 +347,8 @@ int HttpServer::run(const std::atomic_bool &running) {
   ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+)/messages)",
         SessionController, listMessages,
         "GET /api/v1/sessions/" + req.matches[1].str() + "/messages");
+  ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+)/tasks)", TaskController,
+        listTasks, "GET /api/v1/tasks?session_id=" + req.matches[1].str());
   ROUTE(Get, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+))", SessionController,
         getSession, "GET /api/v1/sessions/" + req.matches[1].str());
   ROUTE(Put, R"(/api/v1/sessions/([a-zA-Z0-9\-_]+))", SessionController,

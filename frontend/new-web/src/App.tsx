@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppPhase, GlassTab, SessionRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
-import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, listTools } from './api/api';
+import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools } from './api/api';
 import { GlassPanel } from './components/GlassPanel';
 import { StatusPills } from './components/StatusPills';
 import { ToolPanel } from './components/ToolPanel';
@@ -21,6 +21,23 @@ const PANEL_WIDTH = 420;
 // CSS stagger-out 最长延迟 0.11s + 动画持续 0.12s = 0.23s，取 280ms 安全值
 const PHASE_TRANSITION_MS = 280;
 
+function parseLocation() {
+  const match = window.location.pathname.match(
+    /^\/workspaces\/([^/]+)(?:\/sessions\/([^/]+))?\/?$/,
+  );
+  if (!match) return { workspaceId: null, sessionId: null };
+  try {
+    return { workspaceId: decodeURIComponent(match[1]), sessionId: match[2] ? decodeURIComponent(match[2]) : null };
+  } catch {
+    return { workspaceId: null, sessionId: null };
+  }
+}
+
+function workspacePath(workspaceId: string, sessionId?: string) {
+  const base = `/workspaces/${encodeURIComponent(workspaceId)}`;
+  return sessionId ? `${base}/sessions/${encodeURIComponent(sessionId)}` : base;
+}
+
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [phase, setPhase] = useState<AppPhase>('workspace_select');
@@ -30,9 +47,12 @@ export default function App() {
   const [vw, setVw] = useState(window.innerWidth);
   const [scale, setScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   // ★ 阶段过渡锁：过渡期间忽视重复点击
   const [transitioning, setTransitioning] = useState(false);
   const timerRef = useRef<number>(0);
+  const restoreRequest = useRef(0);
+  const restoreAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     const onResize = () => setVw(window.innerWidth);
     window.addEventListener('resize', onResize);
@@ -41,11 +61,79 @@ export default function App() {
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
+  const restoreFromLocation = useCallback(async () => {
+    const requestId = ++restoreRequest.current;
+    restoreAbort.current?.abort();
+    const controller = new AbortController();
+    restoreAbort.current = controller;
+    const { workspaceId, sessionId } = parseLocation();
+    setInitializing(true);
+    if (!workspaceId) {
+      if (window.location.pathname !== '/') {
+        window.history.replaceState(null, '', '/');
+      }
+      setActiveWorkspace(null);
+      setActiveSession(null);
+      setPhase('workspace_select');
+      setInitializing(false);
+      return;
+    }
+
+    try {
+      const workspace = await getWorkspace(workspaceId, controller.signal);
+      const sessionList = await listSessionsByWorkspace(workspace.id, controller.signal);
+      if (requestId !== restoreRequest.current) return;
+      setActiveWorkspace(workspace);
+      setActiveSession(null);
+      setPhase('normal');
+
+      if (sessionId) {
+        try {
+          const session = await getSession(sessionId, controller.signal);
+          const belongs = session.workspace_id === workspace.id &&
+            (sessionList.items || []).some(item => item.id === session.id && item.workspace_id === workspace.id);
+          if (requestId !== restoreRequest.current) return;
+          if (belongs) {
+            setActiveSession(session);
+          } else {
+            window.history.replaceState(null, '', workspacePath(workspace.id));
+          }
+        } catch {
+          if (requestId === restoreRequest.current) {
+            setActiveSession(null);
+            window.history.replaceState(null, '', workspacePath(workspace.id));
+          }
+        }
+      }
+    } catch {
+      if (requestId !== restoreRequest.current) return;
+      localStorage.removeItem('active_workspace_id');
+      localStorage.removeItem('active_session_id');
+      window.history.replaceState(null, '', '/');
+      setActiveWorkspace(null);
+      setActiveSession(null);
+      setPhase('workspace_select');
+    } finally {
+      if (requestId === restoreRequest.current) setInitializing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void restoreFromLocation();
+    const onPopState = () => { void restoreFromLocation(); };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      restoreAbort.current?.abort();
+    };
+  }, [restoreFromLocation]);
+
   const enterWorkspace = useCallback((ws: WorkspaceRecord) => {
     if (transitioning) return;
     setTransitioning(true);
     setActiveWorkspace(ws);
-    setActiveSession(current => current?.workspace_id === ws.id ? current : null);
+    setActiveSession(null);
+    window.history.pushState(null, '', workspacePath(ws.id));
     timerRef.current = window.setTimeout(() => {
       setPhase('normal');
       setTransitioning(false);
@@ -55,6 +143,7 @@ export default function App() {
   const selectSession = useCallback((session: SessionRecord) => {
     if (!activeWorkspace || session.workspace_id !== activeWorkspace.id) return;
     setActiveSession(session);
+    window.history.pushState(null, '', workspacePath(activeWorkspace.id, session.id));
   }, [activeWorkspace]);
 
   const exitWorkspace = useCallback(() => {
@@ -63,6 +152,7 @@ export default function App() {
     timerRef.current = window.setTimeout(() => {
       setActiveWorkspace(null);
       setActiveSession(null);
+      window.history.pushState(null, '', '/');
       setPhase('workspace_select');
       setTransitioning(false);
     }, PHASE_TRANSITION_MS);
@@ -72,6 +162,21 @@ export default function App() {
 
   // 水平偏移：减小留白，左右对称且紧凑
   const leftOffset = useMemo(() => Math.max(16, Math.round((vw - PANEL_WIDTH) * 0.03)), [vw]);
+
+  const backToSessions = useCallback(() => {
+    setActiveSession(null);
+    if (activeWorkspace) {
+      window.history.pushState(null, '', workspacePath(activeWorkspace.id));
+    }
+  }, [activeWorkspace]);
+
+  if (initializing) {
+    return (
+      <div className={`theme-${theme} background-canvas h-screen flex items-center justify-center`}>
+        <div className="text-sm text-[var(--text-secondary)]">正在恢复工作区...</div>
+      </div>
+    );
+  }
 
     // ========== workspace_select phase ==========
   if (phase === 'workspace_select') {
@@ -162,7 +267,7 @@ export default function App() {
           workspace={activeWorkspace}
           activeSession={activeSession}
           onSelectSession={selectSession}
-          onBackToSessions={() => setActiveSession(null)}
+          onBackToSessions={backToSessions}
           onExitWorkspace={exitWorkspace}
           scale={scale}
         />

@@ -241,3 +241,15 @@ export interface AppState {
   activeSession: SessionRecord|null;
   activeTab: GlassTab;
 }
+
+export interface MessageRecord {
+  id: string;
+  session_id: string;
+  task_id: string | null;
+  role: 'user' | 'assistant' | 'system';
+  message_type: 'normal' | 'result' | 'error';
+  content: string;
+  sequence_no: number;
+  source_event_id: string | null;
+  created_at: string;
+}

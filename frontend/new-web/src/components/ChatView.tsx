@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { SessionRecord, TaskEventRecord, TaskRecord } from '../types';
-import { createTask, cancelTask, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
+import { createTask, cancelTask, listMessages, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
 import { ToolCallCard } from './ToolCallCard';
 
 interface Props {
@@ -21,7 +21,7 @@ type TimelineItem =
 
 interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   expert?: string;
   timestamp: string;
@@ -114,7 +114,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
   const eventSource = useRef<EventSource | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lastHistoryKey = useRef<string>('');
+  const historyRequest = useRef(0);
   const [rawEvents, setRawEvents] = useState<TaskEventRecord[]>([]);
 
   const [streamingContent, setStreamingContent] = useState<string>('');
@@ -206,28 +206,40 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
   }, [addMessage, appendEvents, closeStream]);
 
   useEffect(() => {
-    const key = session.id;
-    if (key === lastHistoryKey.current) return;
-    lastHistoryKey.current = key;
+    const requestId = ++historyRequest.current;
+    const controller = new AbortController();
+    closeStream();
     streamingRef.current = '';
     setStreamingContent('');
     const loadHistory = async () => {
       setLoadingHistory(true);
+      setMessages([]);
+      setRawEvents([]);
+      setActiveTask(null);
       try {
-        const taskRes = await listTasks(session.id);
+        const [messageRes, taskRes] = await Promise.all([
+          listMessages(session.id, controller.signal),
+          listTasks(session.id, controller.signal),
+        ]);
+        if (requestId !== historyRequest.current || controller.signal.aborted) return;
+        setMessages((messageRes.items || [])
+          .slice()
+          .sort((a, b) => a.sequence_no - b.sequence_no)
+          .map(message => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            timestamp: message.created_at,
+          })));
         const tasks = (taskRes.items || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        setActiveTask(tasks.length > 0 ? tasks[tasks.length - 1] : null);
         const historyEvents: TaskEventRecord[] = [];
         for (const t of tasks) {
-          if (t.goal) addMessage({ id: `user_${t.id}`, role: 'user', content: t.goal, timestamp: t.created_at || '' });
           let hasInterruptedEvent = false;
           try {
-            const evtRes = await listTaskEvents(t.id);
+            const evtRes = await listTaskEvents(t.id, controller.signal);
             for (const evt of evtRes.items || []) {
               const channel = ((evt.metadata as { channel?: string })?.channel) || '';
-              // dialog 消息走 addMessage
-              if (channel === 'dialog' && evt.content && evt.type === 'agent_message') {
-                addMessage({ id: evt.id || `evt_${t.id}_${evt.created_at}`, role: 'assistant', content: evt.content, expert: (evt.metadata as { expert?: string })?.expert, timestamp: evt.created_at || '' });
-              }
               // ★ 工具/权限/状态事件走 appendEvents（关闭后回来也能看到）
               if (PERSISTED_EVENT_TYPES.includes(evt.type || '')) {
                 const historyEvent = t.status === 'interrupted' && evt.type === 'task_failed'
@@ -268,16 +280,18 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
             });
           }
         }
-        if (historyEvents.length > 0) {
+        if (requestId === historyRequest.current && historyEvents.length > 0) {
           appendEvents(historyEvents);
         }
       } catch {}
-      setLoadingHistory(false);
+      if (requestId === historyRequest.current) setLoadingHistory(false);
     };
-    setMessages([]);
-    setRawEvents([]);
-    loadHistory();
-  }, [session.id, addMessage, appendEvents]);
+    void loadHistory();
+    return () => {
+      controller.abort();
+      ++historyRequest.current;
+    };
+  }, [session.id, appendEvents, closeStream]);
 
   useEffect(() => () => closeStream(), [closeStream]);
 

@@ -15,6 +15,8 @@ export const endpoints = {
   // Sessions
   sessions: `${BASE}/sessions`,
   session: (id: string) => `${BASE}/sessions/${id}`,
+  sessionMessages: (id: string) => `${BASE}/sessions/${id}/messages`,
+  sessionTasks: (id: string) => `${BASE}/sessions/${id}/tasks`,
 
   // Tasks
   tasks: `${BASE}/tasks`,
