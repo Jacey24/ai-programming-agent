@@ -18,6 +18,8 @@ import { ADD_EXPERT_SIZE, correctControlIfOutside, defaultAddExpertPosition, fin
 
 interface Props {
   theme: 'dark' | 'light';
+  workspaceId: string;
+  positionResetVersion: number;
   workflowState?: WorkflowTaskState;
 }
 
@@ -280,7 +282,7 @@ function EdgeEditorPanel({
 // Main Component
 // ══════════════════════════════════════════════
 
-export function ExpertGraphCanvas({ theme, workflowState }: Props) {
+export function ExpertGraphCanvas({ theme, workspaceId, positionResetVersion, workflowState }: Props) {
   const [graph, setGraph] = useState<ExpertGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
@@ -348,7 +350,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]);
+        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions(workspaceId)]);
         setGraph(g);
         if (pos) setPositions(pos);
         routesMapRef.current = routesMapFromGraph(g);
@@ -356,19 +358,26 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
       } catch { }
       setLoading(false);
     })();
-  }, []);
+  }, [workspaceId]);
   useEffect(() => {
     if (graphVersion === 0) return;
     (async () => {
       try {
-        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions()]);
+        const [g, pos] = await Promise.all([getExpertGraph(), getExpertGraphPositions(workspaceId)]);
         setGraph(g);
         if (pos) setPositions(pos);
         routesMapRef.current = routesMapFromGraph(g);
         setRoutesVersion(v => v + 1);
       } catch { }
     })();
-  }, [graphVersion]);
+  }, [graphVersion, workspaceId]);
+
+  useEffect(() => {
+    if (positionResetVersion === 0) return;
+    setPositions({});
+    setCumPan({ x: 0, y: 0 });
+    setZoomTarget(0.85);
+  }, [positionResetVersion]);
 
   const nodePositions = useMemoNodePositions(graph, positions, canvasSize);
   positionRef.current = { ...nodePositions, ...positions };
@@ -490,7 +499,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
           }
         }
       } else {
-        saveExpertGraphPositions(positionRef.current).catch(() => { });
+        saveExpertGraphPositions(positionRef.current, workspaceId).catch(() => { });
       }
       mousedownRef.current = null;
       isDraggingNode.current = false;
@@ -512,7 +521,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('keydown', onKey);
     };
-  }, [expandedNodeIds, graph, nodePositions]);
+  }, [expandedNodeIds, graph, nodePositions, workspaceId]);
 
   // ── Pan ──
   const handleBgMouseDown = useCallback((e: React.MouseEvent) => {

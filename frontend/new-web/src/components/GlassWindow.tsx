@@ -31,11 +31,9 @@ export function GlassWindow({
         zIndex,
         pointerEvents,
         overflow: overflow ?? 'hidden',
-        backdropFilter: 'blur(80px) saturate(1.2) brightness(1.05)',
-        WebkitBackdropFilter: 'blur(80px) saturate(1.2) brightness(1.05)',
         ...style,
       }}
-      className={className}
+      className={`glass-surface ${className || ''}`}
     >
       {children}
     </div>

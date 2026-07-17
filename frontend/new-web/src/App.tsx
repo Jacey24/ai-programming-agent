@@ -45,6 +45,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<GlassTab>('chat');
   const [scale, setScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [positionResetVersion, setPositionResetVersion] = useState(0);
   const [initializing, setInitializing] = useState(true);
   const [workflowStore, dispatchWorkflow] = useReducer(workflowStoreReducer, initialWorkflowStoreState);
   // ★ 阶段过渡锁：过渡期间忽视重复点击
@@ -215,7 +216,7 @@ export default function App() {
 
       {/* 顶部栏 — StatusPills + 圆形按钮 */}
       <header
-        className="workspace-header shrink-0 flex items-center stagger-item"
+        className="glass-surface workspace-header shrink-0 flex items-center stagger-item"
       >
         <StatusPills />
         {/* 主题切换 — 圆形仅图标 */}
@@ -267,7 +268,12 @@ export default function App() {
         className="workspace-main flex-1 min-h-0 overflow-hidden stagger-item"
       >
         <section className="workspace-graph-pane" aria-label="Expert workflow">
-          <ExpertGraphCanvas theme={theme} workflowState={workflowState} />
+          <ExpertGraphCanvas
+            theme={theme}
+            workspaceId={activeWorkspace?.id || ''}
+            positionResetVersion={positionResetVersion}
+            workflowState={workflowState}
+          />
           <ToolPanelWrapper theme={theme} embedded />
         </section>
         <section className="workspace-session-pane" aria-label="Current session">
@@ -293,6 +299,8 @@ export default function App() {
         theme={theme}
         scale={scale}
         onScaleChange={setScale}
+        workspace={activeWorkspace}
+        onExpertPositionsReset={() => setPositionResetVersion(version => version + 1)}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

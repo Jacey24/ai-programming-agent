@@ -6,6 +6,8 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <cctype>
+#include <stdexcept>
 
 namespace {
 
@@ -51,6 +53,53 @@ std::string extract_path_segment(const std::string &request,
   return line.substr(seg_start, seg_end - seg_start);
 }
 
+std::string extract_query_value(const std::string &request,
+                                const std::string &key) {
+  const std::string marker = key + "=";
+  const std::size_t query = request.find('?');
+  if (query == std::string::npos)
+    return "";
+  const std::size_t start = request.find(marker, query + 1);
+  if (start == std::string::npos)
+    return "";
+  const std::size_t valueStart = start + marker.size();
+  const std::size_t end = request.find_first_of("& \r\n", valueStart);
+  return request.substr(valueStart, end == std::string::npos
+                                        ? std::string::npos
+                                        : end - valueStart);
+}
+
+std::string trimWhitespace(const std::string &value) {
+  std::size_t first = 0;
+  while (first < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[first])))
+    ++first;
+  std::size_t last = value.size();
+  while (last > first &&
+         std::isspace(static_cast<unsigned char>(value[last - 1])))
+    --last;
+  return value.substr(first, last - first);
+}
+
+bool validExpertName(const std::string &name) {
+  if (name.empty())
+    return false;
+  for (const unsigned char ch : name) {
+    if (!std::isalnum(ch) && ch != '-' && ch != '_')
+      return false;
+  }
+  return true;
+}
+
+std::string firstUnknownTool(const std::vector<std::string> &tools) {
+  auto &system = codepilot::ToolSystem::getInstance();
+  if (!system.isInitialized()) return "";
+  for (const auto &tool : tools) {
+    if (!system.registry().hasTool(tool)) return tool;
+  }
+  return "";
+}
+
 // 从 URL 段中提取 Expert 名称（/api/v1/experts/planner/tools → planner）
 std::string extractExpertName(const std::string &segment) {
   auto slash = segment.find('/');
@@ -81,7 +130,7 @@ int extractRouteIndex(const std::string &segment) {
 codepilot::ExpertConfig expertFromJson(const json &j) {
   using namespace codepilot;
   ExpertConfig c;
-  c.name = j.value("name", "");
+  c.name = trimWhitespace(j.value("name", ""));
   c.description = j.value("description", "");
   c.promptTemplate = j.value("prompt_template", "");
   c.isEntry = j.value("is_entry", false);
@@ -340,11 +389,20 @@ std::string ExpertController::createExpert(const std::string &request) const {
   }
 
   ExpertConfig expert = expertFromJson(j);
-  if (expert.name.empty()) {
+  if (!validExpertName(expert.name)) {
     json body;
     body["success"] = false;
     body["error"]["code"] = "INVALID_REQUEST";
-    body["error"]["message"] = "name 字段必填";
+    body["error"]["message"] =
+        "Expert name 必填，且只能包含字母、数字、-、_";
+    return http_response(body.dump(), "400 Bad Request");
+  }
+  if (const std::string unknown = firstUnknownTool(expert.visibleTools);
+      !unknown.empty()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "INVALID_TOOL";
+    body["error"]["message"] = "未注册的工具: " + unknown;
     return http_response(body.dump(), "400 Bad Request");
   }
 
@@ -357,8 +415,13 @@ std::string ExpertController::createExpert(const std::string &request) const {
     return http_response(body.dump(), "409 Conflict");
   }
 
-  cfg.saveToFile();
-
+  if (!cfg.saveToFile()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "IO_ERROR";
+    body["error"]["message"] = "Expert 已更新到内存，但写入配置文件失败";
+    return http_response(body.dump(), "500 Internal Server Error");
+  }
   json body;
   body["success"] = true;
   body["data"]["name"] = expert.name;
@@ -391,6 +454,14 @@ std::string ExpertController::updateExpert(const std::string &request) const {
   }
 
   ExpertConfig expert = expertFromJson(j);
+  if (const std::string unknown = firstUnknownTool(expert.visibleTools);
+      !unknown.empty()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "INVALID_TOOL";
+    body["error"]["message"] = "未注册的工具: " + unknown;
+    return http_response(body.dump(), "400 Bad Request");
+  }
   auto &cfg = AgentConfiguration::getInstance();
   if (!cfg.updateExpert(name, expert)) {
     json body;
@@ -400,7 +471,13 @@ std::string ExpertController::updateExpert(const std::string &request) const {
     return http_response(body.dump(), "404 Not Found");
   }
 
-  cfg.saveToFile();
+  if (!cfg.saveToFile()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "IO_ERROR";
+    body["error"]["message"] = "Expert 已更新到内存，但写入配置文件失败";
+    return http_response(body.dump(), "500 Internal Server Error");
+  }
 
   json body;
   body["success"] = true;
@@ -424,6 +501,33 @@ std::string ExpertController::patchExpert(const std::string &request) const {
   }
 
   std::string raw = request_body(request);
+  json patch = json::parse(raw, nullptr, false);
+  if (patch.is_discarded() || !patch.is_object()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"请求体必须是有效的 JSON 对象"}})",
+        "400 Bad Request");
+  }
+  if (patch.contains("visible_tools")) {
+    if (!patch["visible_tools"].is_array()) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"visible_tools 必须是数组"}})",
+          "400 Bad Request");
+    }
+    try {
+      const auto tools = patch["visible_tools"].get<std::vector<std::string>>();
+      if (const std::string unknown = firstUnknownTool(tools); !unknown.empty()) {
+        json body;
+        body["success"] = false;
+        body["error"]["code"] = "INVALID_TOOL";
+        body["error"]["message"] = "未注册的工具: " + unknown;
+        return http_response(body.dump(), "400 Bad Request");
+      }
+    } catch (const std::exception &) {
+      return http_response(
+          R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"visible_tools 只能包含工具 ID 字符串"}})",
+          "400 Bad Request");
+    }
+  }
   auto &cfg = AgentConfiguration::getInstance();
   if (!cfg.patchExpert(name, raw)) {
     json body;
@@ -433,7 +537,13 @@ std::string ExpertController::patchExpert(const std::string &request) const {
     return http_response(body.dump(), "404 Not Found");
   }
 
-  cfg.saveToFile();
+  if (!cfg.saveToFile()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "IO_ERROR";
+    body["error"]["message"] = "Expert 已更新到内存，但写入配置文件失败";
+    return http_response(body.dump(), "500 Internal Server Error");
+  }
 
   json body;
   body["success"] = true;
@@ -495,6 +605,13 @@ std::string ExpertController::setTools(const std::string &request) const {
   std::vector<std::string> tools;
   for (const auto &t : j["tools"])
     tools.push_back(t.get<std::string>());
+  if (const std::string unknown = firstUnknownTool(tools); !unknown.empty()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "INVALID_TOOL";
+    body["error"]["message"] = "未注册的工具: " + unknown;
+    return http_response(body.dump(), "400 Bad Request");
+  }
 
   auto &cfg = AgentConfiguration::getInstance();
   if (!cfg.setExpertTools(name, tools)) {
@@ -524,12 +641,21 @@ std::string ExpertController::addTool(const std::string &request) const {
 
   std::string raw = request_body(request);
   json j = json::parse(raw, nullptr, false);
-  std::string toolName = j.value("tool_name", "");
+  std::string toolName =
+      j.is_object() ? j.value("tool_name", "") : std::string{};
   if (toolName.empty()) {
     json body;
     body["success"] = false;
     body["error"]["code"] = "INVALID_REQUEST";
     body["error"]["message"] = "tool_name is required";
+    return http_response(body.dump(), "400 Bad Request");
+  }
+  if (const std::string unknown = firstUnknownTool({toolName});
+      !unknown.empty()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "INVALID_TOOL";
+    body["error"]["message"] = "未注册的工具: " + unknown;
     return http_response(body.dump(), "400 Bad Request");
   }
 
@@ -850,39 +976,70 @@ std::string ExpertController::savePositions(const std::string &request) const {
 
   std::string raw = request_body(request);
   json positions = json::parse(raw, nullptr, false);
+  if (positions.is_discarded() || !positions.is_object()) {
+    json body;
+    body["success"] = false;
+    body["error"]["code"] = "INVALID_REQUEST";
+    body["error"]["message"] = "positions 必须是坐标对象";
+    return http_response(body.dump(), "400 Bad Request");
+  }
+  const std::string workspaceId =
+      extract_query_value(request, "workspace_id");
 
   auto &cfg = AgentConfiguration::getInstance();
   try {
     json rawJson = json::parse(cfg.rawJson());
     if (!rawJson.contains("_ui"))
       rawJson["_ui"] = json::object();
-    rawJson["_ui"]["positions"] = positions;
+    if (workspaceId.empty()) {
+      rawJson["_ui"]["positions"] = positions;
+    } else {
+      if (!rawJson["_ui"].contains("workspace_positions") ||
+          !rawJson["_ui"]["workspace_positions"].is_object())
+        rawJson["_ui"]["workspace_positions"] = json::object();
+      rawJson["_ui"]["workspace_positions"][workspaceId] = positions;
+    }
 
     // 通过 import 更新内存 + 保存
-    cfg.importJson(rawJson.dump());
-    cfg.saveToFile();
-  } catch (...) {
+    if (!cfg.importJson(rawJson.dump()) || !cfg.saveToFile())
+      throw std::runtime_error("persist failed");
+  } catch (const std::exception &error) {
     json body;
     body["success"] = false;
     body["error"]["code"] = "INTERNAL_ERROR";
-    body["error"]["message"] = "位置保存失败";
+    body["error"]["message"] =
+        std::string("位置保存失败: ") + error.what();
     return http_response(body.dump(), "500 Internal Server Error");
   }
 
   json body;
   body["success"] = true;
+  body["data"]["saved"] = true;
+  body["data"]["workspace_id"] = workspaceId;
   return http_response(body.dump());
 }
 
-std::string ExpertController::getPositions() const {
+std::string ExpertController::getPositions(const std::string &request) const {
   auto &cfg = AgentConfiguration::getInstance();
   json positions;
+  const std::string workspaceId =
+      extract_query_value(request, "workspace_id");
   try {
     json rawJson = json::parse(cfg.rawJson());
-    if (rawJson.contains("_ui") && rawJson["_ui"].contains("positions"))
+    if (!workspaceId.empty() && rawJson.contains("_ui") &&
+        rawJson["_ui"].contains("workspace_positions") &&
+        rawJson["_ui"]["workspace_positions"].is_object() &&
+        rawJson["_ui"]["workspace_positions"].contains(workspaceId)) {
+      positions = rawJson["_ui"]["workspace_positions"][workspaceId];
+    } else if (workspaceId.empty() && rawJson.contains("_ui") &&
+               rawJson["_ui"].contains("positions")) {
       positions = rawJson["_ui"]["positions"];
+    }
   } catch (...) {
   }
+
+  if (!positions.is_object())
+    positions = json::object();
 
   json body;
   body["success"] = true;
@@ -909,6 +1066,11 @@ std::string
 ExpertController::setGlobalLlmDefaults(const std::string &request) const {
   std::string raw = request_body(request);
   json j = json::parse(raw, nullptr, false);
+  if (j.is_discarded() || !j.is_object()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"INVALID_REQUEST","message":"请求体必须是 JSON 对象"}})",
+        "400 Bad Request");
+  }
 
   AgentConfiguration::GlobalLlmDefaults d;
   d.provider = j.value("provider", "");
@@ -917,8 +1079,11 @@ ExpertController::setGlobalLlmDefaults(const std::string &request) const {
   d.temperature = j.value("temperature", -1.0);
 
   auto &cfg = AgentConfiguration::getInstance();
-  cfg.setGlobalLlmDefaults(d);
-  cfg.saveToFile();
+  if (!cfg.setGlobalLlmDefaults(d) || !cfg.saveToFile()) {
+    return http_response(
+        R"({"success":false,"error":{"code":"CONFIG_SAVE_FAILED","message":"全局 LLM 默认值保存失败，请检查配置文件权限"}})",
+        "500 Internal Server Error");
+  }
 
   json body;
   body["success"] = true;

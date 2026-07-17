@@ -165,7 +165,10 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
   }, [expertName]);
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { setError('名称不能为空'); return; }
+    if (!/^[A-Za-z0-9_-]+$/.test(name.trim())) {
+      setError('名称只能包含字母、数字、-、_');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -189,8 +192,8 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       }
       onSaved();
       onClose();
-    } catch {
-      setError('保存失败');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '保存失败');
     }
     setSaving(false);
   }, [name, description, isEntry, contextIsolation, contextTemplate,
@@ -204,8 +207,8 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       await deleteExpert(originalNameRef.current);
       onSaved();
       onClose();
-    } catch {
-      setError('删除失败');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '删除失败');
     }
   }, [onSaved, onClose]);
 
@@ -234,7 +237,7 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       onClick={onClose}
     >
       <div
-        className="glass-panel flex flex-col"
+        className="glass-panel expert-config-modal flex flex-col"
         style={{
           width: 520, maxWidth: 'calc(100vw - 48px)',
           padding: '28px 32px', gap: 20, overflow: 'visible',
@@ -258,6 +261,7 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
         <Section title="基本信息">
           <Field label="名称" required>
             <input value={name} onChange={e => setName(e.target.value)}
+              disabled={!isCreate}
               placeholder="例如：my_expert"
               className="form-input" style={{ width: '100%' }} />
           </Field>

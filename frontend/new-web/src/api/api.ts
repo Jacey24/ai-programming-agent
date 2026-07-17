@@ -32,10 +32,15 @@ export const deleteWorkspace = (id: string) => requestJson<{deleted: boolean}>(
 export const getFileTree = (workspaceId: string) =>
     requestJson<{tree: FileTreeNode}>(endpoints.workspaceFiles(workspaceId));
 
-export const getFileContent = (workspaceId: string, filePath: string) =>
+export const getFileContent = (workspaceId: string, filePath: string, signal?: AbortSignal) =>
     requestJson<{content: string; path: string}>(
         `${endpoints.workspaceFileContent(workspaceId)}?path=${
-            encodeURIComponent(filePath)}`);
+            encodeURIComponent(filePath)}`, {signal});
+
+export const revealWorkspaceFile = (workspaceId: string, filePath: string) =>
+    requestJson<{revealed: boolean; path: string}>(
+        `${endpoints.workspaceFileReveal(workspaceId)}?path=${encodeURIComponent(filePath)}`,
+        {method: 'POST'});
 
 // ==================== Sessions ====================
 export const listSessions = () =>
@@ -143,7 +148,7 @@ export const createExpert = (data: Partial<Exponent>) => requestJson<Exponent>(
 
 export const updateExpert = (name: string, data: Partial<Exponent>) =>
     requestJson<Exponent>(
-        endpoints.expert(name), {method: 'PUT', body: JSON.stringify(data)});
+        endpoints.expert(name), {method: 'PATCH', body: JSON.stringify(data)});
 
 export const patchExpert = (name: string, data: Partial<Exponent>) =>
     requestJson<Exponent>(
@@ -155,16 +160,17 @@ export const deleteExpert = (name: string) =>
 export const getExpertGraph = () =>
     requestJson<ExpertGraph>(endpoints.expertsGraph);
 
-export const getExpertGraphPositions = () => requestJson < Record < string, {
+export const getExpertGraphPositions = (workspaceId?: string) => requestJson < Record < string, {
   x: number;
   y: number
 }
->> (endpoints.expertsGraphPositions);
+>> (`${endpoints.expertsGraphPositions}${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ''}`);
 
 export const saveExpertGraphPositions = (positions: Record<string, {
   x: number;
   y: number
-}>) => requestJson<{saved: boolean}>(endpoints.expertsGraphPositions, {
+}>, workspaceId?: string) => requestJson<{saved: boolean}>(
+  `${endpoints.expertsGraphPositions}${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ''}`, {
   method: 'PUT',
   body: JSON.stringify(positions),
 });
@@ -286,11 +292,14 @@ export const setConfigLogging = (data: Record<string, unknown>) =>
         endpoints.configLogging, {method: 'PUT', body: JSON.stringify(data)});
 
 export const getConfigTools = () =>
-    requestJson<{items: ToolInfo[]}>(endpoints.configTools);
+    requestJson<Record<string, unknown>>(endpoints.configTools);
 
 export const setConfigTools = (data: Record<string, unknown>) =>
     requestJson<Record<string, unknown>>(
         endpoints.configTools, {method: 'PUT', body: JSON.stringify(data)});
+
+export const reloadToolsConfig = () =>
+    requestJson<Record<string, unknown>>(endpoints.toolsReload, {method: 'POST'});
 
 // ==================== Debug ====================
 export const getDebugConsole = () => requestJson<

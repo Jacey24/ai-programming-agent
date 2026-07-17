@@ -9,6 +9,8 @@ export const endpoints = {
   workspaceFiles: (id: string) => `${BASE}/workspaces/${id}/files/tree`,
   workspaceFileContent: (id: string) =>
       `${BASE}/workspaces/${id}/files/content`,
+  workspaceFileReveal: (id: string) =>
+      `${BASE}/workspaces/${id}/files/reveal`,
   workspaceSessions: (id: string) => `${BASE}/workspaces/${id}/sessions`,
   selectDirectory: `${BASE}/workspaces/select-directory`,
 
@@ -39,6 +41,7 @@ export const endpoints = {
 
   // Tools
   tools: `${BASE}/tools`,
+  toolsReload: `${BASE}/tools/reload`,
   tool: (name: string) => `${BASE}/tools/${name}`,
 
   // Experts

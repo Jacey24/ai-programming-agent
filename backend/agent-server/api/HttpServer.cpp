@@ -455,11 +455,11 @@ int HttpServer::run(const std::atomic_bool &running) {
   // Expert
   ROUTE_NODB(Get, "/api/v1/experts/graph", ExpertController, getGraph,
              "GET /api/v1/experts/graph");
-  ROUTE_NODB0(Get, "/api/v1/experts/graph/positions", ExpertController,
-              getPositions);
+  ROUTE_NODB(Get, "/api/v1/experts/graph/positions", ExpertController,
+             getPositions, "GET " + req.target);
   ROUTE_NODB(Put, "/api/v1/experts/graph/positions", ExpertController,
              savePositions,
-             "PUT /api/v1/experts/graph/positions \r\n\r\n" + req.body);
+             "PUT " + req.target + " \r\n\r\n" + req.body);
   ROUTE_NODB0(Get, "/api/v1/experts/export", ExpertController, exportConfig);
   ROUTE_NODB(Post, "/api/v1/experts/import", ExpertController, importConfig,
              "POST /api/v1/experts/import \r\n\r\n" + req.body);
