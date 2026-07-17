@@ -342,7 +342,7 @@ function WorkspaceSelectOverlay({ onSelect }: { onSelect: (ws: WorkspaceRecord) 
 
   const handleCreate = async () => {
     if (!newName.trim() || !newPath.trim()) return;
-    try { const ws = await createWorkspace(newName.trim(), newPath.trim()); setNewName(''); setNewPath(''); setShowCreate(false); refresh(); }
+    try { await createWorkspace(newName.trim(), newPath.trim()); setNewName(''); setNewPath(''); setShowCreate(false); refresh(); }
     catch { alert('创建工作区失败，请检查路径是否有效'); }
   };
 

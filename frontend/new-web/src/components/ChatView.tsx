@@ -438,9 +438,11 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         items.push({ kind: 'status', data: { title: 'Permission resolved', detail: evt.content || '权限已处理', status: 'success', id }, time });
       } else if (type === 'task_completed') {
         items.push({ kind: 'status', data: { title: '✓ 任务完成', status: 'success', id }, time });
-      } else if (type === 'task_failed' || type === 'task_cancelled') {
-        const interrupted = type === 'task_failed' && strMeta(meta, 'status') === 'interrupted';
-        items.push({ kind: 'status', data: { title: interrupted ? '任务中断' : (evt.content || type), detail: interrupted ? evt.content : undefined, status: 'failed', id }, time });
+      } else if (type === 'task_failed') {
+        const interrupted = strMeta(meta, 'status') === 'interrupted';
+        items.push({ kind: 'status', data: { title: interrupted ? '任务中断' : '任务失败', detail: interrupted ? evt.content : undefined, status: 'failed', id }, time });
+      } else if (type === 'task_cancelled') {
+        items.push({ kind: 'status', data: { title: evt.content || '任务已取消', status: 'failed', id }, time });
       } else if (type === 'stream_end') {
         items.push({ kind: 'status', data: { title: 'Stream ended', detail: evt.content || '', status: 'success', id }, time });
       }

@@ -8,7 +8,6 @@ import {
   saveExpertGraphPositions,
   setExpertRoutes,
   updateExpert,
-  patchExpert,
   setExpertTools,
 } from '../api/api';
 import { ExpertEditModal } from './ExpertEditModal';
@@ -41,13 +40,11 @@ interface EdgeEditorState {
   anchorY: number;
 }
 
-interface PortCoords { x: number; y: number; }
-
 // ── Constants ──
 const NODE_W = 180; const NODE_H = 60; const EXPANDED_W = 300;
 const VNODE_W = 90; const VNODE_H = 36;
 const PORT_RADIUS = 7; const PORT_HIT = 14;
-const VERTICAL_GAP = 120; const INITIAL_TOP = 100; const INITIAL_LEFT = 80;
+const VERTICAL_GAP = 120;
 const DRAG_THRESHOLD = 5;
 const CREATE_MODE = '<<CREATE>>';
 
@@ -780,8 +777,6 @@ export function ExpertGraphCanvas({ theme }: Props) {
     try { await setExpertTools(nodeId, newTools); reloadGraph(); } catch { try { const e = await getExpert(nodeId); setExpandedDataMap(prev => ({ ...prev, [nodeId]: { prompt: e.context_template || '', description: e.description || '', tools: e.visible_tools || [] } })); } catch { } }
   }, [reloadGraph]);
   const removeTool = useCallback((nodeId: string, tn: string) => { const d = expandedDataRef.current[nodeId]; if (d) saveTools(nodeId, d.tools.filter(t => t !== tn)); }, [saveTools]);
-  const savePrompt = useCallback(async (nodeId: string, prompt: string) => { try { await patchExpert(nodeId, { context_template: prompt }); } catch { } }, []);
-
   // ── Edge paths ──
   const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges);
 
@@ -852,7 +847,6 @@ export function ExpertGraphCanvas({ theme }: Props) {
         {allPorts.map(p => {
           const isHighlight = wiring && hoveredPort === p.nodeId;
           const isInput = p.type === 'input';
-          const sc = graphToScreen(p.x, p.y, z, cp);
           return (
             <div
               key={`${p.nodeId}-${p.type}`}
@@ -1123,7 +1117,7 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
     window.addEventListener('mouseup', onU);
     return () => { window.removeEventListener('mousemove', onM); window.removeEventListener('mouseup', onU); };
   }, []);
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback(() => {
     if (dragMoved.current) return;
     onCreate();
   }, [onCreate]);
