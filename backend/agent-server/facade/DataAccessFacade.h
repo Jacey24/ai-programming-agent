@@ -10,6 +10,7 @@
 #include "infrastructure/storage/repositories/TaskRepository.h"
 #include "infrastructure/storage/repositories/ToolCallRepository.h"
 #include "infrastructure/storage/repositories/WorkspaceRepository.h"
+#include "infrastructure/storage/TaskRecovery.h"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -42,6 +43,7 @@ public:
   // ============================================================
   void init(const std::string &dbPath);
   bool isInitialized() const { return initialized_; }
+  TaskRecoveryReport recoverInterruptedTasks();
 
   // ============================================================
   // Session 组（独立存储，通过 workspace_id 关联 Workspace）

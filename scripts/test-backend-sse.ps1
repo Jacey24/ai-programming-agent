@@ -4,6 +4,10 @@ param(
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
     [string]$BackendExe,
 
+    [Parameter(Mandatory = $true)]
+    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
+    [string]$SqliteTestExe,
+
     [ValidateSet('Debug', 'Release')]
     [string]$BuildType = 'Debug',
 
@@ -205,6 +209,19 @@ function Invoke-JsonRequest {
 
 function Assert-True { param([bool]$Condition, [string]$Message) if (-not $Condition) { throw $Message } }
 
+function Invoke-SqliteExec {
+    param([string]$Sql)
+    & $resolvedSqliteTest $databasePath exec $Sql
+    if ($LASTEXITCODE -ne 0) { throw 'sqlite test helper exec failed.' }
+}
+
+function Invoke-SqliteScalar {
+    param([string]$Sql)
+    $value = & $resolvedSqliteTest $databasePath scalar $Sql
+    if ($LASTEXITCODE -ne 0) { throw 'sqlite test helper scalar failed.' }
+    return [string]$value
+}
+
 function New-Task {
     param([string]$Name, [ValidateSet('answer', 'workspace')][string]$Mode = 'answer')
     $body = [ordered]@{
@@ -366,12 +383,14 @@ function Invoke-Scenario {
 }
 
 $resolvedBackend = (Resolve-Path -LiteralPath $BackendExe).Path
+$resolvedSqliteTest = (Resolve-Path -LiteralPath $SqliteTestExe).Path
 $resolvedConfig = (Resolve-Path -LiteralPath $SourceConfigDirectory).Path
 if (-not $RuntimeRoot) { $RuntimeRoot = Join-Path (Split-Path -Parent $resolvedBackend) 'test-runtime' }
 $runDirectory = Join-Path $RuntimeRoot (('{0}-sse-{1}' -f $BuildType, [Guid]::NewGuid().ToString('N')))
 $binDirectory = Join-Path $runDirectory 'bin'; $configDirectory = Join-Path $runDirectory 'config'
 $workspaceDirectory = Join-Path $runDirectory 'workspace'; $requestDirectory = Join-Path $runDirectory 'test-results\requests'
 $streamDirectory = Join-Path $runDirectory 'test-results\streams'; $contractFile = Join-Path $runDirectory 'test-results\backend-sse-contract.json'
+$databasePath = Join-Path $runDirectory 'storage\agent.db'
 $baseUri = 'http://127.0.0.1:8080'; $backendProcessId = $null; $failure = $null; $gracefulStopRequested = $false; $localLlmStubStarted = $false
 $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
 $sseClients = [System.Collections.Generic.List[object]]::new(); $contractResults = [System.Collections.Generic.List[object]]::new()
@@ -416,6 +435,31 @@ try {
         Assert-True (($ids | Select-Object -Unique).Count -eq $ids.Count) 'History/live boundary produced duplicate event IDs.'
         Add-ScenarioResult $script:currentScenario $task $result $true
         $script:terminalTaskId = $task
+    }
+
+    Invoke-Scenario 'interrupted database status terminates without duplicate terminal event' {
+        $task = 'sse-interrupted-no-event'
+        $sql = "INSERT INTO tasks (id,session_id,global_id,workspace_id,goal,status,plan,current_step,created_at,updated_at) VALUES ('$task','$sessionId','','$workspaceId','interrupted SSE regression','interrupted','','',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);"
+        Invoke-SqliteExec $sql
+        Assert-True ((Invoke-SqliteScalar "SELECT COUNT(*) FROM task_events WHERE task_id='$task' AND type IN ('task_completed','task_failed','task_cancelled');") -eq '0') 'Interrupted fixture unexpectedly had a terminal event.'
+
+        $client = Start-SseClient 'interrupted-status-only' $task 5
+        Wait-SseClient $client 8
+        $result = Read-SseResult $client
+        Assert-SseContract $result $task
+        Assert-True (@($result.Events | Where-Object Event -in @('task_completed', 'task_failed', 'task_cancelled')).Count -eq 0) 'SSE synthesized a duplicate terminal event for interrupted status.'
+
+        $cancel = Invoke-JsonRequest POST "/api/v1/tasks/$task/cancel" '{}' $true
+        Assert-True ($cancel.StatusCode -eq 200 -and $cancel.Json.data.status -eq 'interrupted') 'Cancellation changed interrupted task status.'
+        Assert-True ((Get-Task $task).Json.data.status -eq 'interrupted') 'Interrupted task was restarted or modified.'
+        Assert-True ((Invoke-SqliteScalar "SELECT COUNT(*) FROM task_events WHERE task_id='$task' AND type IN ('task_completed','task_failed','task_cancelled');") -eq '0') 'Cancellation inserted a terminal event for interrupted task.'
+
+        $replay = Start-SseClient 'interrupted-status-only-replay' $task 5
+        Wait-SseClient $replay 8
+        $replayResult = Read-SseResult $replay
+        Assert-SseContract $replayResult $task
+        Assert-True (@($replayResult.Events | Where-Object Event -in @('task_completed', 'task_failed', 'task_cancelled')).Count -eq 0) 'Repeated SSE connection inserted a terminal event.'
+        Add-ScenarioResult $script:currentScenario $task $result $true $false 'Persisted interrupted status ended both streams without a terminal business event.'
     }
 
     Invoke-Scenario 'same task reconnect after disconnect' {

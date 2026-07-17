@@ -120,11 +120,27 @@ std::string AgentOrchestrator::resolveGlobalId(const std::string &globalId) {
 
 // ── 任务生命周期 ──
 
+namespace {
+
+bool isTerminalStatus(const std::string &status) {
+  return status == "completed" || status == "failed" ||
+         status == "cancelled" || status == "interrupted";
+}
+
+} // namespace
+
 void AgentOrchestrator::startTask(const std::string &taskId,
                                   const std::string &globalId,
                                   const std::string &workspaceId,
                                   const std::string &goal,
                                   const TaskRunOptions &options) {
+  if (DataAccessFacade::getInstance().isInitialized()) {
+    const auto persistedTask = DataAccessFacade::getInstance().getTask(taskId);
+    if (persistedTask && persistedTask->status == "interrupted") {
+      throw std::logic_error("interrupted task cannot be started again");
+    }
+  }
+
   std::string resolvedGlobalId = resolveGlobalId(globalId);
 
   auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
@@ -146,15 +162,6 @@ void AgentOrchestrator::startTask(const std::string &taskId,
     taskThreads_[taskId].detach();
   }
 }
-
-namespace {
-
-bool isTerminalStatus(const std::string &status) {
-  return status == "completed" || status == "failed" ||
-         status == "cancelled";
-}
-
-} // namespace
 
 bool AgentOrchestrator::cancelTask(const std::string &taskId) {
   bool cancelled = false;
@@ -241,7 +248,8 @@ EventType statusToTerminalEvent(const std::string &status) {
 }
 
 std::string statusToDbString(const std::string &status) {
-  if (status == "completed" || status == "failed" || status == "cancelled")
+  if (status == "completed" || status == "failed" || status == "cancelled" ||
+      status == "interrupted")
     return status;
   return "failed";
 }

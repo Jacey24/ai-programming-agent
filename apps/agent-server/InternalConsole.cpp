@@ -997,7 +997,12 @@ void InternalConsole::onSseEvent(const json &event) {
   } else if (type == "task_completed") {
     std::cout << "\n  ✅ 任务完成" << std::endl << "> " << std::flush;
   } else if (type == "task_failed") {
-    std::cout << "\n  ❌ 任务失败" << std::endl << "> " << std::flush;
+    const bool interrupted =
+        event.contains("metadata") && event["metadata"].is_object() &&
+        event["metadata"].value("status", "") == "interrupted";
+    std::cout << (interrupted ? "\n  ❌ 任务中断" : "\n  ❌ 任务失败")
+              << std::endl
+              << "> " << std::flush;
   } else if (type == "task_cancelled") {
     std::cout << "\n  ⏹ 任务已取消" << std::endl << "> " << std::flush;
   } else if (type == "stream_end") {

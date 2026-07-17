@@ -23,8 +23,8 @@ export function AgentChatPanel({
   className = "",
 }: AgentChatPanelProps) {
   const status = state.activeTask?.status || (state.chatFallback ? "chat" : "idle");
-  const canCancel = Boolean(state.activeTask?.id && !["completed", "failed", "cancelled"].includes(state.activeTask.status || ""));
-  const taskRunning = Boolean(state.activeTask?.id) && !["completed", "failed", "cancelled"].includes(state.activeTask?.status || "");
+  const canCancel = Boolean(state.activeTask?.id && !["completed", "failed", "cancelled", "interrupted"].includes(state.activeTask.status || ""));
+  const taskRunning = Boolean(state.activeTask?.id) && !["completed", "failed", "cancelled", "interrupted"].includes(state.activeTask?.status || "");
 
   return (
     <aside className={`w-full shrink-0 flex-col border-l border-slate-800 bg-[#0a101b]/95 xl:w-[410px] ${className || "hidden xl:flex"}`}>

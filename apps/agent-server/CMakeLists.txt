@@ -88,6 +88,7 @@ add_executable(codepilot-agent-server
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/ToolCallRepository.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/migrations/MigrationRunner.cpp
     ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/repositories/WorkspaceRepository.cpp
+    ${CMAKE_SOURCE_DIR}/backend/agent-server/infrastructure/storage/TaskRecovery.cpp
 )
 
 target_include_directories(codepilot-agent-server PRIVATE
