@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { AppPhase, GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
 import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools } from './api/api';
 import { GlassPanel } from './components/GlassPanel';
@@ -8,8 +8,6 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ExpertGraphCanvas } from './components/ExpertGraphCanvas';
 import { AmbientBubbles } from './components/AmbientBubbles';
 import { initialWorkflowStoreState, workflowStoreReducer } from './workflowState';
-
-const PANEL_WIDTH = 420;
 
 /* ################################################################
  * 工作区切换交错动画规范（STAGGER ANIMATION CONVENTION）
@@ -45,7 +43,6 @@ export default function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceRecord | null>(null);
   const [activeSession, setActiveSession] = useState<SessionRecord | null>(null);
   const [activeTab, setActiveTab] = useState<GlassTab>('chat');
-  const [vw, setVw] = useState(window.innerWidth);
   const [scale, setScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -55,12 +52,6 @@ export default function App() {
   const timerRef = useRef<number>(0);
   const restoreRequest = useRef(0);
   const restoreAbort = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const onResize = () => setVw(window.innerWidth);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
   useEffect(() => {
@@ -183,9 +174,6 @@ export default function App() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
-  // 水平偏移：减小留白，左右对称且紧凑
-  const leftOffset = useMemo(() => Math.max(16, Math.round((vw - PANEL_WIDTH) * 0.03)), [vw]);
-
   const backToSessions = useCallback(() => {
     setActiveSession(null);
     if (activeWorkspace) {
@@ -225,13 +213,9 @@ export default function App() {
       {/* 动态气泡背景 — 最底层 (z-index: -1) */}
       <AmbientBubbles />
 
-      {/* Expert 画布 — 背景层，在所有面板之下 */}
-      <ExpertGraphCanvas theme={theme} workflowState={workflowState} />
-
       {/* 顶部栏 — StatusPills + 圆形按钮 */}
       <header
-        className="shrink-0 flex items-center stagger-item"
-        style={{ height: 56, paddingLeft: leftOffset, paddingRight: `max(24px, ${leftOffset}px)`, gap: 12, position: 'relative', zIndex: 20 }}
+        className="workspace-header shrink-0 flex items-center stagger-item"
       >
         <StatusPills />
         {/* 主题切换 — 圆形仅图标 */}
@@ -280,26 +264,28 @@ export default function App() {
 
       {/* 主区域 — z-index: 10 */}
       <main
-        className="flex-1 min-h-0 overflow-hidden stagger-item"
-        style={{ position: 'relative', zIndex: 10, paddingTop: 16, paddingLeft: leftOffset, paddingRight: leftOffset, pointerEvents: 'none' }}
+        className="workspace-main flex-1 min-h-0 overflow-hidden stagger-item"
       >
-        <GlassPanel
-          theme={theme}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          workspace={activeWorkspace}
-          activeSession={activeSession}
-          onSelectSession={selectSession}
-          onBackToSessions={backToSessions}
-          onExitWorkspace={exitWorkspace}
-          onWorkflowTaskSelected={handleWorkflowTaskSelected}
-          onWorkflowEvents={handleWorkflowEvents}
-          scale={scale}
-        />
+        <section className="workspace-graph-pane" aria-label="Expert workflow">
+          <ExpertGraphCanvas theme={theme} workflowState={workflowState} />
+          <ToolPanelWrapper theme={theme} embedded />
+        </section>
+        <section className="workspace-session-pane" aria-label="Current session">
+          <GlassPanel
+            theme={theme}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            workspace={activeWorkspace}
+            activeSession={activeSession}
+            onSelectSession={selectSession}
+            onBackToSessions={backToSessions}
+            onExitWorkspace={exitWorkspace}
+            onWorkflowTaskSelected={handleWorkflowTaskSelected}
+            onWorkflowEvents={handleWorkflowEvents}
+            scale={scale}
+          />
+        </section>
       </main>
-
-      {/* 右侧工具面板 — position: fixed 独立定位 */}
-      <ToolPanelWrapper theme={theme} />
 
       {/* 全局设置面板 — 最顶层 Portal */}
       <SettingsPanel
@@ -316,7 +302,7 @@ export default function App() {
 // ====================================================================
 // 工具面板包装器（加载工具列表）
 // ====================================================================
-function ToolPanelWrapper({ theme }: { theme: 'dark' | 'light' }) {
+function ToolPanelWrapper({ theme, embedded = false }: { theme: 'dark' | 'light'; embedded?: boolean }) {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -341,7 +327,7 @@ function ToolPanelWrapper({ theme }: { theme: 'dark' | 'light' }) {
     load();
   }, []);
 
-  return <ToolPanel tools={tools} loading={loading} theme={theme} />;
+  return <ToolPanel tools={tools} loading={loading} theme={theme} embedded={embedded} />;
 }
 
 // ====================================================================

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import type { MessageRecord, SessionRecord, TaskEventRecord, TaskRecord, ToolCallLog } from '../types';
 import { createTask, cancelTask, getTaskToolCalls, listMessages, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
 import { ToolCallCard } from './ToolCallCard';
+import { latestTaskForContext, tasksForContext } from '../taskSelection';
 
 interface Props {
   workspaceId: string;
@@ -271,24 +272,27 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
         ]);
         if (requestId !== historyRequest.current || controller.signal.aborted) return;
         setMessages((messageRes.items || []).slice().sort((a, b) => a.sequence_no - b.sequence_no));
-        const tasks = (taskRes.items || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-        const latestTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
+        const tasks = tasksForContext(taskRes.items || [], workspaceId, session.id);
+        const latestTask = latestTaskForContext(tasks, workspaceId, session.id);
         setActiveTask(latestTask);
         onWorkflowTaskSelected(latestTask);
         const historyEvents: TaskEventRecord[] = [];
         const historyToolCalls: ToolCallLog[] = [];
         for (const t of tasks) {
+          const isDisplayTask = t.id === latestTask?.id;
           let hasInterruptedEvent = false;
           try {
             const [evtRes, toolRes] = await Promise.all([
               listTaskEvents(t.id, controller.signal),
               getTaskToolCalls(t.id, controller.signal),
             ]);
-            historyToolCalls.push(...(toolRes.items || []).filter(call => call.task_id === t.id));
+            if (isDisplayTask) {
+              historyToolCalls.push(...(toolRes.items || []).filter(call => call.task_id === t.id));
+            }
             onWorkflowEvents(t, evtRes.items || []);
             for (const evt of evtRes.items || []) {
               // ★ 工具/权限/状态事件走 appendEvents（关闭后回来也能看到）
-              if (PERSISTED_EVENT_TYPES.includes(evt.type || '') &&
+              if (isDisplayTask && PERSISTED_EVENT_TYPES.includes(evt.type || '') &&
                   !TOOL_EVENT_TYPES.includes(evt.type || '')) {
                 const historyEvent = t.status === 'interrupted' && evt.type === 'task_failed'
                   ? { ...evt, metadata: { ...objMeta(evt.metadata), status: 'interrupted' } }
@@ -298,7 +302,7 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
               }
             }
           } catch {}
-          if (t.status === 'interrupted' && !hasInterruptedEvent) {
+          if (isDisplayTask && t.status === 'interrupted' && !hasInterruptedEvent) {
             historyEvents.push({
               id: `interrupted_${t.id}`,
               task_id: t.id,
@@ -324,7 +328,7 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
       controller.abort();
       ++historyRequest.current;
     };
-  }, [session.id, appendEvents, closeStream, onWorkflowEvents, onWorkflowTaskSelected, startSSE]);
+  }, [session.id, workspaceId, appendEvents, closeStream, onWorkflowEvents, onWorkflowTaskSelected, startSSE]);
 
   useEffect(() => () => closeStream(), [closeStream]);
 
@@ -360,6 +364,9 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
       }
       setActiveTask(task);
       onWorkflowTaskSelected(task);
+      setRawEvents([]);
+      setToolCalls([]);
+      seenIds.current.clear();
       setMessages(prev => prev
         .filter(message => message.id !== userMsgId && message.id !== task.user_message.id)
         .concat(task.user_message)
@@ -475,7 +482,7 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
     return items;
   }, [messages, rawEvents, toolCalls, loadingHistory, streaming, streamingContent]);
 
-  const TOP_HEIGHT = 44;
+  const TOP_HEIGHT = 54;
 
   return (
     <div className="flex flex-col h-full">
@@ -483,7 +490,19 @@ export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected,
         <button onClick={onBack} className="btn-secondary" style={{ minWidth: 56, height: 30, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
           ← 返回
         </button>
-        <span className="text-xs text-[var(--text-primary)] truncate flex-1">{session.title || '对话'}</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] text-[var(--text-secondary)] truncate" title={`${workspaceId} / ${session.id}`}>
+            Workspace {workspaceId} / Session {session.title || session.id}
+          </div>
+          <div className="text-xs text-[var(--text-primary)] truncate" title={activeTask?.id || 'No task'}>
+            Task {activeTask?.id || '尚未创建'}
+          </div>
+        </div>
+        {activeTask?.status && (
+          <span className="text-[9px] uppercase rounded-md shrink-0" style={{ padding: '3px 6px', color: 'var(--accent-lighter)', border: '1px solid var(--glass-border-strong)', background: 'var(--surface)' }}>
+            {activeTask.status}
+          </span>
+        )}
         {streaming && <span className="w-2 h-2 rounded-full bg-[var(--accent-light)] animate-pulse" />}
       </div>
 

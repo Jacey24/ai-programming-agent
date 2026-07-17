@@ -286,7 +286,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
   const interactionRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const canvasSize = useElementSize(canvasRef);
+  const canvasSize = useElementSize(canvasRef, !loading && Boolean(graph));
 
   // ── Zoom / Pan ──
   const [cumPan, setCumPan] = useState({ x: 0, y: 0 });
@@ -807,7 +807,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <g style={{ transform: tr, transformOrigin: '0 0' }}>
           {edgePaths.map(ep => (
-            <g key={ep.id}>
+            <g key={ep.id} data-workflow-edge-status={ep.status} data-edge-source={ep.edge.source} data-edge-target={ep.edge.target}>
               {/* Invisible wide hit area */}
               <path
                 d={ep.d} fill="none" stroke="transparent" strokeWidth={14}
@@ -939,7 +939,7 @@ export function ExpertGraphCanvas({ theme, workflowState }: Props) {
                 : runtimeStatus === 'failed' ? 'rgba(239,68,68,0.13)' : null;
           const runtimeShadow = runtimeColor ? `0 0 28px ${runtimeColor}55` : null;
           return (
-            <div key={node.id} data-node={node.id} draggable={false}
+            <div key={node.id} data-node={node.id} data-workflow-status={runtimeStatus} draggable={false}
               className={isExpanded ? 'glass-panel' : undefined}
               onDoubleClick={() => handleNodeDoubleClick(node.id)}
               onMouseDown={e => handleNodeMouseDown(node.id, e)}
@@ -1155,6 +1155,7 @@ function AddExpertButton({ theme, canvasSize, onCreate }: { theme: 'dark' | 'lig
   if (!pos) return null;
   return (
     <div
+      data-add-expert-control
       onMouseDown={onMD}
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
@@ -1182,11 +1183,11 @@ function AddExpertButton({ theme, canvasSize, onCreate }: { theme: 'dark' | 'lig
 }
 
 // ── Hooks ──
-function useElementSize(ref: React.RefObject<HTMLElement | null>): CanvasSize {
+function useElementSize(ref: React.RefObject<HTMLElement | null>, ready: boolean): CanvasSize {
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!ready || !element) return;
     const update = () => {
       const rect = element.getBoundingClientRect();
       setSize(previous => previous.width === rect.width && previous.height === rect.height
@@ -1196,7 +1197,7 @@ function useElementSize(ref: React.RefObject<HTMLElement | null>): CanvasSize {
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [ref]);
+  }, [ready, ref]);
   return size;
 }
 
@@ -1204,7 +1205,7 @@ function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, N
   const [c, setC] = useState<Record<string, NodePosition>>({});
   useEffect(() => {
     if (!graph || canvasSize.width <= 0 || canvasSize.height <= 0) return;
-    const r: Record<string, NodePosition> = { ...saved };
+    const r: Record<string, NodePosition> = {};
     const graphWidth = canvasSize.width / 0.85;
     const graphHeight = canvasSize.height / 0.85;
     const bounds: LayoutRect = {
@@ -1213,6 +1214,26 @@ function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, N
       width: Math.max(NODE_W, graphWidth * 0.72 - 48),
       height: Math.max(NODE_H, graphHeight - 48),
     };
+    const occupied: LayoutRect[] = [];
+    for (const [id, position] of Object.entries(saved)) {
+      const size = getNodeSize(id, false);
+      const outsideBounds = position.x < bounds.x || position.y < bounds.y ||
+        position.x + size.w > bounds.x + bounds.width ||
+        position.y + size.h > bounds.y + bounds.height;
+      const nextPosition = outsideBounds
+        ? findSafeNodePosition(
+          {
+            x: Math.min(Math.max(position.x, bounds.x), bounds.x + bounds.width - size.w),
+            y: Math.min(Math.max(position.y, bounds.y), bounds.y + bounds.height - size.h),
+          },
+          occupied,
+          bounds,
+          { width: size.w, height: size.h },
+        )
+        : position;
+      r[id] = nextPosition;
+      occupied.push({ ...nextPosition, width: size.w, height: size.h });
+    }
     const entryNodes = (graph.virtual_nodes || []).filter(node => node.type === 'entry');
     const exitNodes = (graph.virtual_nodes || []).filter(node => node.type === 'exit');
     const otherVirtualNodes = (graph.virtual_nodes || []).filter(node => node.type !== 'entry' && node.type !== 'exit');
@@ -1226,10 +1247,6 @@ function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, N
     const totalHeight = Math.max(VNODE_H, (ordered.length - 1) * gap + VNODE_H);
     const startY = Math.max(bounds.y, bounds.y + (bounds.height - totalHeight) / 2);
     const centerX = bounds.x + Math.max(0, (bounds.width - NODE_W) / 2);
-    const occupied: LayoutRect[] = Object.entries(saved).map(([id, position]) => {
-      const size = getNodeSize(id, false);
-      return { ...position, width: size.w, height: size.h };
-    });
     ordered.forEach((node, index) => {
       if (r[node.id]) return;
       const position = findSafeNodePosition(
