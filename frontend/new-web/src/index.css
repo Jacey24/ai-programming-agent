@@ -36,6 +36,21 @@
   box-sizing: border-box;
 }
 
+/* 全局主题过渡：仅在主题容器内生效，不影响 portal 到 body 的元素 */
+.theme-dark *,
+.theme-dark *::before,
+.theme-dark *::after,
+.theme-light *,
+.theme-light *::before,
+.theme-light *::after {
+  transition: background-color 0.35s ease, color 0.35s ease,
+    border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+html {
+  font-size: 120%;
+}
+
 html,
 body,
 #root {
@@ -49,6 +64,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 确保 body 自身不受到额外的字体放大 */
+  font-size: 1rem;
 }
 
 /* ========== 双色主题切换容器 ========== */

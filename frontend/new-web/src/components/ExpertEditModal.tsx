@@ -1,10 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Exponent, ExpertRouteRule, ToolInfo } from '../types';
+import type { Exponent } from '../types';
 import {
-  getExpert, createExpert, updateExpert, deleteExpert,
-  listTools,
+  getExpert, createExpert, updateExpert, deleteExpert, patchExpert,
 } from '../api/api';
+
+// ── 模板积木定义 ──
+interface PlaceholderChip {
+  key: string;
+  label: string;
+  desc: string;
+  bg: string;
+  fg: string;
+  border: string;
+}
+
+const PLACEHOLDER_CHIPS: PlaceholderChip[] = [
+  { key: '{role}',           label: '{role}',           desc: 'Expert 角色描述 — 来自「角色描述」字段，定义当前专家的人格与职责',          bg: '#6393eb22', fg: '#6393eb', border: '#6393eb66' },
+  { key: '{goal}',           label: '{goal}',           desc: '当前任务目标 — 用户输入或上级专家传递的任务描述',                                   bg: '#22c55e22', fg: '#22c55e', border: '#22c55e66' },
+  { key: '{plan}',           label: '{plan}',           desc: '当前执行计划 — 包含步骤列表或「暂无计划」提示',                                     bg: '#22c55e22', fg: '#22c55e', border: '#22c55e66' },
+  { key: '{summary}',        label: '{summary}',        desc: '任务上下文/摘要 — 首轮为「暂无摘要」，后续轮次包含之前的执行结果',                   bg: '#6b728022', fg: '#9ca3af', border: '#6b728066' },
+  { key: '{tools_desc}',     label: '{tools_desc}',     desc: '可见工具列表描述 — 自动生成的工具用途说明（含参数和分组）',                        bg: '#f59e0b22', fg: '#f59e0b', border: '#f59e0b66' },
+  { key: '{tag_protocol}',   label: '{tag_protocol}',   desc: '标签协议定义 — 必须使用的 XML 标签格式（done/fail/plan/write 等）',               bg: '#f59e0b22', fg: '#f59e0b', border: '#f59e0b66' },
+  { key: '{output_hint}',    label: '{output_hint}',    desc: '输出格式提示 — 阶段结束方式、禁止事项等输出规范',                                   bg: '#f59e0b22', fg: '#f59e0b', border: '#f59e0b66' },
+  { key: '{rounds_left}',    label: '{rounds_left}',    desc: '剩余轮次提示 — 当前剩余的可用工具调用轮次',                                         bg: '#6b728022', fg: '#9ca3af', border: '#6b728066' },
+  { key: '{session}',        label: '{session}',        desc: '会话上下文 — 续接历史对话时注入的先前上下文，首发为空',                              bg: '#6b728022', fg: '#9ca3af', border: '#6b728066' },
+  { key: '{workspace}',      label: '{workspace}',      desc: '工作目录信息 — 当前工作区路径和标识',                                                bg: '#6b728022', fg: '#9ca3af', border: '#6b728066' },
+];
+
+const DEFAULT_CONTEXT_TEMPLATE = '{role}\n\n{goal}\n\n{plan}\n{summary}\n{tools_desc}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}\n{workspace}';
 
 interface Props {
   expertName?: string;         // undefined = create mode
@@ -13,24 +37,90 @@ interface Props {
   onSaved: () => void;         // trigger graph refresh
 }
 
+/**
+ * ExpertEditModal — 编辑/新建 Expert 基本信息、LLM 配置、容量限制。
+ * 工具可见性 和 路由规则 已迁移到 Canvas 上的拖拽/连线编辑，此处不再保留。
+ *
+ * 注意：后端 GET /api/v1/experts/:name 返回的是 graph node 结构（嵌套
+ * permissions/llm/limits），与保存时的扁平字段不同。本组件在加载时做映射。
+ */
+
+// 后端 graph node 的 JSON 结构（部分字段）
+interface ExpertNodeJson {
+  id: string;
+  label: string;
+  description: string;
+  context_template: string;
+  is_entry: boolean;
+  context_isolation: boolean;
+  on_fail: string;
+  visible_tools: string[];
+  permissions: { can_modify_plan: boolean; can_write_summary: boolean; read_global_actively: boolean };
+  llm: { provider: string; model: string; temperature: number; timeout: number };
+  limits: { max_internal_rounds: number; tool_timeout_seconds: number };
+  position?: { x: number; y: number };
+}
+
+function mapNodeToForm(node: ExpertNodeJson) {
+  return {
+    name: node.id || '',
+    description: node.description || '',
+    isEntry: node.is_entry || false,
+    contextIsolation: node.context_isolation || false,
+    contextTemplate: node.context_template
+      || '{role}\n\n{goal}\n\n{plan}\n\n{summary}\n{tools_desc}\n{tag_protocol}\n{output_hint}\n{rounds_left}\n{session}',
+    canModifyPlan: node.permissions?.can_modify_plan ?? true,
+    canWriteSummary: node.permissions?.can_write_summary ?? false,
+    readGlobalActively: node.permissions?.read_global_actively ?? false,
+    onFail: node.on_fail || '',
+    llmProvider: node.llm?.provider || '',
+    llmModel: node.llm?.model || '',
+    llmTimeout: node.llm?.timeout || 0,
+    llmTemperature: node.llm?.temperature ?? -1,
+    maxInternalRounds: node.limits?.max_internal_rounds || 5,
+    toolTimeout: node.limits?.tool_timeout_seconds || 60,
+  };
+}
+
 export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) {
   const isCreate = !expertName;
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
 
-  // Form state
+  // 在编辑模式下保存原始名称，用于 API 调用（允许改名后仍能找到后端资源）
+  const originalNameRef = useRef(expertName || '');
+
+  // 模板 textarea 引用，用于插入占位符到光标位置
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contextTemplateRef = useRef('');
+
+  // Form state — 扁平结构，与保存 API 的 body 字段一致
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isEntry, setIsEntry] = useState(false);
   const [contextIsolation, setContextIsolation] = useState(false);
   const [contextTemplate, setContextTemplate] = useState('');
-  const [visibleTools, setVisibleTools] = useState<string[]>([]);
+  // Keep ref in sync for insertPlaceholder
+  contextTemplateRef.current = contextTemplate;
+
+  const insertPlaceholder = useCallback((placeholder: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const current = contextTemplateRef.current;
+    const newValue = current.slice(0, start) + placeholder + current.slice(end);
+    setContextTemplate(newValue);
+    // 光标定位到插入内容之后
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + placeholder.length;
+    });
+  }, []);
   const [canModifyPlan, setCanModifyPlan] = useState(true);
   const [canWriteSummary, setCanWriteSummary] = useState(false);
   const [readGlobalActively, setReadGlobalActively] = useState(false);
-  const [nextRules, setNextRules] = useState<ExpertRouteRule[]>([]);
   const [onFail, setOnFail] = useState('');
   const [llmProvider, setLlmProvider] = useState('');
   const [llmModel, setLlmModel] = useState('');
@@ -39,30 +129,33 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
   const [maxInternalRounds, setMaxInternalRounds] = useState(5);
   const [toolTimeout, setToolTimeout] = useState(60);
 
-  // Load existing expert data (edit mode)
+  // Load existing expert data (edit mode) — 映射 graph node → 扁平表单
   useEffect(() => {
     if (!expertName) return;
     const load = async () => {
       setLoading(true);
+      setError('');
       try {
-        const expert = await getExpert(expertName);
-        setName(expert.name || '');
-        setDescription(expert.description || '');
-        setIsEntry(expert.is_entry || false);
-        setContextIsolation(expert.context_isolation || false);
-        setContextTemplate(expert.context_template || '');
-        setVisibleTools(expert.visible_tools || []);
-        setCanModifyPlan(expert.can_modify_plan ?? true);
-        setCanWriteSummary(expert.can_write_summary ?? false);
-        setReadGlobalActively(expert.read_global_actively ?? false);
-        setNextRules(expert.next_rules || []);
-        setOnFail(expert.on_fail || '');
-        setLlmProvider(expert.llm_provider || '');
-        setLlmModel(expert.llm_model || '');
-        setLlmTimeout(expert.llm_timeout || 0);
-        setLlmTemperature(expert.llm_temperature ?? -1);
-        setMaxInternalRounds(expert.max_internal_rounds || 5);
-        setToolTimeout(expert.tool_timeout_seconds || 60);
+        const raw = await getExpert(expertName);
+        // 后端返回的是 graph node 结构，需要映射
+        const node = raw as unknown as ExpertNodeJson;
+        const f = mapNodeToForm(node);
+        setName(f.name);
+        setDescription(f.description);
+        setIsEntry(f.isEntry);
+        setContextIsolation(f.contextIsolation);
+        setContextTemplate(f.contextTemplate);
+        setCanModifyPlan(f.canModifyPlan);
+        setCanWriteSummary(f.canWriteSummary);
+        setReadGlobalActively(f.readGlobalActively);
+        setOnFail(f.onFail);
+        setLlmProvider(f.llmProvider);
+        setLlmModel(f.llmModel);
+        setLlmTimeout(f.llmTimeout);
+        setLlmTemperature(f.llmTemperature);
+        setMaxInternalRounds(f.maxInternalRounds);
+        setToolTimeout(f.toolTimeout);
+        originalNameRef.current = expertName;
       } catch {
         setError('加载专家配置失败');
       }
@@ -70,17 +163,6 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
     };
     load();
   }, [expertName]);
-
-  // Load available tools
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await listTools();
-        setAvailableTools(res.items || []);
-      } catch {}
-    };
-    load();
-  }, []);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) { setError('名称不能为空'); return; }
@@ -90,10 +172,9 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       const data: Partial<Exponent> = {
         name: name.trim(), description, is_entry: isEntry,
         context_isolation: contextIsolation, context_template: contextTemplate,
-        visible_tools: visibleTools,
         can_modify_plan: canModifyPlan, can_write_summary: canWriteSummary,
         read_global_actively: readGlobalActively,
-        next_rules: nextRules, on_fail: onFail,
+        on_fail: onFail,
         llm_provider: llmProvider, llm_model: llmModel,
         llm_timeout: llmTimeout, llm_temperature: llmTemperature,
         max_internal_rounds: maxInternalRounds,
@@ -103,7 +184,8 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       if (isCreate) {
         await createExpert(data);
       } else {
-        await updateExpert(expertName!, data);
+        // 使用 PATCH 而非 PUT：仅更新表单内的字段，不覆盖 visible_tools / next_rules
+        await patchExpert(originalNameRef.current, data);
       }
       onSaved();
       onClose();
@@ -111,39 +193,21 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
       setError('保存失败');
     }
     setSaving(false);
-  }, [name, description, isEntry, contextIsolation, contextTemplate, visibleTools,
-    canModifyPlan, canWriteSummary, readGlobalActively, nextRules, onFail,
+  }, [name, description, isEntry, contextIsolation, contextTemplate,
+    canModifyPlan, canWriteSummary, readGlobalActively, onFail,
     llmProvider, llmModel, llmTimeout, llmTemperature, maxInternalRounds, toolTimeout,
-    isCreate, expertName, onSaved, onClose]);
+    isCreate, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm(`确定删除 Expert "${expertName}"？`)) return;
+    if (!confirm(`确定删除 Expert "${originalNameRef.current}"？`)) return;
     try {
-      await deleteExpert(expertName!);
+      await deleteExpert(originalNameRef.current);
       onSaved();
       onClose();
     } catch {
       setError('删除失败');
     }
-  }, [expertName, onSaved, onClose]);
-
-  const toggleTool = (toolName: string) => {
-    setVisibleTools(prev =>
-      prev.includes(toolName) ? prev.filter(t => t !== toolName) : [...prev, toolName]
-    );
-  };
-
-  const addRoute = () => {
-    setNextRules(prev => [...prev, { type: 'tag_exists', value: '', route_to: '', priority: 0 }]);
-  };
-
-  const removeRoute = (idx: number) => {
-    setNextRules(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const updateRoute = (idx: number, field: keyof ExpertRouteRule, value: string | number) => {
-    setNextRules(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
-  };
+  }, [onSaved, onClose]);
 
   if (loading) {
     return createPortal(
@@ -180,7 +244,7 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
         {/* Header */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-[var(--text-primary)]">
-            {isCreate ? '+ 新建 Expert' : `编辑 ${expertName}`}
+            {isCreate ? '+ 新建 Expert' : `编辑 ${originalNameRef.current}`}
           </span>
           <button
             onClick={onClose} title="取消"
@@ -194,13 +258,45 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
         <Section title="基本信息">
           <Field label="名称" required>
             <input value={name} onChange={e => setName(e.target.value)}
-              placeholder="例如：my_expert" disabled={!isCreate}
+              placeholder="例如：my_expert"
               className="form-input" style={{ width: '100%' }} />
           </Field>
-          <Field label="描述">
+          <Field label="角色描述 (description → {role})">
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-              placeholder="Expert 的角色描述，会注入到 prompt 的 {role} 中"
+              placeholder="Expert 的角色描述，会注入到 prompt 的 {role} 占位符中"
               className="form-input" style={{ width: '100%', resize: 'vertical' }} />
+          </Field>
+          <Field label="提示词模板 (context_template)">
+            <textarea ref={textareaRef} value={contextTemplate} onChange={e => setContextTemplate(e.target.value)} rows={6}
+              placeholder="点击下方占位符积木插入，或自由输入..."
+              className="form-input" style={{ width: '100%', resize: 'vertical', fontSize: 10, lineHeight: 1.55, fontFamily: 'monospace' }}
+            />
+            <div className="flex flex-col gap-1.5" style={{ marginTop: -2 }}>
+              {/* 占位符积木条 */}
+              <div className="flex flex-wrap gap-1">
+                {PLACEHOLDER_CHIPS.map(chip => (
+                  <button
+                    key={chip.key}
+                    onClick={() => insertPlaceholder(chip.key)}
+                    title={chip.desc}
+                    className="text-[9px] font-semibold rounded cursor-pointer transition-all hover:scale-105 active:scale-95 select-none"
+                    style={{
+                      padding: '2px 7px',
+                      background: chip.bg,
+                      color: chip.fg,
+                      border: `1px solid ${chip.border}`,
+                      letterSpacing: '0.02em',
+                    }}
+                  >{chip.label}</button>
+                ))}
+              </div>
+              {/* 重置按钮 */}
+              <button
+                onClick={() => setContextTemplate(DEFAULT_CONTEXT_TEMPLATE)}
+                className="text-[9px] text-[var(--text-secondary)] hover:text-[var(--accent-lighter)] underline underline-offset-2 cursor-pointer transition-colors self-start"
+                style={{ background: 'none', border: 'none', padding: 0, marginTop: -2 }}
+              >↺ 重置为默认模板</button>
+            </div>
           </Field>
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-[var(--text-secondary)]">入口 Expert</span>
@@ -222,59 +318,6 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
             <span className="text-[11px] text-[var(--text-secondary)]">主动读全局</span>
             <Toggle value={readGlobalActively} onChange={setReadGlobalActively} />
           </div>
-        </Section>
-
-        {/* ── 工具可见 ── */}
-        <Section title="可见工具">
-          <div className="flex flex-wrap gap-1.5">
-            {availableTools.map(t => (
-              <button key={t.name}
-                onClick={() => toggleTool(t.name)}
-                style={{
-                  fontSize: 10, padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
-                  border: `1px solid ${visibleTools.includes(t.name) ? 'var(--accent-light)' : 'var(--glass-border)'}`,
-                  background: visibleTools.includes(t.name) ? 'var(--accent)' : 'var(--surface)',
-                  color: visibleTools.includes(t.name) ? '#fff' : 'var(--text-secondary)',
-                  transition: 'all 0.15s',
-                }}
-              >{t.name}</button>
-            ))}
-          </div>
-        </Section>
-
-        {/* ── 路由规则 ── */}
-        <Section title="路由规则">
-          {nextRules.map((rule, idx) => (
-            <div key={idx} className="flex items-center gap-1.5">
-              <select value={rule.type} onChange={e => updateRoute(idx, 'type', e.target.value)}
-                className="form-input text-[10px]" style={{ width: 110 }}>
-                <option value="tag_exists">tag_exists</option>
-                <option value="tag_value_match">tag_value_match</option>
-                <option value="plan_state">plan_state</option>
-                <option value="default">default</option>
-              </select>
-              <input value={rule.value} onChange={e => updateRoute(idx, 'value', e.target.value)}
-                placeholder="值" className="form-input text-[10px]" style={{ width: 80 }} />
-              <input value={rule.route_to} onChange={e => updateRoute(idx, 'route_to', e.target.value)}
-                placeholder="目标" className="form-input text-[10px]" style={{ width: 90 }} />
-              <input value={rule.priority} onChange={e => updateRoute(idx, 'priority', Number(e.target.value))}
-                type="number" min={0} className="form-input text-[10px]" style={{ width: 40 }} />
-              <button onClick={() => removeRoute(idx)}
-                style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid var(--glass-border)',
-                  background: 'var(--surface)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-              >✕</button>
-            </div>
-          ))}
-          <button onClick={addRoute}
-            className="text-[10px] text-[var(--accent-lighter)] hover:text-[var(--accent)] cursor-pointer"
-            style={{ background: 'none', border: 'none', alignSelf: 'flex-start' }}
-          >+ 添加路由</button>
-          <Field label="失败兜底 (on_fail)">
-            <input value={onFail} onChange={e => setOnFail(e.target.value)}
-              placeholder="例如：summarizer 或 _done"
-              className="form-input" style={{ width: '100%' }} />
-          </Field>
         </Section>
 
         {/* ── LLM 配置 ── */}
@@ -308,6 +351,15 @@ export function ExpertEditModal({ expertName, theme, onClose, onSaved }: Props) 
           <Field label="工具超时 (秒)">
             <input value={String(toolTimeout)} onChange={e => setToolTimeout(Number(e.target.value) || 0)}
               type="number" min={10} className="form-input" style={{ width: 80 }} />
+          </Field>
+        </Section>
+
+        {/* ── 失败兜底 ── */}
+        <Section title="失败兜底">
+          <Field label="on_fail 目标">
+            <input value={onFail} onChange={e => setOnFail(e.target.value)}
+              placeholder="例如：summarizer 或 _done"
+              className="form-input" style={{ width: '100%' }} />
           </Field>
         </Section>
 

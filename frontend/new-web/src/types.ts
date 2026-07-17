@@ -54,8 +54,14 @@ export interface ToolInfo {
   name: string;
   description: string;
   risk_level: string;
+  /**
+   * 后端 listToolInfo 未返回 enabled，前端默认 true；后端加字段后改为来自 API
+   */
   enabled: boolean;
+  /** 工具提示词（后端待加字段） */
+  prompt?: string;
   params: Record<string, unknown>;
+  /** 后端字段名是 group，前端映射为 category */
   category: string;
 }
 
