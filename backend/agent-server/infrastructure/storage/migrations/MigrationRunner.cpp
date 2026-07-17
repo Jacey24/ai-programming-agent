@@ -491,6 +491,25 @@ std::vector<MigrationRunner::Migration> MigrationRunner::builtinMigrations() {
            "WHERE task_id IS NOT NULL AND task_id <> '' "
            "AND role = 'assistant' AND message_type IN ('result','error');")}});
 
+  // V007: Stable per-task ordering for persisted events and SSE recovery.
+  migrations.push_back({
+      7,
+      "task_event_sequence",
+      {addColumnStep(
+           "ALTER TABLE task_events ADD COLUMN sequence_no INTEGER NOT NULL "
+           "DEFAULT 0;",
+           "task_events", "sequence_no", "INTEGER", true, "0"),
+       sqlStep(
+           "UPDATE task_events SET sequence_no = ("
+           "  SELECT COUNT(*) FROM task_events AS earlier"
+           "  WHERE earlier.task_id = task_events.task_id"
+           "    AND (earlier.created_at < task_events.created_at"
+           "      OR (earlier.created_at = task_events.created_at"
+           "          AND earlier.id <= task_events.id))"
+           ") WHERE sequence_no = 0;"
+           "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_events_task_sequence "
+           "ON task_events(task_id, sequence_no);")}});
+
   return migrations;
 }
 

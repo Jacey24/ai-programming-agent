@@ -680,6 +680,17 @@ DataAccessFacade::getEventsByTaskId(const std::string &taskId) {
   return EventRepository(db_).findByTaskId(taskId);
 }
 
+std::vector<EventRecord> DataAccessFacade::getEventsByTaskIdAfterSequence(
+    const std::string &taskId, std::int64_t afterSequence) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return EventRepository(db_).findByTaskIdAfterSequence(taskId, afterSequence);
+}
+
+std::optional<EventRecord> DataAccessFacade::getEvent(const std::string &id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return EventRepository(db_).findById(id);
+}
+
 std::vector<EventRecord>
 DataAccessFacade::getEventsByTaskIdAndType(const std::string &taskId,
                                            const std::string &type) {

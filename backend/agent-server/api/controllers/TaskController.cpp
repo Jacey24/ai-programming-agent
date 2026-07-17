@@ -787,7 +787,8 @@ std::string TaskController::listEventHistory(const std::string &request) {
         metadata = json::object();
       }
       body << metadata.dump() << R"(,"created_at":")"
-           << json_escape(event.created_at) << R"("})";
+           << json_escape(event.created_at) << R"(","sequence_no":)"
+           << event.sequence_no << "}";
     }
     body << "]}}";
     return http_response(body.str());

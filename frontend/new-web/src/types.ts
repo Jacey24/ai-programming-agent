@@ -41,6 +41,10 @@ export interface TaskRecord {
   updated_at?: string;
 }
 
+export interface TaskCreationRecord extends TaskRecord {
+  user_message: MessageRecord;
+}
+
 export interface TaskEventRecord {
   id: string;
   task_id?: string;
@@ -48,6 +52,7 @@ export interface TaskEventRecord {
   content?: string;
   metadata?: Record<string, unknown>;
   created_at?: string;
+  sequence_no?: number;
 }
 
 export interface ToolInfo {
@@ -97,8 +102,10 @@ export interface ToolCallLog {
   id: string;
   task_id?: string;
   tool_name?: string;
-  input?: string;
-  output?: string;
+  arguments?: string;
+  result?: string;
+  success?: boolean;
+  exit_code?: number;
   created_at?: string;
 }
 

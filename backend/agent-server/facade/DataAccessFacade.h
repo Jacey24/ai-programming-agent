@@ -147,6 +147,10 @@ public:
                         const std::string &type, const std::string &content,
                         const std::string &metadata);
   std::vector<EventRecord> getEventsByTaskId(const std::string &taskId);
+  std::vector<EventRecord>
+  getEventsByTaskIdAfterSequence(const std::string &taskId,
+                                 std::int64_t afterSequence);
+  std::optional<EventRecord> getEvent(const std::string &id);
   std::vector<EventRecord> getEventsByTaskIdAndType(const std::string &taskId,
                                                     const std::string &type);
 

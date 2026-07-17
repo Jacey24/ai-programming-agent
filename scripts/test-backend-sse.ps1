@@ -248,11 +248,12 @@ function Wait-TaskTerminal {
 }
 
 function Start-SseClient {
-    param([string]$Name, [string]$TaskId, [int]$MaxSeconds = 25)
+    param([string]$Name, [string]$TaskId, [int]$MaxSeconds = 25, [string]$LastEventId = '')
     $stdout = Join-Path $streamDirectory "$Name.stdout.txt"
     $stderr = Join-Path $streamDirectory "$Name.stderr.txt"
     $url = "$baseUri/api/v1/tasks/$TaskId/events"
-    $arguments = "--silent --show-error --no-buffer --include --max-time $MaxSeconds `"$url`""
+    $headerArgument = if ($LastEventId) { " --header `"Last-Event-ID: $LastEventId`"" } else { '' }
+    $arguments = "--silent --show-error --no-buffer --include --max-time $MaxSeconds$headerArgument `"$url`""
     $process = Start-Process -FilePath $curl.Source -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -WindowStyle Hidden
     $client = [pscustomobject]@{ Name = $Name; TaskId = $TaskId; Url = $url; Process = $process; Stdout = $stdout; Stderr = $stderr; TimedOut = $false; ActivelyStopped = $false }
     $script:sseClients.Add($client)
@@ -302,15 +303,16 @@ function Read-SseResult {
     $events = [System.Collections.Generic.List[object]]::new()
     foreach ($frame in [regex]::Split($body, "\r?\n\r?\n")) {
         if (-not $frame.Trim() -or $frame.TrimStart().StartsWith(':')) { continue }
-        $eventName = ''; $dataLines = [System.Collections.Generic.List[string]]::new()
+        $eventName = ''; $eventId = ''; $dataLines = [System.Collections.Generic.List[string]]::new()
         foreach ($line in [regex]::Split($frame, "\r?\n")) {
-            if ($line -match '^event:\s?(.*)$') { $eventName = $matches[1] }
+            if ($line -match '^id:\s?(.*)$') { $eventId = $matches[1] }
+            elseif ($line -match '^event:\s?(.*)$') { $eventName = $matches[1] }
             elseif ($line -match '^data:\s?(.*)$') { $dataLines.Add($matches[1]) }
         }
         if (-not $eventName -and $dataLines.Count -eq 0) { continue }
         $dataText = $dataLines -join "`n"; $data = $null
         try { $data = $dataText | ConvertFrom-Json } catch { throw "Invalid SSE JSON in '$($Client.Name)': $dataText" }
-        $events.Add([pscustomobject]@{ Event = $eventName; DataText = $dataText; Data = $data })
+        $events.Add([pscustomobject]@{ Event = $eventName; Id = $eventId; DataText = $dataText; Data = $data })
     }
     return [pscustomobject]@{ Client = $Client; Raw = $raw; StatusCode = $status; ContentType = $contentType; Events = $events }
 }
@@ -331,7 +333,16 @@ function Assert-SseContract {
             foreach ($field in @('id', 'content', 'metadata', 'created_at')) {
                 Assert-True ($null -ne $event.Data.PSObject.Properties[$field]) "Event '$($event.Event)' lacked data.$field."
             }
+            if ($null -ne $event.Data.PSObject.Properties['sequence_no']) {
+                Assert-True (-not [string]::IsNullOrWhiteSpace($event.Id)) "Persisted event '$($event.Event)' lacked an SSE id field."
+                Assert-True ($event.Id -eq $event.Data.id) "SSE id '$($event.Id)' did not match data.id '$($event.Data.id)'."
+            }
         }
+    }
+    $persisted = @($Result.Events | Where-Object { $null -ne $_.Data.PSObject.Properties['sequence_no'] })
+    for ($i = 1; $i -lt $persisted.Count; $i++) {
+        Assert-True ([int64]$persisted[$i].Data.sequence_no -gt [int64]$persisted[$i - 1].Data.sequence_no) `
+            'Persisted SSE event sequence was not strictly increasing.'
     }
     $endCount = @($Result.Events | Where-Object Event -eq 'stream_end').Count
     if ($RequireStreamEnd) { Assert-True ($endCount -eq 1) "Expected exactly one stream_end; got $endCount." }
@@ -434,6 +445,10 @@ try {
         Assert-True (@($names | Where-Object { $_ -eq 'task_failed' }).Count -eq 1) 'task_failed was duplicated.'
         $ids = @($result.Events | Where-Object Event -ne 'stream_end' | ForEach-Object { $_.Data.id })
         Assert-True (($ids | Select-Object -Unique).Count -eq $ids.Count) 'History/live boundary produced duplicate event IDs.'
+        $messages = Invoke-JsonRequest GET "/api/v1/sessions/$sessionId/messages" $null
+        $taskMessages = @($messages.Json.data.items | Where-Object { $_.task_id -eq $task })
+        Assert-True (@($taskMessages | Where-Object role -eq 'user').Count -eq 1) 'Task user Message was missing or duplicated.'
+        Assert-True (@($taskMessages | Where-Object { $_.role -eq 'assistant' -and $_.message_type -eq 'error' }).Count -eq 1) 'Failed task Assistant error Message was missing or duplicated.'
         Add-ScenarioResult $script:currentScenario $task $result $true
         $script:terminalTaskId = $task
     }
@@ -466,10 +481,13 @@ try {
     Invoke-Scenario 'same task reconnect after disconnect' {
         $first = Start-SseClient 'reconnect-first' $script:terminalTaskId; Wait-SseClient $first
         $firstResult = Read-SseResult $first; Assert-SseContract $firstResult $script:terminalTaskId
-        $second = Start-SseClient 'reconnect-second' $script:terminalTaskId; Wait-SseClient $second
+        $lastPersistedId = [string]@($firstResult.Events | Where-Object { $_.Data.sequence_no } | Select-Object -Last 1).Id
+        Assert-True (-not [string]::IsNullOrWhiteSpace($lastPersistedId)) 'First connection did not expose a resumable persisted event ID.'
+        $second = Start-SseClient 'reconnect-second' $script:terminalTaskId 25 $lastPersistedId; Wait-SseClient $second
         $secondResult = Read-SseResult $second; Assert-SseContract $secondResult $script:terminalTaskId
         Assert-True ($secondResult.Events.Count -gt 0) 'Second connection received no replayed events.'
-        Add-ScenarioResult $script:currentScenario $script:terminalTaskId $secondResult $true $false 'Both sequential connections completed from replay.'
+        Assert-True (@($secondResult.Events | Where-Object Event -ne 'stream_end').Count -eq 0) 'Last-Event-ID reconnect replayed already consumed business events.'
+        Add-ScenarioResult $script:currentScenario $script:terminalTaskId $secondResult $true $false 'Last-Event-ID reconnect resumed without duplicate business events.'
     }
 
     Invoke-Scenario 'same task two clients' {
@@ -495,13 +513,10 @@ try {
         Add-ScenarioResult $script:currentScenario "$taskA,$taskB" $resultA $true $false 'Both streams validated; contract entry summarizes stream A.'
     }
 
-    Invoke-Scenario 'client active disconnect and backend reuse' {
+    Invoke-Scenario 'unknown task SSE is rejected and backend remains reusable' {
         $unknownTask = 'disconnect-' + [Guid]::NewGuid().ToString('N')
-        $client = Start-SseClient 'active-disconnect' $unknownTask 25
-        Assert-True (Wait-ClientOutput $client '^HTTP/\S+\s+200' 8) 'SSE connection did not establish before active disconnect.'
-        Stop-SseClient $client; Start-Sleep -Seconds 1
-        $result = Read-SseResult $client
-        Assert-True ($result.StatusCode -eq 200) 'Actively disconnected SSE client did not establish with HTTP 200.'
+        $unknown = Invoke-JsonRequest GET "/api/v1/tasks/$unknownTask/events" $null
+        Assert-True ($unknown.StatusCode -eq 404 -and $unknown.Json.error.code -eq 'TASK_NOT_FOUND') 'Unknown task SSE request was not safely rejected.'
         $healthAfter = Invoke-JsonRequest GET '/api/v1/health' $null
         Assert-True ($healthAfter.StatusCode -eq 200 -and $healthAfter.Json.success -eq $true) 'Backend health failed after client disconnect.'
         $reuseTask = New-Task 'SSE post-disconnect task' 'answer'; Wait-TaskTerminal $reuseTask | Out-Null

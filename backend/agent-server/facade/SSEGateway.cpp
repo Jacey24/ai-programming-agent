@@ -12,6 +12,7 @@
 #define close_socket close
 #endif
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -124,8 +125,10 @@ int SSEGateway::getConnectionCount(const std::string &taskId) const {
 // ============================================================
 void SSEGateway::broadcastFrame(const std::string &taskId,
                                 const std::string &eventName,
+                                const std::string &eventId,
                                 const std::string &data) {
-  std::string frame = "event: " + eventName + "\ndata: " + data + "\n\n";
+  std::string frame = "id: " + eventId + "\nevent: " + eventName +
+                      "\ndata: " + data + "\n\n";
 
   std::vector<std::shared_ptr<ClientConnection>> clients;
   {
@@ -178,11 +181,20 @@ void SSEGateway::push(const std::string &taskId, EventType eventType,
   const std::string eventTypeStr =
       EventData::Create("", eventType, "", {}).typeToString();
 
+  std::int64_t sequenceNo = 0;
+  if (persist == Persist::Always && dataFacade_ &&
+      dataFacade_->isInitialized()) {
+    const auto saved = dataFacade_->saveEvent(
+        eventId, taskId, eventTypeStr, content, dumpJsonForTransport(meta));
+    sequenceNo = saved.sequence_no;
+  }
+
   // ① EventBus 广播
   if (eventBus_) {
     EventData event = EventData::Create(taskId, eventType, content, meta);
     event.id = eventId;
     event.createdAt = now;
+    event.sequenceNo = sequenceNo;
     eventBus_->publish(event);
   }
 
@@ -194,14 +206,11 @@ void SSEGateway::push(const std::string &taskId, EventType eventType,
   sseData["content"] = content;
   sseData["metadata"] = meta;
   sseData["created_at"] = now;
-  broadcastFrame(taskId, eventTypeStr, dumpJsonForTransport(sseData));
-
-  // ③ 持久化到 SQLite（仅 persist=Always）
-  if (persist == Persist::Always && dataFacade_ &&
-      dataFacade_->isInitialized()) {
-    dataFacade_->saveEvent(eventId, taskId, eventTypeStr, content,
-                           dumpJsonForTransport(meta));
+  if (sequenceNo > 0) {
+    sseData["sequence_no"] = sequenceNo;
   }
+  broadcastFrame(taskId, eventTypeStr, eventId,
+                 dumpJsonForTransport(sseData));
 }
 
 // ============================================================
@@ -242,19 +251,22 @@ void SSEGateway::pushStream(const std::string &taskId,
                         {"done", true},
                         {"stream_end", true}};
 
+    std::int64_t sequenceNo = 0;
+    if (dataFacade_ && dataFacade_->isInitialized()) {
+      const auto saved = dataFacade_->saveEvent(
+          eventId, taskId, "agent_message", finalContent,
+          dumpJsonForTransport(finalMeta));
+      sequenceNo = saved.sequence_no;
+    }
+
     if (eventBus_) {
       EventData event =
           EventData::Create(taskId, EventType::AgentMessage, finalContent,
                             finalMeta);
       event.id = eventId;
       event.createdAt = now;
+      event.sequenceNo = sequenceNo;
       eventBus_->publish(event);
-    }
-
-    // 持久化完整内容
-    if (dataFacade_ && dataFacade_->isInitialized()) {
-      dataFacade_->saveEvent(eventId, taskId, "agent_message", finalContent,
-                             dumpJsonForTransport(finalMeta));
     }
   }
 }
@@ -388,7 +400,8 @@ void SSEGateway::streamTaskEvents(int clientFd, const std::string &taskId) {
 // ============================================================
 void SSEGateway::streamTaskEvents(
     SendCallback sendFn, const std::string &taskId,
-    std::shared_ptr<ConnectionSignal> connectionSignal) {
+    std::shared_ptr<ConnectionSignal> connectionSignal,
+    const std::string &lastEventId) {
   if (!initialized_) {
     const std::string errFrame =
         "event: error\ndata: "
@@ -401,7 +414,7 @@ void SSEGateway::streamTaskEvents(
   }
 
   streamTaskEventsImpl(taskId, std::move(sendFn),
-                       std::move(connectionSignal));
+                       std::move(connectionSignal), lastEventId);
 }
 
 // ============================================================
@@ -409,7 +422,8 @@ void SSEGateway::streamTaskEvents(
 // ============================================================
 void SSEGateway::streamTaskEventsImpl(
     const std::string &taskId, SendCallback sendFn,
-    std::shared_ptr<ConnectionSignal> connectionSignal) {
+    std::shared_ptr<ConnectionSignal> connectionSignal,
+    const std::string &lastEventId) {
   if (!initialized_) {
     return;
   }
@@ -470,14 +484,38 @@ void SSEGateway::streamTaskEventsImpl(
     }
   };
   auto writeFrame = [sendFrame](const std::string &eventName,
+                                const std::string &eventId,
                                 const std::string &data) {
-    return sendFrame("event: " + eventName + "\ndata: " + data + "\n\n");
+    const std::string idLine = eventId.empty() ? "" : "id: " + eventId + "\n";
+    return sendFrame(idLine + "event: " + eventName + "\ndata: " + data +
+                     "\n\n");
   };
+
+  std::int64_t afterSequence = 0;
+  if (!lastEventId.empty() && dataFacade_ && dataFacade_->isInitialized()) {
+    const auto lastEvent = dataFacade_->getEvent(lastEventId);
+    if (lastEvent && lastEvent->task_id == taskId) {
+      afterSequence = lastEvent->sequence_no;
+    }
+  }
 
   try {
     if (eventBus_) {
       listenerId = eventBus_->subscribeByTaskId(
           taskId, [connection, writeFrame](const EventData &ev) {
+            {
+              std::lock_guard<std::mutex> replayLock(connection->replayMutex);
+              if (connection->replaying) {
+                connection->pendingEvents.push_back(ev);
+                return;
+              }
+            }
+            if (ev.sequenceNo > 0) {
+              std::lock_guard<std::mutex> seenLock(connection->seenMutex);
+              if (!connection->seenEventIds.insert(ev.id).second) {
+                return;
+              }
+            }
             json data;
             data["id"] = ev.id;
             data["task_id"] = ev.taskId;
@@ -485,7 +523,11 @@ void SSEGateway::streamTaskEventsImpl(
             data["content"] = ev.content;
             data["metadata"] = ev.metadata;
             data["created_at"] = ev.createdAt;
-            writeFrame(ev.typeToString(), dumpJsonForTransport(data));
+            if (ev.sequenceNo > 0) {
+              data["sequence_no"] = ev.sequenceNo;
+            }
+            writeFrame(ev.typeToString(), ev.sequenceNo > 0 ? ev.id : "",
+                       dumpJsonForTransport(data));
             if (isTerminal(ev.type)) {
               connection->done.store(true);
               connection->signal->cv.notify_all();
@@ -496,9 +538,16 @@ void SSEGateway::streamTaskEventsImpl(
 
     // 回放历史事件
     if (dataFacade_ && dataFacade_->isInitialized()) {
-      for (const auto &ev : dataFacade_->getEventsByTaskId(taskId)) {
+      for (const auto &ev : dataFacade_->getEventsByTaskIdAfterSequence(
+               taskId, afterSequence)) {
         if (!connection->signal->connected.load()) {
           break;
+        }
+        {
+          std::lock_guard<std::mutex> seenLock(connection->seenMutex);
+          if (!connection->seenEventIds.insert(ev.id).second) {
+            continue;
+          }
         }
         json data;
         data["id"] = ev.id;
@@ -512,12 +561,57 @@ void SSEGateway::streamTaskEventsImpl(
         }
         data["metadata"] = meta;
         data["created_at"] = ev.created_at;
+        data["sequence_no"] = ev.sequence_no;
 
-        writeFrame(ev.type, dumpJsonForTransport(data));
+        writeFrame(ev.type, ev.id, dumpJsonForTransport(data));
         if (ev.type == "task_completed" || ev.type == "task_failed" ||
             ev.type == "task_cancelled") {
           connection->done.store(true);
           connection->signal->cv.notify_all();
+          break;
+        }
+      }
+
+      // Events published while history was replaying are buffered. Drain the
+      // buffer in persisted sequence order before allowing direct live sends.
+      while (true) {
+        std::vector<EventData> pending;
+        {
+          std::lock_guard<std::mutex> replayLock(connection->replayMutex);
+          if (connection->pendingEvents.empty()) {
+            connection->replaying = false;
+            break;
+          }
+          pending.swap(connection->pendingEvents);
+        }
+        std::sort(pending.begin(), pending.end(), [](const EventData &left,
+                                                     const EventData &right) {
+          if (left.sequenceNo > 0 && right.sequenceNo > 0) {
+            return left.sequenceNo < right.sequenceNo;
+          }
+          return left.createdAt < right.createdAt;
+        });
+        for (const auto &ev : pending) {
+          if (ev.sequenceNo > 0) {
+            std::lock_guard<std::mutex> seenLock(connection->seenMutex);
+            if (!connection->seenEventIds.insert(ev.id).second) {
+              continue;
+            }
+          }
+          json data;
+          data["id"] = ev.id;
+          data["task_id"] = ev.taskId;
+          data["type"] = ev.typeToString();
+          data["content"] = ev.content;
+          data["metadata"] = ev.metadata;
+          data["created_at"] = ev.createdAt;
+          if (ev.sequenceNo > 0) data["sequence_no"] = ev.sequenceNo;
+          writeFrame(ev.typeToString(), ev.sequenceNo > 0 ? ev.id : "",
+                     dumpJsonForTransport(data));
+          if (isTerminal(ev.type)) {
+            connection->done.store(true);
+            connection->signal->cv.notify_all();
+          }
         }
       }
 
@@ -561,7 +655,7 @@ void SSEGateway::streamTaskEventsImpl(
     }
 
     if (connection->signal->connected.load() && connection->done.load()) {
-      writeFrame("stream_end", "{\"type\":\"stream_end\"}");
+      writeFrame("stream_end", "", "{\"type\":\"stream_end\"}");
     }
   } catch (...) {
     cleanup();

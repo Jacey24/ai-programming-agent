@@ -193,7 +193,7 @@ SELECT COUNT(*) || ':' || COUNT(DISTINCT version) || ':' ||
        COALESCE(group_concat(version, ','), '')
 FROM (SELECT version FROM schema_migrations ORDER BY version);
 '@
-    Assert-True ($summary -eq '6:6:1,2,3,4,5,6') `
+    Assert-True ($summary -eq '7:7:1,2,3,4,5,6,7') `
         "Unexpected migration records: '$summary'."
 }
 
@@ -202,7 +202,8 @@ function Assert-RelationIndexes {
     foreach ($index in @('idx_sessions_workspace_id', 'idx_tasks_session_id',
             'idx_tasks_workspace_id', 'idx_messages_session_sequence',
             'idx_messages_task_id', 'idx_messages_source_event_id',
-            'idx_messages_task_assistant_final')) {
+            'idx_messages_task_assistant_final',
+            'idx_task_events_task_sequence')) {
         $count = Invoke-SqliteScalar $Database `
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='$index';"
         Assert-True ($count -eq '1') "Missing relation index $index."
@@ -230,7 +231,8 @@ function Assert-MigrationColumns {
             @('tasks', 'assistant_message_id'),
             @('messages', 'message_type'),
             @('messages', 'sequence_no'),
-            @('messages', 'source_event_id'))) {
+            @('messages', 'source_event_id'),
+            @('task_events', 'sequence_no'))) {
         Assert-Column $Database $item[0] $item[1]
     }
 }

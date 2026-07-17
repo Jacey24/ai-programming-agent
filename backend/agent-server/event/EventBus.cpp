@@ -77,6 +77,9 @@ std::string EventData::serialize() const {
   j["metadata"] = metadata;
 
   j["created_at"] = createdAt;
+  if (sequenceNo > 0) {
+    j["sequence_no"] = sequenceNo;
+  }
   return j.dump(2, ' ', false, json::error_handler_t::replace);
 }
 
