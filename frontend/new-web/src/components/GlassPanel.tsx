@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GlassTab, SessionRecord, ThemeMode, WorkspaceRecord } from '../types';
+import type { GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, WorkspaceRecord } from '../types';
 import { SessionList } from './SessionList';
 import { ChatView } from './ChatView';
 import { FileTree } from './FileTree';
@@ -14,12 +13,10 @@ interface Props {
   onSelectSession: (s: SessionRecord) => void;
   onBackToSessions: () => void;
   onExitWorkspace: () => void;
+  onWorkflowTaskSelected: (task: TaskRecord | null) => void;
+  onWorkflowEvents: (task: TaskRecord, events: TaskEventRecord[]) => void;
   scale: number;
 }
-
-const MIN_W = 300;
-const MAX_W = 720;
-const MIN_H = 260;
 
 export function GlassPanel({
   theme,
@@ -30,76 +27,10 @@ export function GlassPanel({
   onSelectSession,
   onBackToSessions,
   onExitWorkspace,
+  onWorkflowTaskSelected,
+  onWorkflowEvents,
   scale,
 }: Props) {
-  const [size, setSize] = useState(() => {
-    const vw = window.innerWidth / scale;
-    const vh = window.innerHeight / scale;
-    const maxH = vh - (72 + 16) / scale;
-    const maxW = Math.min(MAX_W, vw - 48 / scale);
-    return {
-      w: Math.max(MIN_W, Math.min(maxW, 420)),
-      h: Math.max(MIN_H, Math.min(maxH, 520)),
-    };
-  });
-  const dragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0, w: 420, h: 520 });
-
-  // --- manual resize via bottom-right handle ---
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dragging.current = true;
-      dragStart.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-    },
-    [size],
-  );
-
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      if (!dragging.current) return;
-      const dx = (e.clientX - dragStart.current.x) / scale;
-      const dy = (e.clientY - dragStart.current.y) / scale;
-      const vw = window.innerWidth / scale;
-      const vh = window.innerHeight / scale;
-      // 顶部: header(56) + main paddingTop(16) = 72, 底部留白对齐 ToolPanel 的 bottom:16
-      const maxH = vh - (72 + 16) / scale;
-      const maxW = Math.min(MAX_W, vw - 48 / scale);
-      setSize({
-        w: Math.max(MIN_W, Math.min(maxW, dragStart.current.w + dx)),
-        h: Math.max(MIN_H, Math.min(maxH, dragStart.current.h + dy)),
-      });
-    };
-    const handleUp = () => {
-      dragging.current = false;
-    };
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-    };
-  }, [scale]);
-
-  // guard: keep size within bounds when scale or viewport changes
-  useEffect(() => {
-    const applyBounds = () => {
-      const vw = window.innerWidth / scale;
-      const vh = window.innerHeight / scale;
-      const maxH = vh - (72 + 16) / scale;
-      const maxW = Math.min(MAX_W, vw - 48 / scale);
-      setSize((prev) => ({
-        w: Math.max(MIN_W, Math.min(maxW, prev.w)),
-        h: Math.max(MIN_H, Math.min(maxH, prev.h)),
-      }));
-    };
-    applyBounds();
-    window.addEventListener('resize', applyBounds);
-    return () => window.removeEventListener('resize', applyBounds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scale]);
-
   // 统一玻璃面板样式参数（与 glass-panel CSS 类保持一致）
   const glassStyle = {
     background: 'color-mix(in srgb, var(--bg) 45%, transparent)',
@@ -114,8 +45,10 @@ export function GlassPanel({
       position="relative"
       pointerEvents="auto"
       style={{
-        width: size.w,
-        height: size.h,
+        width: '100%',
+        height: '100%',
+        minWidth: 0,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         ...glassStyle,
@@ -242,6 +175,8 @@ export function GlassPanel({
                 workspaceId={workspace?.id || ''}
                 session={activeSession}
                 onBack={onBackToSessions}
+                onWorkflowTaskSelected={onWorkflowTaskSelected}
+                onWorkflowEvents={onWorkflowEvents}
               />
             ) : (
               <SessionList
@@ -256,37 +191,6 @@ export function GlassPanel({
               theme={theme}
             />
           )}
-        </div>
-
-        {/* Manual resize handle — bottom-right corner */}
-        <div
-          onMouseDown={handleMouseDown}
-          style={{
-            position: 'absolute',
-            right: 2,
-            bottom: 2,
-            width: 18,
-            height: 18,
-            cursor: 'nwse-resize',
-            zIndex: 15,
-            pointerEvents: 'auto',
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'flex-end',
-            borderRadius: '0 0 14px 0',
-          }}
-        >
-          {/* Visual grip lines */}
-          <svg
-            width={14}
-            height={14}
-            viewBox="0 0 16 16"
-            style={{ display: 'block', opacity: 0.45 }}
-          >
-            <line x1={14} y1={4} x2={4} y2={14} stroke="var(--text-secondary)" strokeWidth={1} />
-            <line x1={14} y1={8} x2={8} y2={14} stroke="var(--text-secondary)" strokeWidth={1} />
-            <line x1={14} y1={12} x2={12} y2={14} stroke="var(--text-secondary)" strokeWidth={1} />
-          </svg>
         </div>
       </div>
     </GlassWindow>

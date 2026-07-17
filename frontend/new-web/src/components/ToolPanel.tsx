@@ -264,9 +264,10 @@ interface Props {
   tools: ToolInfo[];
   loading: boolean;
   theme: 'dark' | 'light';
+  embedded?: boolean;
 }
 
-export function ToolPanel({ tools: initialTools, loading: initialLoading, theme }: Props) {
+export function ToolPanel({ tools: initialTools, loading: initialLoading, theme, embedded = false }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [tools, setTools] = useState<ToolInfo[]>(initialTools);
   const [loading, setLoading] = useState(initialLoading);
@@ -307,11 +308,14 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
   return (
     <GlassWindow
       zIndex={30}
+      position={embedded ? 'absolute' : 'fixed'}
       style={{
-        right: 0,
-        top: 56,
-        bottom: 16,
-        transform: expanded ? 'translateX(0)' : `translateX(${PANEL_WIDTH - TAB_WIDTH}px)`,
+        ...(embedded
+          ? { left: 0, bottom: 12, height: 'min(42%, 360px)', maxHeight: 'calc(100% - 24px)', flexDirection: 'row-reverse' as const }
+          : { right: 0, top: 56, bottom: 16 }),
+        transform: expanded ? 'translateX(0)' : embedded
+          ? `translateX(-${PANEL_WIDTH - TAB_WIDTH}px)`
+          : `translateX(${PANEL_WIDTH - TAB_WIDTH}px)`,
         transition: 'transform 0.15s ease-out',
         display: 'flex',
       }}
@@ -331,8 +335,9 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
           background: 'var(--surface)',
           backdropFilter: 'blur(20px)',
           border: '1px solid var(--glass-border-strong)',
-          borderRight: 'none',
-          borderRadius: '16px 0 0 16px',
+          borderRight: embedded ? '1px solid var(--glass-border-strong)' : 'none',
+          borderLeft: embedded ? 'none' : '1px solid var(--glass-border-strong)',
+          borderRadius: embedded ? '0 16px 16px 0' : '16px 0 0 16px',
           writingMode: 'vertical-rl',
           fontSize: 11,
           fontWeight: 600,
@@ -351,7 +356,10 @@ export function ToolPanel({ tools: initialTools, loading: initialLoading, theme 
           height: '100%',
           borderTopLeftRadius: 0,
           borderBottomLeftRadius: 0,
-          borderLeft: 'none',
+          borderTopRightRadius: embedded ? 0 : undefined,
+          borderBottomRightRadius: embedded ? 0 : undefined,
+          borderLeft: embedded ? undefined : 'none',
+          borderRight: embedded ? 'none' : undefined,
           opacity: expanded ? 1 : 0,
           transition: 'opacity 0.12s ease-out',
           pointerEvents: expanded ? 'auto' : 'none',

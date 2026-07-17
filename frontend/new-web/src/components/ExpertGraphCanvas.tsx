@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Exponent, ExpertEdge, ExpertGraph, ExpertRouteRule } from '../types';
+import type { WorkflowEdgeStatus, WorkflowNodeStatus, WorkflowTaskState } from '../workflowState';
+import { normalizeExpertName, workflowEdgeKey } from '../workflowState';
 import {
   getExpert,
   getExpertGraph,
@@ -11,9 +13,12 @@ import {
   setExpertTools,
 } from '../api/api';
 import { ExpertEditModal } from './ExpertEditModal';
+import type { CanvasSize, LayoutRect } from '../graphLayout';
+import { ADD_EXPERT_SIZE, correctControlIfOutside, defaultAddExpertPosition, findSafeNodePosition } from '../graphLayout';
 
 interface Props {
   theme: 'dark' | 'light';
+  workflowState?: WorkflowTaskState;
 }
 
 interface NodePosition { x: number; y: number; }
@@ -56,6 +61,9 @@ const CONDITION_COLORS: Record<string, string> = {
   on_fail: '#ef4444',
 };
 const RISK_COLORS: Record<string, string> = { safe: '#22c55e', medium: '#f59e0b', dangerous: '#ef4444' };
+const WORKFLOW_COLORS: Record<Exclude<WorkflowNodeStatus, 'idle'>, string> = {
+  pending: '#f59e0b', running: '#3b82f6', completed: '#22c55e', failed: '#ef4444',
+};
 
 // ── Helpers ──
 function getNodeSize(nodeId: string, isExpanded: boolean) {
@@ -272,11 +280,13 @@ function EdgeEditorPanel({
 // Main Component
 // ══════════════════════════════════════════════
 
-export function ExpertGraphCanvas({ theme }: Props) {
+export function ExpertGraphCanvas({ theme, workflowState }: Props) {
   const [graph, setGraph] = useState<ExpertGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
   const interactionRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasSize = useElementSize(canvasRef, !loading && Boolean(graph));
 
   // ── Zoom / Pan ──
   const [cumPan, setCumPan] = useState({ x: 0, y: 0 });
@@ -360,7 +370,8 @@ export function ExpertGraphCanvas({ theme }: Props) {
     })();
   }, [graphVersion]);
 
-  const nodePositions = useMemoNodePositions(graph, positions);
+  const nodePositions = useMemoNodePositions(graph, positions, canvasSize);
+  positionRef.current = { ...nodePositions, ...positions };
   // Compute display edges from routes cache
   const displayEdges = useMemoEdges(routesMapRef.current, graph, routesVersion);
 
@@ -778,7 +789,7 @@ export function ExpertGraphCanvas({ theme }: Props) {
   }, [reloadGraph]);
   const removeTool = useCallback((nodeId: string, tn: string) => { const d = expandedDataRef.current[nodeId]; if (d) saveTools(nodeId, d.tools.filter(t => t !== tn)); }, [saveTools]);
   // ── Edge paths ──
-  const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges);
+  const edgePaths = useMemoEdgePaths(graph, nodePositions, displayEdges, workflowState);
 
   if (loading || !graph) return null;
   const tr = `scale(${zoomRendered}) translate(${cumPan.x}px, ${cumPan.y}px)`;
@@ -789,14 +800,14 @@ export function ExpertGraphCanvas({ theme }: Props) {
   const allPorts = computeRenderPorts(graph, nodePositions, expandedNodeIds);
 
   return (
-    <div className={`expert-canvas theme-${theme}`} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div ref={canvasRef} className={`expert-canvas theme-${theme}`} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <div ref={interactionRef} onMouseDown={handleBgMouseDown} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'auto', cursor: panning.current ? 'grabbing' : 'default' }} />
 
       {/* SVG layer: edges + temporary wire */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <g style={{ transform: tr, transformOrigin: '0 0' }}>
           {edgePaths.map(ep => (
-            <g key={ep.id}>
+            <g key={ep.id} data-workflow-edge-status={ep.status} data-edge-source={ep.edge.source} data-edge-target={ep.edge.target}>
               {/* Invisible wide hit area */}
               <path
                 d={ep.d} fill="none" stroke="transparent" strokeWidth={14}
@@ -808,9 +819,11 @@ export function ExpertGraphCanvas({ theme }: Props) {
                 stroke={ep.color}
                 strokeWidth={ep.isActive ? 3 : 1.8}
                 strokeOpacity={ep.isActive ? 0.95 : 0.5}
-                strokeDasharray={ep.conditionType === 'default' ? '6 3' : undefined}
+                strokeDasharray={ep.status === 'pending' ? '8 5' : ep.status === 'failed' ? '3 3' : ep.conditionType === 'default' ? '6 3' : undefined}
                 style={{ pointerEvents: 'none', transition: 'stroke-opacity 0.15s, stroke-width 0.15s' }}
-              />
+              >
+                {(ep.status === 'pending' || ep.status === 'running') && <animate attributeName="stroke-dashoffset" from="26" to="0" dur="0.8s" repeatCount="indefinite" />}
+              </path>
               {ep.label && (
                 <text
                   x={ep.labelX} y={ep.labelY - 6}
@@ -918,22 +931,29 @@ export function ExpertGraphCanvas({ theme }: Props) {
           const ed = expandedDataMap[node.id];
           const dragHL = draggingTool;
           const isCollapsed = !isExpanded;
+          const runtimeStatus = workflowState?.nodeStates[normalizeExpertName(node.id)] || 'idle';
+          const runtimeColor = runtimeStatus === 'idle' ? null : WORKFLOW_COLORS[runtimeStatus];
+          const runtimeBackground = runtimeStatus === 'pending' ? 'rgba(245,158,11,0.12)'
+            : runtimeStatus === 'running' ? 'rgba(59,130,246,0.14)'
+              : runtimeStatus === 'completed' ? 'rgba(34,197,94,0.12)'
+                : runtimeStatus === 'failed' ? 'rgba(239,68,68,0.13)' : null;
+          const runtimeShadow = runtimeColor ? `0 0 28px ${runtimeColor}55` : null;
           return (
-            <div key={node.id} data-node={node.id} draggable={false}
+            <div key={node.id} data-node={node.id} data-workflow-status={runtimeStatus} draggable={false}
               className={isExpanded ? 'glass-panel' : undefined}
               onDoubleClick={() => handleNodeDoubleClick(node.id)}
               onMouseDown={e => handleNodeMouseDown(node.id, e)}
               onMouseEnter={e => {
                 handleNodeHoverEnter(node.id);
                 if (!dragHL && !isExpanded) {
-                  e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)';
+                  e.currentTarget.style.boxShadow = runtimeShadow || (theme === 'dark' ? '0 4px 32px rgba(99,147,235,0.25)' : '0 4px 32px rgba(99,147,235,0.12)');
                 }
               }}
               onMouseLeave={e => {
                 handleNodeHoverLeave(node.id);
                 e.currentTarget.style.boxShadow = dragHL && isCollapsed
                   ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
-                  : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
+                  : runtimeShadow || (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)');
               }}
               onDragOver={e => handleNodeDragOver(node.id, e)}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) handleNodeDragLeave(node.id); }}
@@ -948,14 +968,14 @@ export function ExpertGraphCanvas({ theme }: Props) {
                 pointerEvents: 'auto', userSelect: 'none',
                 background: isExpanded
                   ? (theme === 'dark' ? 'rgba(10,14,23,0.92)' : 'rgba(253,252,251,0.92)')
-                  : (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
-                border: `2px solid ${isExpanded || dragHL ? 'var(--accent-light)' : 'var(--glass-border-strong)'}`,
+                  : runtimeBackground || (theme === 'dark' ? 'rgba(10,14,23,0.75)' : 'rgba(253,252,251,0.75)'),
+                border: `2px solid ${isExpanded || dragHL ? 'var(--accent-light)' : runtimeColor || 'var(--glass-border-strong)'}`,
                 color: 'var(--text-primary)', backdropFilter: isExpanded ? 'blur(24px)' : 'blur(20px)',
                 boxShadow: isExpanded
                   ? (theme === 'dark' ? '0 8px 48px rgba(99,147,235,0.35)' : '0 8px 48px rgba(99,147,235,0.2)')
                   : dragHL
                     ? (theme === 'dark' ? '0 0 24px rgba(99,147,235,0.35)' : '0 0 24px rgba(99,147,235,0.18)')
-                    : (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
+                    : runtimeShadow || (theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)'),
                 transition: 'width 0.12s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), min-height 0.12s cubic-bezier(0.4, 0, 0.2, 1)',
                 zIndex: isExpanded ? 10 : 0,
                 padding: isExpanded ? '16px 18px' : 0,
@@ -965,7 +985,10 @@ export function ExpertGraphCanvas({ theme }: Props) {
               }}
             >
               {isCollapsed ? (
-                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>{node.label}</span>
+                <>
+                  {runtimeColor && <span title={runtimeStatus} style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: '50%', background: runtimeColor, boxShadow: runtimeStatus === 'running' ? `0 0 10px ${runtimeColor}` : 'none' }} />}
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em' }}>{node.label}</span>
+                </>
               ) : ed ? (
                 <>
                   <div className="flex items-center justify-between shrink-0" data-no-close>
@@ -1010,7 +1033,7 @@ export function ExpertGraphCanvas({ theme }: Props) {
         />
       )}
 
-      <AddExpertButton theme={theme} onCreate={() => setEditExpertName(CREATE_MODE)} />
+      <AddExpertButton theme={theme} canvasSize={canvasSize} onCreate={() => setEditExpertName(CREATE_MODE)} />
       {editExpertName && <ExpertEditModal expertName={editExpertName === CREATE_MODE ? undefined : editExpertName} theme={theme} onClose={() => setEditExpertName(null)} onSaved={() => { reloadGraph(); setEditExpertName(null); }} />}
     </div>
   );
@@ -1077,30 +1100,32 @@ function findInputPort(gx: number, gy: number, ports: { nodeId: string; type: st
 }
 
 // ── AddExpertButton ──
-function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreate: () => void }) {
-  const [pos, setPos] = useState(() => {
-    // 初始化在入口虚拟节点右侧：入口节点在画布中央偏上，按钮对齐其右侧
-    const z = 0.85;
-    const entryGraphX = window.innerWidth / 2 / z - NODE_W / 2;
-    const entryScreenRight = entryGraphX * z + VNODE_W * z;
-    const defaultTotalH = (2 + 0) * VERTICAL_GAP + VNODE_H; // 默认 2 虚拟节点
-    const startGraphY = window.innerHeight / 2 / z - defaultTotalH / 2;
-    const entryScreenTop = startGraphY * z;
-    const buttonY = entryScreenTop + (VNODE_H * z - 38) / 2;
-    return { x: entryScreenRight + 16, y: Math.max(8, buttonY) };
-  });
+function AddExpertButton({ theme, canvasSize, onCreate }: { theme: 'dark' | 'light'; canvasSize: CanvasSize; onCreate: () => void }) {
+  const [pos, setPos] = useState<NodePosition | null>(null);
   const [hovered, setHovered] = useState(false);
   const dragging = useRef(false);
   const dragMoved = useRef(false);
   const offset = useRef({ x: 0, y: 0 });
+  const canvasOrigin = useRef({ x: 0, y: 0 });
   const startPos = useRef({ x: 0, y: 0 });
   const posRef = useRef(pos); posRef.current = pos;
+  useEffect(() => {
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) return;
+    setPos(previous => previous
+      ? correctControlIfOutside(previous, canvasSize)
+      : defaultAddExpertPosition(canvasSize));
+  }, [canvasSize]);
   const onMD = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !posRef.current) return;
     dragging.current = true;
     dragMoved.current = false;
     startPos.current = { x: e.clientX, y: e.clientY };
-    offset.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
+    const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+    canvasOrigin.current = { x: rect?.left || 0, y: rect?.top || 0 };
+    offset.current = {
+      x: e.clientX - (rect?.left || 0) - posRef.current.x,
+      y: e.clientY - (rect?.top || 0) - posRef.current.y,
+    };
     e.stopPropagation();
     e.preventDefault();
   }, []);
@@ -1110,7 +1135,12 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
       const dx = e.clientX - startPos.current.x;
       const dy = e.clientY - startPos.current.y;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved.current = true;
-      if (dragMoved.current) setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+      if (dragMoved.current) {
+        setPos({
+          x: e.clientX - canvasOrigin.current.x - offset.current.x,
+          y: e.clientY - canvasOrigin.current.y - offset.current.y,
+        });
+      }
     };
     const onU = () => { dragging.current = false; };
     window.addEventListener('mousemove', onM);
@@ -1122,18 +1152,20 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
     onCreate();
   }, [onCreate]);
   const isDark = theme === 'dark';
-  return createPortal(
+  if (!pos) return null;
+  return (
     <div
+      data-add-expert-control
       onMouseDown={onMD}
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        position: 'fixed', left: pos.x, top: pos.y, zIndex: 100,
-        minWidth: 38, height: 38, padding: '0 14px', borderRadius: 10,
+        position: 'absolute', left: pos.x, top: pos.y, zIndex: 100,
+        width: ADD_EXPERT_SIZE.width, height: ADD_EXPERT_SIZE.height, padding: '0 14px', borderRadius: 10,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         fontSize: 14, fontWeight: 600, letterSpacing: '0.03em',
-        cursor: 'grab', userSelect: 'none',
+        cursor: 'grab', userSelect: 'none', pointerEvents: 'auto',
         background: isDark ? '#ffffff' : '#0a0e17',
         color: isDark ? '#0a0e17' : '#ffffff',
         border: 'none',
@@ -1146,28 +1178,88 @@ function AddExpertButton({ theme, onCreate }: { theme: 'dark' | 'light'; onCreat
     >
       <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
       <span>Expert</span>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
 // ── Hooks ──
-function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, NodePosition>) {
+function useElementSize(ref: React.RefObject<HTMLElement | null>, ready: boolean): CanvasSize {
+  const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = ref.current;
+    if (!ready || !element) return;
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      setSize(previous => previous.width === rect.width && previous.height === rect.height
+        ? previous : { width: rect.width, height: rect.height });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ready, ref]);
+  return size;
+}
+
+function useMemoNodePositions(graph: ExpertGraph | null, saved: Record<string, NodePosition>, canvasSize: CanvasSize) {
   const [c, setC] = useState<Record<string, NodePosition>>({});
   useEffect(() => {
-    if (!graph) return;
-    const r: Record<string, NodePosition> = { ...saved };
-    const totalCount = (graph.virtual_nodes || []).length + (graph.nodes || []).length;
-    const totalHeight = totalCount * VERTICAL_GAP + VNODE_H;
-    const centerY = window.innerHeight / 2 / 0.85;
-    const startY = centerY - totalHeight / 2;
-    const centerX = window.innerWidth / 2 / 0.85 - NODE_W / 2;
-    (graph.virtual_nodes || []).forEach(vn => { if (!r[vn.id]) r[vn.id] = { x: centerX, y: startY }; });
-    (graph.nodes || []).forEach((n, i) => { if (!r[n.id]) r[n.id] = { x: centerX, y: startY + (i + 1) * VERTICAL_GAP }; });
-    const ev = (graph.virtual_nodes || []).find(v => v.type === 'exit');
-    if (ev && !saved[ev.id]) r[ev.id] = { x: centerX, y: startY + (graph.nodes.length + 1) * VERTICAL_GAP };
+    if (!graph || canvasSize.width <= 0 || canvasSize.height <= 0) return;
+    const r: Record<string, NodePosition> = {};
+    const graphWidth = canvasSize.width / 0.85;
+    const graphHeight = canvasSize.height / 0.85;
+    const bounds: LayoutRect = {
+      x: 24,
+      y: 24,
+      width: Math.max(NODE_W, graphWidth * 0.72 - 48),
+      height: Math.max(NODE_H, graphHeight - 48),
+    };
+    const occupied: LayoutRect[] = [];
+    for (const [id, position] of Object.entries(saved)) {
+      const size = getNodeSize(id, false);
+      const outsideBounds = position.x < bounds.x || position.y < bounds.y ||
+        position.x + size.w > bounds.x + bounds.width ||
+        position.y + size.h > bounds.y + bounds.height;
+      const nextPosition = outsideBounds
+        ? findSafeNodePosition(
+          {
+            x: Math.min(Math.max(position.x, bounds.x), bounds.x + bounds.width - size.w),
+            y: Math.min(Math.max(position.y, bounds.y), bounds.y + bounds.height - size.h),
+          },
+          occupied,
+          bounds,
+          { width: size.w, height: size.h },
+        )
+        : position;
+      r[id] = nextPosition;
+      occupied.push({ ...nextPosition, width: size.w, height: size.h });
+    }
+    const entryNodes = (graph.virtual_nodes || []).filter(node => node.type === 'entry');
+    const exitNodes = (graph.virtual_nodes || []).filter(node => node.type === 'exit');
+    const otherVirtualNodes = (graph.virtual_nodes || []).filter(node => node.type !== 'entry' && node.type !== 'exit');
+    const ordered = [
+      ...entryNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+      ...(graph.nodes || []).map(node => ({ id: node.id, width: NODE_W, height: NODE_H })),
+      ...exitNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+      ...otherVirtualNodes.map(node => ({ id: node.id, width: VNODE_W, height: VNODE_H })),
+    ];
+    const gap = Math.max(88, Math.min(VERTICAL_GAP, (bounds.height - VNODE_H) / Math.max(1, ordered.length - 1)));
+    const totalHeight = Math.max(VNODE_H, (ordered.length - 1) * gap + VNODE_H);
+    const startY = Math.max(bounds.y, bounds.y + (bounds.height - totalHeight) / 2);
+    const centerX = bounds.x + Math.max(0, (bounds.width - NODE_W) / 2);
+    ordered.forEach((node, index) => {
+      if (r[node.id]) return;
+      const position = findSafeNodePosition(
+        { x: centerX, y: startY + index * gap },
+        occupied,
+        bounds,
+        { width: node.width, height: node.height },
+      );
+      r[node.id] = position;
+      occupied.push({ ...position, width: node.width, height: node.height });
+    });
     setC(r);
-  }, [graph, saved]);
+  }, [canvasSize, graph, saved]);
   return Object.keys(c).length > 0 ? c : {};
 }
 
@@ -1180,9 +1272,9 @@ function useMemoEdges(routesMap: RoutesMap, graph: ExpertGraph | null, version: 
   return edges;
 }
 
-interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; edge: ExpertEdge; }
+interface EdgePath { id: string; d: string; color: string; label: string; labelX: number; labelY: number; conditionType: string; isActive: boolean; status: WorkflowEdgeStatus; edge: ExpertEdge; }
 
-function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>, displayEdges: ExpertEdge[]) {
+function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, NodePosition>, displayEdges: ExpertEdge[], workflowState?: WorkflowTaskState) {
   const [paths, setPaths] = useState<EdgePath[]>([]);
   useEffect(() => {
     if (!graph) { setPaths([]); return; }
@@ -1203,7 +1295,18 @@ function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, N
       const d = `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
       const lx = (sx + tx) / 2 + co * 0.5;
       const ly = (sy + ty) / 2 - 2 + (pi - 1) * 14;
-      const col = CONDITION_COLORS[e.condition_type] || '#6b7280';
+      let status = workflowState?.edgeStates[workflowEdgeKey(e.source, e.target)] || 'idle';
+      if (status === 'idle' && e.source === '_user') {
+        const targetStatus = workflowState?.nodeStates[normalizeExpertName(e.target)] || 'idle';
+        if (targetStatus === 'running') status = 'running';
+        if (targetStatus === 'completed') status = 'completed';
+        if (targetStatus === 'failed') status = 'failed';
+      }
+      const col = status === 'pending' ? '#f59e0b'
+        : status === 'running' ? '#3b82f6'
+          : status === 'completed' ? '#22c55e'
+            : status === 'failed' ? '#ef4444'
+              : CONDITION_COLORS[e.condition_type] || '#6b7280';
       r.push({
         id: e.id,
         d,
@@ -1212,11 +1315,12 @@ function useMemoEdgePaths(graph: ExpertGraph | null, positions: Record<string, N
         labelX: lx,
         labelY: ly,
         conditionType: e.condition_type,
-        isActive: false,
+        isActive: status !== 'idle',
+        status,
         edge: e,
       });
     }
     setPaths(r);
-  }, [graph, positions, displayEdges]);
+  }, [graph, positions, displayEdges, workflowState]);
   return paths;
 }

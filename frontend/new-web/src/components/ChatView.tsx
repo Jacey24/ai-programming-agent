@@ -3,11 +3,14 @@ import ReactMarkdown from 'react-markdown';
 import type { MessageRecord, SessionRecord, TaskEventRecord, TaskRecord, ToolCallLog } from '../types';
 import { createTask, cancelTask, getTaskToolCalls, listMessages, listTaskEvents, listTasks, approvePermission, rejectPermission } from '../api/api';
 import { ToolCallCard } from './ToolCallCard';
+import { latestTaskForContext, tasksForContext } from '../taskSelection';
 
 interface Props {
   workspaceId: string;
   session: SessionRecord;
   onBack: () => void;
+  onWorkflowTaskSelected: (task: TaskRecord | null) => void;
+  onWorkflowEvents: (task: TaskRecord, events: TaskEventRecord[]) => void;
 }
 
 type TimelineItem =
@@ -82,6 +85,7 @@ function dedupeToolEvents(events: TaskEventRecord[]): TaskEventRecord[] {
 
 // 所有需要从持久化记录回放的事件类型
 const PERSISTED_EVENT_TYPES = [
+  'agent_message',
   'tool_started', 'tool_output', 'tool_finished',
   'task_planning', 'permission_required', 'permission_resolved',
   'file_changed', 'task_completed', 'task_failed', 'task_cancelled',
@@ -98,7 +102,7 @@ function isInterruptedEvent(event: TaskEventRecord): boolean {
   return event.type === 'task_failed' && strMeta(objMeta(event.metadata), 'status') === 'interrupted';
 }
 
-export function ChatView({ workspaceId, session, onBack }: Props) {
+export function ChatView({ workspaceId, session, onBack, onWorkflowTaskSelected, onWorkflowEvents }: Props) {
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [input, setInput] = useState('');
   const [activeTask, setActiveTask] = useState<TaskRecord | null>(null);
@@ -183,6 +187,8 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
           sessionStorage.setItem(seenStorageKey, JSON.stringify([...seenIds.current].slice(-500)));
         } catch {}
 
+        onWorkflowEvents(task, [evt]);
+
         if (evt.type === 'agent_message_chunk' && evt.content) {
           const content = (streamingRef.current[task.id] || '') + evt.content;
           streamingRef.current = { ...streamingRef.current, [task.id]: content };
@@ -244,7 +250,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     source.onerror = () => {
       if (source.readyState === EventSource.CLOSED) setStreaming(false);
     };
-  }, [appendEvents, closeStream, mergeMessages, session.id, workspaceId]);
+  }, [appendEvents, closeStream, mergeMessages, onWorkflowEvents, session.id, workspaceId]);
 
   useEffect(() => {
     const requestId = ++historyRequest.current;
@@ -258,6 +264,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
       setRawEvents([]);
       setToolCalls([]);
       setActiveTask(null);
+      onWorkflowTaskSelected(null);
       try {
         const [messageRes, taskRes] = await Promise.all([
           listMessages(session.id, controller.signal),
@@ -265,22 +272,27 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         ]);
         if (requestId !== historyRequest.current || controller.signal.aborted) return;
         setMessages((messageRes.items || []).slice().sort((a, b) => a.sequence_no - b.sequence_no));
-        const tasks = (taskRes.items || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-        const latestTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
+        const tasks = tasksForContext(taskRes.items || [], workspaceId, session.id);
+        const latestTask = latestTaskForContext(tasks, workspaceId, session.id);
         setActiveTask(latestTask);
+        onWorkflowTaskSelected(latestTask);
         const historyEvents: TaskEventRecord[] = [];
         const historyToolCalls: ToolCallLog[] = [];
         for (const t of tasks) {
+          const isDisplayTask = t.id === latestTask?.id;
           let hasInterruptedEvent = false;
           try {
             const [evtRes, toolRes] = await Promise.all([
               listTaskEvents(t.id, controller.signal),
               getTaskToolCalls(t.id, controller.signal),
             ]);
-            historyToolCalls.push(...(toolRes.items || []).filter(call => call.task_id === t.id));
+            if (isDisplayTask) {
+              historyToolCalls.push(...(toolRes.items || []).filter(call => call.task_id === t.id));
+            }
+            onWorkflowEvents(t, evtRes.items || []);
             for (const evt of evtRes.items || []) {
               // ★ 工具/权限/状态事件走 appendEvents（关闭后回来也能看到）
-              if (PERSISTED_EVENT_TYPES.includes(evt.type || '') &&
+              if (isDisplayTask && PERSISTED_EVENT_TYPES.includes(evt.type || '') &&
                   !TOOL_EVENT_TYPES.includes(evt.type || '')) {
                 const historyEvent = t.status === 'interrupted' && evt.type === 'task_failed'
                   ? { ...evt, metadata: { ...objMeta(evt.metadata), status: 'interrupted' } }
@@ -290,7 +302,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
               }
             }
           } catch {}
-          if (t.status === 'interrupted' && !hasInterruptedEvent) {
+          if (isDisplayTask && t.status === 'interrupted' && !hasInterruptedEvent) {
             historyEvents.push({
               id: `interrupted_${t.id}`,
               task_id: t.id,
@@ -316,7 +328,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
       controller.abort();
       ++historyRequest.current;
     };
-  }, [session.id, appendEvents, closeStream, startSSE]);
+  }, [session.id, workspaceId, appendEvents, closeStream, onWorkflowEvents, onWorkflowTaskSelected, startSSE]);
 
   useEffect(() => () => closeStream(), [closeStream]);
 
@@ -351,6 +363,10 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         throw new Error('Task session mismatch');
       }
       setActiveTask(task);
+      onWorkflowTaskSelected(task);
+      setRawEvents([]);
+      setToolCalls([]);
+      seenIds.current.clear();
       setMessages(prev => prev
         .filter(message => message.id !== userMsgId && message.id !== task.user_message.id)
         .concat(task.user_message)
@@ -466,7 +482,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
     return items;
   }, [messages, rawEvents, toolCalls, loadingHistory, streaming, streamingContent]);
 
-  const TOP_HEIGHT = 44;
+  const TOP_HEIGHT = 54;
 
   return (
     <div className="flex flex-col h-full">
@@ -474,7 +490,19 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         <button onClick={onBack} className="btn-secondary" style={{ minWidth: 56, height: 30, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
           ← 返回
         </button>
-        <span className="text-xs text-[var(--text-primary)] truncate flex-1">{session.title || '对话'}</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[9px] text-[var(--text-secondary)] truncate" title={`${workspaceId} / ${session.id}`}>
+            Workspace {workspaceId} / Session {session.title || session.id}
+          </div>
+          <div className="text-xs text-[var(--text-primary)] truncate" title={activeTask?.id || 'No task'}>
+            Task {activeTask?.id || '尚未创建'}
+          </div>
+        </div>
+        {activeTask?.status && (
+          <span className="text-[9px] uppercase rounded-md shrink-0" style={{ padding: '3px 6px', color: 'var(--accent-lighter)', border: '1px solid var(--glass-border-strong)', background: 'var(--surface)' }}>
+            {activeTask.status}
+          </span>
+        )}
         {streaming && <span className="w-2 h-2 rounded-full bg-[var(--accent-light)] animate-pulse" />}
       </div>
 
