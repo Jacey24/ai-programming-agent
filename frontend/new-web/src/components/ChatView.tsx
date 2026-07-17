@@ -95,6 +95,16 @@ const PERSISTED_EVENT_TYPES = [
   'file_changed', 'task_completed', 'task_failed', 'task_cancelled',
 ];
 
+const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+
+function isTerminalTask(task: TaskRecord | null): boolean {
+  return Boolean(task?.status && TERMINAL_TASK_STATUSES.has(task.status));
+}
+
+function isInterruptedEvent(event: TaskEventRecord): boolean {
+  return event.type === 'task_failed' && strMeta(objMeta(event.metadata), 'status') === 'interrupted';
+}
+
 export function ChatView({ workspaceId, session, onBack }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -172,6 +182,10 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         }
 
         appendEvents([evt]);
+        if (isInterruptedEvent(evt)) {
+          setActiveTask(prev => prev?.id === taskId ? { ...prev, status: 'interrupted' } : prev);
+          closeStream();
+        }
       } catch {}
     };
 
@@ -205,6 +219,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
         const historyEvents: TaskEventRecord[] = [];
         for (const t of tasks) {
           if (t.goal) addMessage({ id: `user_${t.id}`, role: 'user', content: t.goal, timestamp: t.created_at || '' });
+          let hasInterruptedEvent = false;
           try {
             const evtRes = await listTaskEvents(t.id);
             for (const evt of evtRes.items || []) {
@@ -215,7 +230,11 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
               }
               // ★ 工具/权限/状态事件走 appendEvents（关闭后回来也能看到）
               if (PERSISTED_EVENT_TYPES.includes(evt.type || '')) {
-                historyEvents.push(evt);
+                const historyEvent = t.status === 'interrupted' && evt.type === 'task_failed'
+                  ? { ...evt, metadata: { ...objMeta(evt.metadata), status: 'interrupted' } }
+                  : evt;
+                hasInterruptedEvent ||= isInterruptedEvent(historyEvent);
+                historyEvents.push(historyEvent);
               }
               // ★ 后端将工具调用记录为 agent_message (channel=debug, source=tool)
               // 从 metadata 中提取 tool_name，构造 tool_finished 事件
@@ -238,6 +257,16 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
               }
             }
           } catch {}
+          if (t.status === 'interrupted' && !hasInterruptedEvent) {
+            historyEvents.push({
+              id: `interrupted_${t.id}`,
+              task_id: t.id,
+              type: 'task_failed',
+              content: '任务因后端异常退出而中断',
+              metadata: { status: 'interrupted' },
+              created_at: t.updated_at || t.created_at,
+            });
+          }
         }
         if (historyEvents.length > 0) {
           appendEvents(historyEvents);
@@ -280,7 +309,7 @@ export function ChatView({ workspaceId, session, onBack }: Props) {
   };
 
   const handleCancel = async () => {
-    if (!activeTask) return;
+    if (!activeTask || isTerminalTask(activeTask)) return;
     try { await cancelTask(activeTask.id); closeStream(); } catch {}
   };
 
