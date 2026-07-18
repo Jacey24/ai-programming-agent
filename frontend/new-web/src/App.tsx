@@ -9,6 +9,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ExpertGraphCanvas } from './components/ExpertGraphCanvas';
 import { AmbientBubbles } from './components/AmbientBubbles';
 import { initialWorkflowStoreState, workflowStoreReducer } from './workflowState';
+import { useStickyState } from './hooks/useStickyState';
 import {
   DEFAULT_SESSION_WIDTH,
   LAYOUT_STORAGE_KEY,
@@ -44,15 +45,15 @@ function workspacePath(workspaceId: string, sessionId?: string) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useStickyState<ThemeMode>('codepilot.theme', 'dark');
   const [phase, setPhase] = useState<AppPhase>('workspace_select');
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceRecord | null>(null);
   const [activeSession, setActiveSession] = useState<SessionRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<GlassTab>('chat');
-  const [scale, setScale] = useState(1);
+  const [activeTab, setActiveTab] = useStickyState<GlassTab>('codepilot.active-tab', 'chat');
+  const [scale, setScale] = useStickyState<number>('codepilot.scale', 1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [positionResetVersion, setPositionResetVersion] = useState(0);
-  const [toolPanelExpanded, setToolPanelExpanded] = useState(false);
+  const [toolPanelExpanded, setToolPanelExpanded] = useStickyState<boolean>('codepilot.tool-panel-expanded', false);
   const fileDirtyRef = useRef(false);
   const activeWorkspaceRef = useRef<WorkspaceRecord | null>(null);
   const activeSessionRef = useRef<SessionRecord | null>(null);
@@ -196,7 +197,7 @@ export default function App() {
     void restoreFromLocation();
     const onPopState = () => {
       if (fileDirtyRef.current && !window.confirm(
-        '当前文件有未保存修改。确定放弃修改并切换 Workspace 吗？\n选择“取消”后可返回文件页保存。',
+        '当前文件有未保存修改。确定放弃修改并切换 Workspace 吗？\n选择"取消"后可返回文件页保存。',
       )) {
         const currentWorkspace = activeWorkspaceRef.current;
         const currentSession = activeSessionRef.current;
@@ -222,6 +223,7 @@ export default function App() {
     setTransitioning(true);
     setActiveWorkspace(ws);
     setActiveSession(null);
+    localStorage.setItem('codepilot.last-workspace-id', ws.id);
     window.history.pushState(null, '', workspacePath(ws.id));
     timerRef.current = window.setTimeout(() => {
       setPhase('normal');
@@ -232,6 +234,7 @@ export default function App() {
   const selectSession = useCallback((session: SessionRecord) => {
     if (!activeWorkspace || session.workspace_id !== activeWorkspace.id) return;
     setActiveSession(session);
+    localStorage.setItem(`codepilot.last-session-id.${activeWorkspace.id}`, session.id);
     window.history.pushState(null, '', workspacePath(activeWorkspace.id, session.id));
   }, [activeWorkspace]);
 
@@ -239,6 +242,10 @@ export default function App() {
     if (transitioning) return;
     setTransitioning(true);
     timerRef.current = window.setTimeout(() => {
+      if (activeWorkspaceRef.current) {
+        localStorage.removeItem(`codepilot.last-session-id.${activeWorkspaceRef.current.id}`);
+      }
+      localStorage.removeItem('codepilot.last-workspace-id');
       setActiveWorkspace(null);
       setActiveSession(null);
       window.history.pushState(null, '', '/');
@@ -288,10 +295,8 @@ export default function App() {
       {/* 动态气泡背景 — 最底层 (z-index: -1) */}
       <AmbientBubbles />
 
-      {/* 顶部栏 — StatusPills + 圆形按钮 */}
-      <header
-        className="glass-surface workspace-header shrink-0 flex items-center stagger-item"
-      >
+      {/* 顶部栏 — StatusPills + 圆形按钮（与 workspace-main 面板左右对齐） */}
+      <header className="stagger-item" style={{ position: 'relative', zIndex: 20, height: 40, margin: `10px clamp(10px, 1.4vw, 18px) 0`, display: 'flex', alignItems: 'center', gap: 12 }}>
         <StatusPills />
         {/* 主题切换 — 圆形仅图标 */}
         <button
@@ -355,6 +360,7 @@ export default function App() {
             workspaceId={activeWorkspace?.id || ''}
             positionResetVersion={positionResetVersion}
             workflowState={workflowState}
+            cssScale={scale}
           />
         </section>
         <div
@@ -420,8 +426,6 @@ function ToolPanelWrapper({
       setLoading(true);
       try {
         const res = await listTools();
-        // 后端 listToolInfo 返回字段：name, description, group, risk_level
-        // 没有 enabled/params/category，前端补齐默认值
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const items = ((res as any).items || []).map((item: any) => ({
           ...item,

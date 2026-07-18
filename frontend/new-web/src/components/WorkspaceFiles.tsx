@@ -363,11 +363,12 @@ export const WorkspaceFiles = forwardRef<WorkspaceFilesHandle, Props>(function W
   if (editor) {
     return (
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--glass-border-strong)] px-3 py-2">
+        <div className="flex shrink-0 items-center border-b border-[var(--glass-border-strong)]" style={{ height: 54, padding: '0 20px', gap: 8 }}>
           <button
             type="button"
             onClick={() => requestAction({ kind: 'list' })}
-            className="rounded-lg border border-[var(--glass-border-strong)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="rounded-lg border border-[var(--glass-border-strong)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            style={{ height: 30, padding: '0 10px', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             ← 文件列表
           </button>
@@ -388,7 +389,7 @@ export const WorkspaceFiles = forwardRef<WorkspaceFilesHandle, Props>(function W
             type="button"
             disabled={!editor.dirty || editor.saving || editor.loading || Boolean(editor.loadingError)}
             onClick={() => void saveCurrent()}
-            className="btn-primary shrink-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ height: 32, padding: '0 16px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             保存
           </button>
@@ -446,13 +447,13 @@ export const WorkspaceFiles = forwardRef<WorkspaceFilesHandle, Props>(function W
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center border-b border-[var(--glass-border-strong)] px-5 py-3">
+      <div className="flex shrink-0 items-center border-b border-[var(--glass-border-strong)]" style={{ height: 54, padding: '0 20px' }}>
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text-primary)]">
           📁 {workspace?.name || '文件浏览'}
         </div>
         <span className="text-[10px] text-[var(--text-secondary)]">单击文件进行编辑</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto py-3">
         {treeLoading ? (
           <div className="px-5 py-2 text-xs text-[var(--text-secondary)]">加载中...</div>
         ) : rootNodes.length === 0 ? (
@@ -515,15 +516,15 @@ function FileTreeRow({
   const isDirectory = node.type === 'directory';
   const isOpen = expanded.has(node.path);
   return (
-    <div>
+    <div style={{ marginBottom: 4 }}>
       <button
         type="button"
         onClick={() => {
           if (isDirectory) onToggle(node.path);
           else onOpen(node.path);
         }}
-        className="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-3 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--accent)]/10 hover:text-[var(--text-primary)]"
-        style={{ paddingLeft: 14 + depth * 16 }}
+        className="flex w-full items-center gap-1.5 rounded-md pr-3 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--accent)]/10 hover:text-[var(--text-primary)]"
+        style={{ height: 38, paddingLeft: 16 + depth * 16 }}
         title={node.path}
       >
         <span className="w-3 shrink-0 text-center">{isDirectory ? (isOpen ? '▾' : '▸') : ''}</span>

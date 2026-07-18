@@ -28,6 +28,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -249,8 +250,7 @@ int HttpServer::run(const std::atomic_bool &running) {
               }
             }
             if (!frame.empty()) {
-              const bool writable =
-                  !sink.is_writable || sink.is_writable();
+              const bool writable = !sink.is_writable || sink.is_writable();
               if (!writable || !sink.write(frame.data(), frame.size())) {
                 {
                   std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -285,9 +285,8 @@ int HttpServer::run(const std::atomic_bool &running) {
       return true;
     };
     std::thread([sendFn, taskId, lastEventId, ctx]() {
-      SSEGateway::getInstance().streamTaskEvents(sendFn, taskId,
-                                                 ctx->connectionSignal,
-                                                 lastEventId);
+      SSEGateway::getInstance().streamTaskEvents(
+          sendFn, taskId, ctx->connectionSignal, lastEventId);
 
       {
         std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -464,8 +463,7 @@ int HttpServer::run(const std::atomic_bool &running) {
   ROUTE_NODB(Get, "/api/v1/experts/graph/positions", ExpertController,
              getPositions, "GET " + req.target);
   ROUTE_NODB(Put, "/api/v1/experts/graph/positions", ExpertController,
-             savePositions,
-             "PUT " + req.target + " \r\n\r\n" + req.body);
+             savePositions, "PUT " + req.target + " \r\n\r\n" + req.body);
   ROUTE_NODB0(Get, "/api/v1/experts/export", ExpertController, exportConfig);
   ROUTE_NODB(Post, "/api/v1/experts/import", ExpertController, importConfig,
              "POST /api/v1/experts/import \r\n\r\n" + req.body);
@@ -601,6 +599,19 @@ int HttpServer::run(const std::atomic_bool &running) {
 #undef ROUTE0
 #undef ROUTE_NODB
 #undef ROUTE_NODB0
+
+  // 静态文件服务 — 托管前端 Web UI
+  {
+    const std::string webRoot = "./web";
+    std::error_code ec;
+    if (std::filesystem::is_directory(webRoot, ec) && !ec) {
+      svr.set_mount_point("/", webRoot);
+      LOG_INFO("Static file serving enabled: / -> {}", webRoot);
+    } else {
+      LOG_INFO("Static file serving skipped: '{}' directory not found",
+               webRoot);
+    }
+  }
 
   // 404
   svr.set_error_handler(

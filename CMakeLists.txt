@@ -13,6 +13,7 @@ endif()
 
 option(CODEPILOT_BUILD_TUI "Build the TUI client" ON)
 option(CODEPILOT_BUILD_TESTS "Build tests" ON)
+option(CODEPILOT_BUILD_SHELL "Build the WebView2 shell (Windows only)" ON)
 
 if(CODEPILOT_BUILD_TESTS)
     enable_testing()
@@ -20,6 +21,10 @@ endif()
 
 add_subdirectory(apps/agent-server)
 add_subdirectory(apps/cli-client)
+
+if(WIN32 AND CODEPILOT_BUILD_SHELL)
+    add_subdirectory(apps/webview2-shell)
+endif()
 
 if(CODEPILOT_BUILD_TESTS)
     add_subdirectory(tests)

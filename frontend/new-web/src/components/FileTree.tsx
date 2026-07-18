@@ -277,12 +277,11 @@ export function FileTree({ workspace, theme }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 border-b border-[var(--glass-border-strong)]" style={{ padding: '12px 20px' }}>
-        <div className="text-xs font-medium text-[var(--text-primary)] truncate">📁 {workspace?.name || '文件浏览'}</div>
-        <div className="text-[10px] text-[var(--text-secondary)] truncate" style={{ marginTop: 4 }}>{workspace?.path || ''}</div>
-        {fileActionMessage && <div className="text-[10px] text-[var(--accent-lighter)] truncate" style={{ marginTop: 3 }}>{fileActionMessage}</div>}
+      <div className="flex shrink-0 items-center border-b border-[var(--glass-border-strong)]" style={{ height: 54, padding: '0 20px' }}>
+        <div className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text-primary)]">📁 {workspace?.name || '文件浏览'}</div>
+        <div className="text-[10px] text-[var(--text-secondary)] truncate" style={{ marginTop: 5 }}>{workspace?.path || ''}</div>
       </div>
-      <div className="flex-1 overflow-y-auto" ref={listRef} style={{ padding: '8px 0' }}>
+      <div className="flex-1 overflow-y-auto" ref={listRef} style={{ padding: '10px 0' }}>
         {loading ? (
           <div className="text-xs text-[var(--text-secondary)] px-5 py-2">加载中...</div>
         ) : rootNodes.length === 0 ? (
@@ -300,8 +299,7 @@ export function FileTree({ workspace, theme }: Props) {
 
       {preview && popStyle && createPortal(
         <div className={`theme-${theme} glass-panel flex flex-col overflow-hidden`} style={popStyle}>
-          <div className="flex items-center justify-between shrink-0 border-b border-[var(--glass-border-strong)]"
-            style={{ height: 36, padding: '0 10px 0 14px' }}>
+          <div className="flex shrink-0 items-center justify-between border-b border-[var(--glass-border-strong)]" style={{ height: 54, padding: '0 20px' }}>
             <span className="text-[10px] font-semibold text-[var(--text-primary)] truncate">
               📄 {preview.filePath.split('/').pop() || preview.filePath}
             </span>
@@ -360,7 +358,7 @@ function FileTreeNode({
     <div>
       <button ref={rowRef} type="button" onClick={handleClick} onDoubleClick={handleDoubleClick}
         className="w-full text-left flex items-center rounded hover:bg-[var(--accent)]/10 transition-colors"
-        style={{ height: 32, paddingLeft: 8 + depth * 14, paddingRight: 8, gap: 6 }}>
+        style={{ height: 38, marginBottom: 4, paddingLeft: 10 + depth * 16, paddingRight: 10, gap: 6 }}>
         <span className="text-xs shrink-0" style={{ width: 14, textAlign: 'center', opacity: isDir ? 1 : 0 }}>
           {isOpen ? '▾' : '▸'}
         </span>
