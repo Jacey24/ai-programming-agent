@@ -123,7 +123,8 @@ $dirs = @(
     (Join-Path $stagingDir "config"),
     (Join-Path $stagingDir "web"),
     (Join-Path $stagingDir "storage"),
-    (Join-Path $stagingDir "workspace")
+    (Join-Path $stagingDir "workspace"),
+    (Join-Path $stagingDir "logs")
 )
 foreach ($d in $dirs) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
@@ -186,6 +187,7 @@ else {
 # ─── Create placeholder files ─────────────────────────────────
 "" | Out-File -FilePath (Join-Path $stagingDir "storage\.gitkeep") -Encoding ascii
 "" | Out-File -FilePath (Join-Path $stagingDir "workspace\.gitkeep") -Encoding ascii
+"" | Out-File -FilePath (Join-Path $stagingDir "logs\.gitkeep") -Encoding ascii
 
 # ─── Generate app.ico placeholder ─────────────────────────────
 $icoPath = Join-Path $resourcesDir "app.ico"

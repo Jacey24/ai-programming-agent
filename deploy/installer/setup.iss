@@ -29,8 +29,8 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 
-; 安装路径 — 用户可选
-DefaultDirName={autopf}\{#MyAppName}
+; 安装路径 — 用户 AppData（可读写，无需管理员权限）
+DefaultDirName={localappdata}\{#MyAppName}
 DisableDirPage=no
 DirExistsWarning=auto
 
@@ -48,9 +48,8 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
 
-; 权限
-PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
+; 权限 — 安装到用户目录，无需管理员
+PrivilegesRequired=none
 
 ; 外观
 WizardStyle=modern
@@ -79,12 +78,16 @@ Source: "{#StagingDir}\codepilot-shell.exe"; DestDir: "{app}"; Flags: ignorevers
 ; 运行时 DLL（OpenSSL、VC++ 等）
 Source: "{#StagingDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
+; 公共配置文件（不含密钥 — llm.local.json 已被构建脚本排除）
+Source: "{#StagingDir}\config\*"; DestDir: "{app}\config"; Flags: ignoreversion recursesubdirs createallsubdirs
+
 ; 前端静态文件
 Source: "{#StagingDir}\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; 占位目录 (运行时数据实际走 APPDATA)
-Source: "{#StagingDir}\storage\.gitkeep"; DestDir: "{app}\storage"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{srcexe}'))
+; 占位目录（安装时预创建，避免 Program Files 写权限问题）
+Source: "{#StagingDir}\storage\.gitkeep"; DestDir: "{app}\storage"; Flags: ignoreversion
 Source: "{#StagingDir}\workspace\.gitkeep"; DestDir: "{app}\workspace"; Flags: ignoreversion
+Source: "{#StagingDir}\logs\.gitkeep"; DestDir: "{app}\logs"; Flags: ignoreversion
 
 [Icons]
 ; 开始菜单 — 壳启动器

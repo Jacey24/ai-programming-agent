@@ -31,9 +31,14 @@ public:
   // Check if the backend process is still running.
   bool isRunning() const;
 
+  // Read captured stderr from the backend process (for diagnostics).
+  std::string readStderrTail(std::size_t maxLines = 20) const;
+
 private:
   PROCESS_INFORMATION processInfo_{};
   bool spawned_{false};
+  HANDLE stderrRead_{nullptr};
+  HANDLE stderrWrite_{nullptr};
 };
 
 } // namespace shell

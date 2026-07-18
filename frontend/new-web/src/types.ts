@@ -13,7 +13,7 @@ export interface WorkspaceRecord {
   name: string;
   description?: string;
   path?: string;
-  permissions_config?: string | Record<string, PermissionPolicy>;
+  permissions_config?: string|Record<string, PermissionPolicy>;
   created_at?: string;
   updated_at?: string;
 }
@@ -211,10 +211,11 @@ export interface LlmProvider {
   api_key_env?: string;
   api_key?: string;
   api_key_masked?: boolean;
+  api_key_source?: string;  // "env" | "local" | ""
   set_default?: boolean;
 }
 
-export type PermissionPolicy = 'ask' | 'auto_approve' | 'deny';
+export type PermissionPolicy = 'ask'|'auto_approve'|'deny';
 
 // Debug
 export interface DebugConsoleMessage {
@@ -267,11 +268,11 @@ export interface AppState {
 export interface MessageRecord {
   id: string;
   session_id: string;
-  task_id: string | null;
-  role: 'user' | 'assistant' | 'system';
-  message_type: 'normal' | 'result' | 'error';
+  task_id: string|null;
+  role: 'user'|'assistant'|'system';
+  message_type: 'normal'|'result'|'error';
   content: string;
   sequence_no: number;
-  source_event_id: string | null;
+  source_event_id: string|null;
   created_at: string;
 }

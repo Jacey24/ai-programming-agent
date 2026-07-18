@@ -74,8 +74,7 @@ nlohmann::json loadRequiredConfig(const std::string &configPath) {
 }
 
 std::string optionalString(const nlohmann::json &config,
-                           const std::string &section,
-                           const std::string &key) {
+                           const std::string &section, const std::string &key) {
   if (!config.contains(section)) {
     return "";
   }
@@ -192,18 +191,48 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
     return 4;
   }
 
-  try {
+  {
     auto &dataAccess = codepilot::DataAccessFacade::getInstance();
-    dataAccess.init(database_path);
-    const auto recovery = dataAccess.recoverInterruptedTasks();
-    LOG_INFO("Crash recovery complete: interrupted_tasks={}, "
-             "expired_permissions={}, inserted_terminal_events={}",
-             recovery.tasksInterrupted, recovery.permissionsExpired,
-             recovery.terminalEventsInserted);
-  } catch (const std::exception &error) {
-    std::cerr << "[FATAL][SQLite] Unable to initialize database '"
-              << database_path << "': " << error.what() << std::endl;
-    return 5;
+    bool dbOk = false;
+    try {
+      dataAccess.init(database_path);
+      const auto recovery = dataAccess.recoverInterruptedTasks();
+      LOG_INFO("Crash recovery complete: interrupted_tasks={}, "
+               "expired_permissions={}, inserted_terminal_events={}",
+               recovery.tasksInterrupted, recovery.permissionsExpired,
+               recovery.terminalEventsInserted);
+      dbOk = true;
+    } catch (const std::exception &error) {
+      std::cerr << "[WARN][SQLite] Database init/recovery failed on "
+                << database_path << ": " << error.what()
+                << " — attempting reset" << std::endl;
+    }
+
+    if (!dbOk) {
+      // Delete the stale database and retry from scratch.
+      // This is safe because the only local state is the chat history which
+      // the user can rebuild.
+      std::error_code ec;
+      std::filesystem::remove(database_path, ec);
+      // Also remove the WAL and journal files that SQLite may have created.
+      std::filesystem::remove(database_path + "-wal", ec);
+      std::filesystem::remove(database_path + "-shm", ec);
+      std::filesystem::remove(database_path + "-journal", ec);
+
+      try {
+        dataAccess.init(database_path);
+        const auto recovery = dataAccess.recoverInterruptedTasks();
+        LOG_INFO("Database reset complete: interrupted_tasks={}, "
+                 "expired_permissions={}, inserted_terminal_events={}",
+                 recovery.tasksInterrupted, recovery.permissionsExpired,
+                 recovery.terminalEventsInserted);
+      } catch (const std::exception &error) {
+        std::cerr << "[FATAL][SQLite] Unable to initialize database even after "
+                     "reset '"
+                  << database_path << "': " << error.what() << std::endl;
+        return 5;
+      }
+    }
   }
 
   try {
@@ -274,8 +303,7 @@ int run_agent_server(const std::string &config_path, bool enableConsole) {
   LOG_INFO("CodePilot Agent Server starting");
   LOG_INFO("Config: {}", config_path);
   LOG_INFO("Workspace: {}", workspace_root);
-  LOG_INFO("SQLite: {} connected={}", database_path,
-           "true");
+  LOG_INFO("SQLite: {} connected={}", database_path, "true");
 
   codepilot::HttpServerConfig server_config;
   server_config.host = "0.0.0.0";

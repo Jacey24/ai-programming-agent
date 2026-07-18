@@ -52,6 +52,8 @@ export function SettingsPanel({ show, theme, scale, onScaleChange, workspace, on
           >✕</button>
         </div>
 
+        <ApiKeyStatusBanner />
+
         <div className="overflow-y-auto flex flex-col gap-16" style={{ paddingRight: 4 }}>
           {/* ── 缩放 ── */}
           <Section title="界面缩放">
@@ -319,6 +321,17 @@ function LlmProvidersSection() {
         autoComplete="new-password"
         placeholder={editingId === '' ? 'API Key' : 'API Key（留空表示不修改）'}
         className="form-input" style={{ width: '100%' }} />
+      {editingId !== '' && (() => {
+        const editingProvider = providers.find(p => p.id === editingId);
+        if (editingProvider?.api_key_env) {
+          return (
+            <div className="text-[10px] text-[var(--text-secondary)]" style={{ marginTop: -4 }}>
+              或设置环境变量 {editingProvider.api_key_env}
+            </div>
+          );
+        }
+        return null;
+      })()}
       <div className="flex flex-wrap gap-2">
         <Btn label={editingId === '' ? '添加' : '保存'} primary loading={busy} onClick={handleSave} />
         <Btn label="测试连接" loading={busy} onClick={handleTest} />
@@ -336,7 +349,10 @@ function LlmProvidersSection() {
           {providers.map(p => (
             <React.Fragment key={p.id}>
               <div className="provider-row flex items-center gap-2" style={{ padding: '5px 0' }}>
-                <span className="provider-name text-[var(--text-primary)] font-medium flex-1">{p.id}</span>
+                {p.api_key_masked && <span style={{ fontSize: 12, flexShrink: 0 }}>🔑</span>}
+                <span className="provider-name font-medium flex-1" style={{
+                  color: p.api_key_masked ? '#4ade80' : 'var(--text-primary)'
+                }}>{p.id}</span>
                 <span className="provider-model text-[var(--text-secondary)] truncate max-w-[120px]">{p.model}</span>
                 <button onClick={() => beginEdit(p)} disabled={busy || deletingId !== null}
                   className="settings-action text-[var(--accent-lighter)]"
@@ -515,6 +531,66 @@ function DebugResetPositions({ workspaceId, onReset }: { workspaceId: string; on
         {msg && <span className={`settings-message ${msg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>{msg}</span>}
       </div>
     </Section>
+  );
+}
+
+// ============================================================
+// ApiKeyStatusBanner — shows default provider key status at top
+// ============================================================
+
+function ApiKeyStatusBanner() {
+  const [status, setStatus] = useState<{ hasKey: boolean; source: string; masked: string; envVar?: string } | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await listLlmProviders();
+        const providers = res.providers || [];
+        const defaultId = res.default || providers[0]?.id;
+        if (!defaultId) return;
+        const dp = providers.find(p => p.id === defaultId);
+        if (!dp) return;
+        if (dp.api_key_masked) {
+          setStatus({
+            hasKey: true,
+            source: dp.api_key_source === 'env' ? '环境变量' : '系统内配置',
+            masked: dp.api_key || '••••••',
+            envVar: dp.api_key_env,
+          });
+        } else {
+          setStatus({ hasKey: false, source: '', masked: '' });
+        }
+      } catch {}
+    };
+    void load();
+  }, []);
+
+  if (!status) return null;
+
+  return (
+    <div style={{
+      fontSize: 11, padding: '8px 12px', borderRadius: 8,
+      background: status.hasKey ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.06)',
+      border: `1px solid ${status.hasKey ? 'rgba(74,222,128,0.25)' : 'rgba(239,68,68,0.20)'}`,
+      display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+    }}>
+      {status.hasKey ? (
+        <>
+          <span style={{ color: '#4ade80' }}>🔑 Key 已配置</span>
+          <span className="text-[var(--text-secondary)]">
+            · 来源：{status.source}
+            {status.envVar && <span style={{ marginLeft: 4, opacity: 0.7 }}>({status.envVar})</span>}
+          </span>
+          <span className="text-[var(--text-secondary)]" style={{ fontFamily: 'monospace', fontSize: 10 }}>
+            {status.masked}
+          </span>
+        </>
+      ) : (
+        <span className="text-[var(--text-secondary)]">
+          ⚠️ 默认 Provider 未配置 API Key — 请设置环境变量或在下方 Provider 编辑中填入
+        </span>
+      )}
+    </div>
   );
 }
 

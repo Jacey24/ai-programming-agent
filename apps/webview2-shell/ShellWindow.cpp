@@ -8,6 +8,7 @@
 #include <WebView2EnvironmentOptions.h>
 #include <wil/com.h>
 #include <dwmapi.h>
+#include <shlobj.h>
 // clang-format on
 
 #include <iostream>
@@ -15,6 +16,7 @@
 #include <sstream>
 
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "shell32.lib")
 
 namespace codepilot {
 namespace shell {
@@ -41,8 +43,23 @@ bool Impl::initWebView2(HWND hWnd, ShellWindow &window) {
 
   std::wcout << L"[Shell] Creating WebView2 environment..." << std::endl;
 
+  // Use LOCALAPPDATA to avoid Program Files write permission issues
+  wchar_t localAppData[MAX_PATH];
+  std::wstring userDataFolder;
+  if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
+                                 localAppData))) {
+    userDataFolder = std::wstring(localAppData) + L"\\CodePilot\\WebView2";
+    // Ensure the directory tree exists
+    std::wstring codePilotDir = std::wstring(localAppData) + L"\\CodePilot";
+    CreateDirectoryW(codePilotDir.c_str(), nullptr);
+    CreateDirectoryW(userDataFolder.c_str(), nullptr);
+  } else {
+    userDataFolder = L"./webview2_data";
+    CreateDirectoryW(userDataFolder.c_str(), nullptr);
+  }
+
   HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-      nullptr, L"./webview2_data", options.Get(),
+      nullptr, userDataFolder.c_str(), options.Get(),
       Microsoft::WRL::Callback<
           ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
           [this, hWnd, &window](HRESULT result,

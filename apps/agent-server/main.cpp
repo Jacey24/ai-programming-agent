@@ -8,7 +8,10 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#include <fcntl.h>
+#include <io.h>
 #include <windows.h>
+
 #endif
 
 int run_agent_server(const std::string &config_path, bool enableConsole);
@@ -18,8 +21,8 @@ static std::filesystem::path findRuntimeRoot() {
   std::filesystem::path exeDir;
 #ifdef _WIN32
   std::array<wchar_t, 32768> buffer{};
-  const DWORD length = GetModuleFileNameW(
-      nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+  const DWORD length = GetModuleFileNameW(nullptr, buffer.data(),
+                                          static_cast<DWORD>(buffer.size()));
   if (length == 0 || length >= buffer.size()) {
     throw std::runtime_error("GetModuleFileNameW failed (Win32 error " +
                              std::to_string(GetLastError()) + ")");
@@ -76,6 +79,37 @@ int main(int argc, char **argv) {
     const auto runtimeRoot = findRuntimeRoot();
     std::filesystem::current_path(runtimeRoot);
     std::cout << "[INFO] Runtime root: " << runtimeRoot.string() << std::endl;
+
+#ifdef _WIN32
+    // Redirect both stdout and stderr to a persistent log file so ALL
+    // output (including spdlog console sink and C++ std::cerr messages)
+    // is captured even when the process is launched without a console.
+    // We use _open/_dup2 instead of freopen because the latter does not
+    // reliably synchronise with the C++ stream layer on MSVC.
+    {
+      std::error_code ec;
+      std::filesystem::create_directories(runtimeRoot / "logs", ec);
+      if (!ec) {
+        const std::string logPath =
+            (runtimeRoot / "logs" / "error.log").string();
+        const int fd =
+            _open(logPath.c_str(), _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY,
+                  _S_IREAD | _S_IWRITE);
+        if (fd != -1) {
+          _dup2(fd, _fileno(stdout));
+          _dup2(fd, _fileno(stderr));
+          _close(fd);
+          // Force both layers to use the new handle unbuffered.
+          setvbuf(stdout, nullptr, _IONBF, 0);
+          setvbuf(stderr, nullptr, _IONBF, 0);
+          std::ios::sync_with_stdio(false);
+          std::ios::sync_with_stdio(true);
+          fprintf(stderr, "[STARTUP] Output redirected to %s\n",
+                  logPath.c_str());
+        }
+      }
+    }
+#endif
 
     std::string config_path = "config/agent.json";
     bool enableConsole = false;

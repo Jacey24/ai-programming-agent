@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { AppPhase, GlassTab, SessionRecord, TaskEventRecord, TaskRecord, ThemeMode, ToolInfo, WorkspaceRecord } from './types';
-import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools } from './api/api';
+import { listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, getSession, getWorkspace, listSessionsByWorkspace, listTools, listLlmProviders } from './api/api';
 import { GlassPanel } from './components/GlassPanel';
 import { StatusPills } from './components/StatusPills';
 import { ToolPanel } from './components/ToolPanel';
@@ -60,6 +60,7 @@ export default function App() {
     return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_SESSION_WIDTH;
   });
   const [initializing, setInitializing] = useState(true);
+  const [showApiKeyWarning, setShowApiKeyWarning] = useState(false);
   const [workflowStore, dispatchWorkflow] = useReducer(workflowStoreReducer, initialWorkflowStoreState);
   const [transitioning, setTransitioning] = useState(false);
   const timerRef = useRef<number>(0);
@@ -69,6 +70,23 @@ export default function App() {
   const sessionPaneWidthRef = useRef(sessionPaneWidth);
   sessionPaneWidthRef.current = sessionPaneWidth;
   useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  // Check API key availability after initializing
+  useEffect(() => {
+    if (initializing) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(`codepilot.api-key-dismissed.${today}`)) return;
+    const check = async () => {
+      try {
+        const res = await listLlmProviders();
+        const providers = res.providers || [];
+        if (providers.length === 0) return;
+        const anyKey = providers.some(p => p.api_key_masked);
+        if (!anyKey) setShowApiKeyWarning(true);
+      } catch {}
+    };
+    void check();
+  }, [initializing]);
 
   useEffect(() => {
     const main = workspaceMainRef.current;
@@ -281,6 +299,9 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center">
           <div><WorkspaceSelectOverlay onSelect={enterWorkspace} /></div>
         </div>
+        {showApiKeyWarning && (
+          <ApiKeyWarningModal theme={theme} onDismiss={() => { const today = new Date().toISOString().slice(0,10); localStorage.setItem(`codepilot.api-key-dismissed.${today}`, '1'); setShowApiKeyWarning(false); }} onGotoSettings={() => { setShowApiKeyWarning(false); setSettingsOpen(true); }} />
+        )}
       </div>
     );
   }
@@ -399,6 +420,43 @@ export default function App() {
         onExpertPositionsReset={() => setPositionResetVersion(version => version + 1)}
         onClose={() => setSettingsOpen(false)}
       />
+    </div>
+  );
+}
+
+// ====================================================================
+// API Key 警告弹窗
+// ====================================================================
+
+function ApiKeyWarningModal({ theme, onDismiss, onGotoSettings }: { theme: string; onDismiss: () => void; onGotoSettings: () => void }) {
+  return (
+    <div className="anim-backdrop-in" style={{
+      position: 'fixed', inset: 0, zIndex: 3000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(6px)',
+    }}>
+      <div className="glass-panel anim-modal-pop" style={{
+        width: 400, maxWidth: '90vw', padding: '28px 32px',
+        display: 'flex', flexDirection: 'column', gap: 16,
+      }}>
+        <span className="text-sm font-semibold text-[var(--text-primary)]">⚠️ 未检测到 API Key</span>
+        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+          CodePilot 需要 LLM API Key 才能调用大模型。你可以通过以下方式配置：
+        </p>
+        <ul className="text-[11px] text-[var(--text-secondary)]" style={{ paddingLeft: 18, lineHeight: 1.7 }}>
+          <li>设置环境变量（如 DeepSeek 的 <code style={{ fontFamily: 'monospace', fontSize: 10, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>DEEPSEEK_API_KEY</code>）</li>
+          <li>在 ⚙️ 全局设置 → LLM Providers 中填入 Key</li>
+          <li>在 <code style={{ fontFamily: 'monospace', fontSize: 10, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>config/llm.local.json</code> 中配置</li>
+        </ul>
+        <div className="flex gap-2" style={{ marginTop: 4 }}>
+          <button onClick={onGotoSettings} className="btn-primary" style={{ height: 34, padding: '0 18px', fontSize: 12, fontWeight: 600, borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+            前往设置
+          </button>
+          <button onClick={onDismiss} style={{ height: 34, padding: '0 18px', fontSize: 12, borderRadius: 7, background: 'var(--surface)', color: 'var(--text-secondary)', border: '1px solid var(--glass-border-strong)', cursor: 'pointer' }}>
+            稍后处理
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

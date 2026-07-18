@@ -2,6 +2,7 @@
 #include "facade/LlmClientFacade.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <regex>
@@ -310,8 +311,7 @@ std::string ConfigController::listLlmProviders() const {
           local["providers"].contains(it.key()) &&
           local["providers"][it.key()].is_object() &&
           local["providers"][it.key()].contains("api_key") &&
-          !trimWhitespace(
-               local["providers"][it.key()].value("api_key", ""))
+          !trimWhitespace(local["providers"][it.key()].value("api_key", ""))
                .empty();
       const bool hasLegacyDefaultKey =
           it.key() == llm.value("default", "") &&
@@ -319,6 +319,21 @@ std::string ConfigController::listLlmProviders() const {
       p["api_key_masked"] = hasProviderKey || hasLegacyDefaultKey;
       if (p["api_key_masked"].get<bool>())
         p["api_key"] = "••••••";
+
+      // Determine the key source: env (environment variable) or local (file)
+      std::string source;
+      const std::string envVar = p.value("api_key_env", "");
+      if (!envVar.empty()) {
+        const char *envVal = std::getenv(envVar.c_str());
+        if (envVal && envVal[0] != '\0') {
+          source = "env";
+        }
+      }
+      if (source.empty() && (hasProviderKey || hasLegacyDefaultKey)) {
+        source = "local";
+      }
+      p["api_key_source"] = source;
+
       providers.push_back(p);
     }
   }
@@ -349,8 +364,8 @@ std::string ConfigController::addLlmProvider(const std::string &request) const {
     json body;
     body["success"] = false;
     body["error"]["code"] = "INVALID_PROVIDER";
-    body["error"]["message"] =
-        "Provider ID、Base URL、Model 均不能为空，且 ID 只能包含字母、数字、-、_";
+    body["error"]["message"] = "Provider ID、Base URL、Model 均不能为空，且 ID "
+                               "只能包含字母、数字、-、_";
     return http_response(body.dump(), "400 Bad Request");
   }
   if (apiKey.empty() || isMaskedSecret(apiKey)) {
@@ -440,8 +455,8 @@ ConfigController::updateLlmProvider(const std::string &request) const {
     body["error"]["message"] = "Provider ID 不允许在编辑时修改";
     return http_response(body.dump(), "400 Bad Request");
   }
-  const std::string baseUrl =
-      trimWhitespace(j.value("base_url", llm["providers"][id].value("base_url", "")));
+  const std::string baseUrl = trimWhitespace(
+      j.value("base_url", llm["providers"][id].value("base_url", "")));
   const std::string model =
       trimWhitespace(j.value("model", llm["providers"][id].value("model", "")));
   if (baseUrl.empty() || model.empty()) {
@@ -506,9 +521,8 @@ ConfigController::deleteLlmProvider(const std::string &request) const {
 
   llm["providers"].erase(id);
   if (llm.value("default", "") == id) {
-    llm["default"] = llm["providers"].empty()
-                         ? ""
-                         : llm["providers"].begin().key();
+    llm["default"] =
+        llm["providers"].empty() ? "" : llm["providers"].begin().key();
   }
   json local = readJsonFile(LLM_LOCAL_PATH);
   if (local.contains("providers") && local["providers"].is_object())

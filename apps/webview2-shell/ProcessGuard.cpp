@@ -1,7 +1,9 @@
 #include "ProcessGuard.h"
 
+#include <array>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -14,7 +16,11 @@ namespace shell {
 
 ProcessGuard::ProcessGuard() = default;
 
-ProcessGuard::~ProcessGuard() { shutdown(); }
+ProcessGuard::~ProcessGuard() {
+  shutdown();
+  if (stderrRead_)
+    CloseHandle(stderrRead_);
+}
 
 bool ProcessGuard::spawnBackend(const std::wstring &executablePath) {
   if (spawned_) {
@@ -170,6 +176,86 @@ void ProcessGuard::shutdown() {
   processInfo_ = {};
   spawned_ = false;
   std::cout << "[Shell] Backend shut down." << std::endl;
+}
+
+std::string ProcessGuard::readStderrTail(std::size_t maxLines) const {
+  // Read the most recent log file from the backend's logs/ directory.
+  // This is a best-effort diagnostic: if the backend process dies before
+  // logging starts, the result will be empty.
+  if (!spawned_)
+    return {};
+
+  // Find the backend executable directory from processInfo_ is not directly
+  // available, so we search relative to the shell executable.
+  wchar_t buffer[MAX_PATH]{};
+  GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+  std::filesystem::path shellDir = std::filesystem::path(buffer).parent_path();
+  std::filesystem::path logsDir;
+
+  const std::vector<std::filesystem::path> candidates = {
+      shellDir / L"logs",
+      shellDir / L".." / L".." / L"logs",
+  };
+  for (const auto &c : candidates) {
+    std::error_code ec;
+    if (std::filesystem::is_directory(c, ec) && !ec) {
+      logsDir = c;
+      break;
+    }
+  }
+  if (logsDir.empty())
+    return {};
+
+  // Find the newest .log file
+  std::filesystem::path newestLog;
+  std::filesystem::file_time_type newestTime;
+  std::error_code ec;
+  for (const auto &entry : std::filesystem::directory_iterator(logsDir, ec)) {
+    if (!entry.is_regular_file(ec) || ec)
+      continue;
+    if (entry.path().extension() != L".log")
+      continue;
+    const auto wt = entry.last_write_time(ec);
+    if (ec)
+      continue;
+    if (newestLog.empty() || wt > newestTime) {
+      newestLog = entry.path();
+      newestTime = wt;
+    }
+  }
+  if (newestLog.empty())
+    return {};
+
+  // Read the full file, take last N lines
+  std::ifstream in(newestLog, std::ios::ate);
+  if (!in)
+    return {};
+  const auto size = in.tellg();
+  if (size <= 0)
+    return {};
+  // Read at most the last 16 KB
+  const auto readSize = std::min<std::streamsize>(size, 16 * 1024);
+  in.seekg(-readSize, std::ios::end);
+  std::string content(readSize, '\0');
+  in.read(content.data(), readSize);
+  content.resize(in.gcount());
+
+  // Extract last maxLines
+  std::vector<std::string> lines;
+  std::istringstream stream(content);
+  std::string line;
+  while (std::getline(stream, line))
+    lines.push_back(line);
+  if (lines.size() <= maxLines) {
+    std::ostringstream oss;
+    for (const auto &l : lines)
+      oss << l << "\n";
+    return oss.str();
+  }
+  std::ostringstream oss;
+  for (std::size_t i = lines.size() - maxLines; i < lines.size(); ++i)
+    oss << lines[i] << "\n";
+  return oss.str();
 }
 
 bool ProcessGuard::isRunning() const {
