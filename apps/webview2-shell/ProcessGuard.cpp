@@ -1,6 +1,7 @@
 #include "ProcessGuard.h"
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -31,6 +32,13 @@ bool ProcessGuard::spawnBackend(const std::wstring &executablePath) {
   // We need a writable copy for CreateProcess.
   std::wstring cmdLine = L"\"" + executablePath + L"\"";
 
+  // Set the backend's working directory to the folder containing its
+  // executable so it can find config/, web/, storage/, etc. via
+  // relative paths (e.g. "./web", "./config/agent.json").
+  std::filesystem::path backendDir =
+      std::filesystem::path(executablePath).parent_path();
+  std::wstring workDir = backendDir.wstring();
+
   if (!CreateProcessW(nullptr,          // lpApplicationName
                       cmdLine.data(),   // lpCommandLine (writable)
                       nullptr,          // lpProcessAttributes
@@ -38,7 +46,7 @@ bool ProcessGuard::spawnBackend(const std::wstring &executablePath) {
                       FALSE,            // bInheritHandles
                       CREATE_NO_WINDOW, // dwCreationFlags
                       nullptr,          // lpEnvironment
-                      nullptr,          // lpCurrentDirectory
+                      workDir.c_str(),  // lpCurrentDirectory
                       &si, &pi)) {
     std::cerr << "[Shell] Failed to start backend: " << GetLastError()
               << std::endl;

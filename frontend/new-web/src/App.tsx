@@ -16,15 +16,6 @@ import {
   clampSessionWidth,
 } from './fileEditor';
 
-/* ################################################################
- * 工作区切换交错动画规范（STAGGER ANIMATION CONVENTION）
- * ################################################################
- * 任何希望参与 workspace_select ↔ normal 阶段切换动画的元素，
- * 必须在其 JSX 上添加 className="stagger-item"。
- * stagger 动画仅控制 opacity（不碰 transform），确保不影响元素
- * 自身的 translate/scale/position 定位。延迟由 nth-child 自动分配。
- * ################################################################ */
-// CSS stagger-out 最长延迟 0.11s + 动画持续 0.12s = 0.23s，取 280ms 安全值
 const PHASE_TRANSITION_MS = 280;
 
 function parseLocation() {
@@ -43,6 +34,10 @@ function workspacePath(workspaceId: string, sessionId?: string) {
   const base = `/workspaces/${encodeURIComponent(workspaceId)}`;
   return sessionId ? `${base}/sessions/${encodeURIComponent(sessionId)}` : base;
 }
+
+// ====================================================================
+// App
+// ====================================================================
 
 export default function App() {
   const [theme, setTheme] = useStickyState<ThemeMode>('codepilot.theme', 'dark');
@@ -66,7 +61,6 @@ export default function App() {
   });
   const [initializing, setInitializing] = useState(true);
   const [workflowStore, dispatchWorkflow] = useReducer(workflowStoreReducer, initialWorkflowStoreState);
-  // ★ 阶段过渡锁：过渡期间忽视重复点击
   const [transitioning, setTransitioning] = useState(false);
   const timerRef = useRef<number>(0);
   const restoreRequest = useRef(0);
@@ -254,7 +248,16 @@ export default function App() {
     }, PHASE_TRANSITION_MS);
   }, [transitioning]);
 
-  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    // Sync native title bar theme via WebMessage
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wv = (window as any).chrome?.webview;
+    if (wv) {
+      wv.postMessage(JSON.stringify({ type: 'set-theme', theme: newTheme }));
+    }
+  };
 
   const backToSessions = useCallback(() => {
     setActiveSession(null);
@@ -271,11 +274,13 @@ export default function App() {
     );
   }
 
-    // ========== workspace_select phase ==========
+  // ========== workspace_select phase ==========
   if (phase === 'workspace_select') {
     return (
-      <div className={`theme-${theme} background-canvas h-screen flex items-center justify-center ${transitioning ? 'stagger-fade-out' : 'stagger-fade-in'}`}>
-        <div className="stagger-item"><WorkspaceSelectOverlay onSelect={enterWorkspace} /></div>
+      <div className={`theme-${theme} background-canvas h-screen flex flex-col overflow-hidden`}>
+        <div className="flex-1 flex items-center justify-center">
+          <div><WorkspaceSelectOverlay onSelect={enterWorkspace} /></div>
+        </div>
       </div>
     );
   }
@@ -283,76 +288,69 @@ export default function App() {
   // ========== normal phase ==========
   return (
     <div
-      className={`theme-${theme} background-canvas flex flex-col overflow-hidden ${transitioning ? 'stagger-fade-out' : 'stagger-fade-in'}`}
-      style={{
+      className={`theme-${theme} background-canvas flex flex-col overflow-hidden`}
+      style={scale !== 1 ? {
         position: 'relative',
         transform: `scale(${scale})`,
         transformOrigin: 'top left',
         width: `${100 / scale}vw`,
         height: `${100 / scale}vh`,
-      }}
+      } : { position: 'relative', width: '100vw', height: '100vh' }}
     >
-      {/* 动态气泡背景 — 最底层 (z-index: -1) */}
       <AmbientBubbles />
 
-      {/* 顶部栏 — StatusPills + 圆形按钮（与 workspace-main 面板左右对齐） */}
-      <header className="stagger-item" style={{ position: 'relative', zIndex: 20, height: 40, margin: `10px clamp(10px, 1.4vw, 18px) 0`, display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Header: ← 返回 [StatusPills] ☀主题 ⚙️设置 */}
+      <header style={{ position: 'relative', zIndex: 20, height: 40, margin: `10px clamp(10px, 1.4vw, 18px) 0`, display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* ← Back to workspace select (same circle style as theme/settings) */}
+        <button
+          onClick={exitWorkspace}
+          title="返回工作区选择"
+          style={{
+            width: 40, height: 40, borderRadius: '50%', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            fontSize: 18, fontWeight: 700,
+            background: 'var(--surface)',
+            border: '1px solid var(--glass-border-strong)',
+            color: 'var(--text-primary)', cursor: 'pointer',
+          }}
+        >
+          ←
+        </button>
         <StatusPills />
-        {/* 主题切换 — 圆形仅图标 */}
         <button
           onClick={toggleTheme}
           title="切换主题"
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            fontSize: 18,
-            background: 'var(--surface)',
+            width: 40, height: 40, borderRadius: '50%', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            fontSize: 18, background: 'var(--surface)',
             border: '1px solid var(--glass-border-strong)',
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
+            color: 'var(--text-primary)', cursor: 'pointer',
           }}
         >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
-        {/* 全局设置 — 圆形 */}
         <button
           onClick={() => setSettingsOpen(true)}
           title="全局设置"
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            fontSize: 18,
-            background: 'var(--surface)',
+            width: 40, height: 40, borderRadius: '50%', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            fontSize: 18, background: 'var(--surface)',
             border: '1px solid var(--glass-border-strong)',
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
+            color: 'var(--text-primary)', cursor: 'pointer',
           }}
         >
           ⚙️
         </button>
       </header>
 
-      {/* 主区域 — z-index: 10 */}
       <main
         ref={workspaceMainRef}
-        className={`workspace-main flex-1 min-h-0 overflow-hidden stagger-item ${resizingLayout ? 'is-resizing' : ''}`}
+        className={`workspace-main flex-1 min-h-0 overflow-hidden ${resizingLayout ? 'is-resizing' : ''}`}
       >
         <aside className="workspace-tool-pane" aria-label="Tools">
-          <ToolPanelWrapper
-            theme={theme}
-            embedded
-            onExpandedChange={setToolPanelExpanded}
-          />
+          <ToolPanelWrapper theme={theme} embedded onExpandedChange={setToolPanelExpanded} />
         </aside>
         <section className="workspace-graph-pane" aria-label="Expert workflow">
           <ExpertGraphCanvas
@@ -392,7 +390,6 @@ export default function App() {
         </section>
       </main>
 
-      {/* 全局设置面板 — 最顶层 Portal */}
       <SettingsPanel
         show={settingsOpen}
         theme={theme}
@@ -407,7 +404,7 @@ export default function App() {
 }
 
 // ====================================================================
-// 工具面板包装器（加载工具列表）
+// 工具面板包装器
 // ====================================================================
 function ToolPanelWrapper({
   theme,
@@ -440,13 +437,7 @@ function ToolPanelWrapper({
     load();
   }, []);
 
-  return <ToolPanel
-    tools={tools}
-    loading={loading}
-    theme={theme}
-    embedded={embedded}
-    onExpandedChange={onExpandedChange}
-  />;
+  return <ToolPanel tools={tools} loading={loading} theme={theme} embedded={embedded} onExpandedChange={onExpandedChange} />;
 }
 
 // ====================================================================

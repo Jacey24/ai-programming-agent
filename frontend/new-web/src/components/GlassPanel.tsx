@@ -75,42 +75,6 @@ export function GlassPanel({
             gap: `${2 / scale}px`,
           }}
         >
-          {/* ← back button */}
-          <button
-            onClick={() => {
-              if (workspaceFilesRef.current) workspaceFilesRef.current.requestExitWorkspace();
-              else onExitWorkspace();
-            }}
-            title="切换工作区"
-            style={{
-              width: 34 / scale,
-              height: 34 / scale,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 16 / scale,
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 8 / scale,
-              cursor: 'pointer',
-              marginRight: 6 / scale,
-              marginBottom: 0,
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-primary)';
-              e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 12%, transparent)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-secondary)';
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            ←
-          </button>
-
           {/* Chat tab */}
           <div
             onClick={() => onTabChange('chat')}

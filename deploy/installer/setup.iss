@@ -64,7 +64,6 @@ UninstallDisplayIcon={app}\codepilot-shell.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 ; 桌面快捷方式
@@ -76,6 +75,9 @@ Source: "{#StagingDir}\codepilot-agent-server.exe"; DestDir: "{app}"; Flags: ign
 
 ; 壳启动器
 Source: "{#StagingDir}\codepilot-shell.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; 运行时 DLL（OpenSSL、VC++ 等）
+Source: "{#StagingDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; 前端静态文件
 Source: "{#StagingDir}\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs

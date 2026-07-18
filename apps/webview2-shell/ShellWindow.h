@@ -7,8 +7,6 @@
 namespace codepilot {
 namespace shell {
 
-// Forward declarations — WebView2 types are only needed in the .cpp file.
-// This avoids the include-order-sensitive <WebView2.h> in the header.
 struct Impl;
 class ShellWindow {
 public:
@@ -21,8 +19,8 @@ public:
   bool create();
   int runMessageLoop();
 
-  // Backend port (needed by Impl).
   int port() const;
+  HWND mainHwnd() const;
 
 private:
   friend struct Impl;
@@ -38,10 +36,10 @@ private:
   int port_;
   HWND hWnd_{nullptr};
 
-  // Opaque pointer to WebView2 implementation details.
   std::unique_ptr<Impl> impl_;
 
   static constexpr const wchar_t *ClassName = L"CodePilotShellWindow";
+  static constexpr int TITLE_BAR_HEIGHT = 42;
 };
 
 } // namespace shell

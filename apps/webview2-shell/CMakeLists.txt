@@ -122,7 +122,7 @@ target_compile_definitions(codepilot-shell PRIVATE
 # NOTE: Do NOT define WIN32_LEAN_AND_MEAN — WebView2.h requires the full
 #       COM interface macros from <windows.h> (objbase.h / Unknwn.h).
 
-# Set subsystem to Windows (no console)
+# GUI app with alloc-console for diagnostics
 set_target_properties(codepilot-shell PROPERTIES
   WIN32_EXECUTABLE TRUE
 )

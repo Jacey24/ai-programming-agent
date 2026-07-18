@@ -29,6 +29,7 @@
 #include <condition_variable>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -613,14 +614,27 @@ int HttpServer::run(const std::atomic_bool &running) {
     }
   }
 
-  // 404
-  svr.set_error_handler(
-      [setCors](const httplib::Request &req, httplib::Response &res) {
-        setCors(req, res);
-        if (res.body.empty()) {
-          res.set_content(not_found_json(), "application/json");
-        }
-      });
+  // SPA fallback + 404
+  svr.set_error_handler([setCors](const httplib::Request &req,
+                                  httplib::Response &res) {
+    setCors(req, res);
+    if (res.status == 404 && req.method == "GET" &&
+        req.path.rfind("/api/", 0) != 0) {
+      // SPA fallback: serve index.html for client-side routes
+      std::ifstream ifs("./web/index.html", std::ios::binary | std::ios::ate);
+      if (ifs.good()) {
+        auto size = ifs.tellg();
+        ifs.seekg(0, std::ios::beg);
+        std::string content(static_cast<size_t>(size), '\0');
+        ifs.read(&content[0], size);
+        res.set_content(content, "text/html; charset=utf-8");
+        return;
+      }
+    }
+    if (res.body.empty()) {
+      res.set_content(not_found_json(), "application/json");
+    }
+  });
 
 #ifdef _WIN32
   // SO_REUSEADDR permits a wildcard listener to coexist with an existing

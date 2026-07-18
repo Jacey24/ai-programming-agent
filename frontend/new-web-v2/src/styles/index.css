@@ -83,8 +83,8 @@ body {
 /* ========== 毛玻璃面板 ========== */
 .glass-panel {
   background: color-mix(in srgb, var(--bg) 45%, transparent);
-  backdrop-filter: blur(80px) saturate(1.2) brightness(1.05);
-  -webkit-backdrop-filter: blur(80px) saturate(1.2) brightness(1.05);
+  backdrop-filter: blur(16px) saturate(1.2) brightness(1.05);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2) brightness(1.05);
   border: 1.5px solid var(--glass-border-strong);
   border-radius: 16px;
   position: relative;
@@ -103,8 +103,6 @@ body {
   pointer-events: none;
   border-radius: 16px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
-  backdrop-filter: blur(12px) saturate(0.6);
-  -webkit-backdrop-filter: blur(12px) saturate(0.6);
   opacity: 0.45;
 }
 

@@ -4,30 +4,59 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <thread>
+#include <vector>
 
+// Try to locate the backend executable. The search order is:
+//   1. Same directory as the shell (production install layout)
+//   2. ../../agent-server/Release/  (CMake multi-config build tree)
+//   3. ../agent-server/Release/     (CMake single-config build tree)
+static std::filesystem::path findBackend() {
+  wchar_t buffer[MAX_PATH]{};
+  GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+  const std::filesystem::path shellDir =
+      std::filesystem::path(buffer).parent_path();
+
+  const std::vector<std::filesystem::path> candidates = {
+      shellDir / L"codepilot-agent-server.exe",
+      shellDir / L"../../agent-server/Release/codepilot-agent-server.exe",
+      shellDir / L"../agent-server/Release/codepilot-agent-server.exe",
+  };
+
+  for (const auto &candidate : candidates) {
+    std::error_code ec;
+    if (std::filesystem::exists(candidate, ec) && !ec) {
+      return std::filesystem::canonical(candidate, ec);
+    }
+  }
+
+  return {}; // not found
+}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
-  // Locate the backend executable relative to the shell.
-  std::filesystem::path shellPath;
-  {
-    wchar_t buffer[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, buffer, MAX_PATH);
-    shellPath = std::filesystem::path(buffer).parent_path();
-  }
-  std::filesystem::path backendPath = shellPath / L"codepilot-agent-server.exe";
+  SetProcessDPIAware();
+  CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  if (!std::filesystem::exists(backendPath)) {
-    std::wcerr << L"[Shell] Backend executable not found: " << backendPath
-               << std::endl;
+#if !defined(NDEBUG)
+  AllocConsole();
+  FILE *fDummy;
+  freopen_s(&fDummy, "CONOUT$", "w", stdout);
+  freopen_s(&fDummy, "CONOUT$", "w", stderr);
+  std::wcout << L"=== CodePilot Shell (Diagnostics) ===" << std::endl;
+#endif
+
+  const auto backendPath = findBackend();
+  if (backendPath.empty()) {
     MessageBoxW(nullptr,
                 L"CodePilot Agent Server not found.\n\n"
                 L"Please reinstall the application or contact support.",
                 L"CodePilot - Error", MB_OK | MB_ICONERROR);
     return 1;
   }
+  std::wcout << L"[Shell] Backend found: " << backendPath.wstring()
+             << std::endl;
 
-  // Spawn the backend.
+  // Spawn the backend. Its working directory is the one containing the exe,
+  // so that it can find config/, web/, etc. relative to itself.
   codepilot::shell::ProcessGuard guard;
   if (!guard.spawnBackend(backendPath.wstring())) {
     MessageBoxW(nullptr,

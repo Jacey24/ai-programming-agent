@@ -36,19 +36,18 @@
   box-sizing: border-box;
 }
 
-/* 全局主题过渡：仅在主题容器内生效，不影响 portal 到 body 的元素 */
+/* 主题过渡：仅颜色 & 边框，避免全背景/阴影计算 */
 .theme-dark *,
 .theme-dark *::before,
 .theme-dark *::after,
 .theme-light *,
 .theme-light *::before,
 .theme-light *::after {
-  transition: background-color 0.35s ease, color 0.35s ease,
-    border-color 0.35s ease, box-shadow 0.35s ease;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
 html {
-  font-size: 120%;
+  font-size: 100%;
 }
 
 html,
@@ -192,6 +191,7 @@ body {
 .background-canvas {
   background: var(--bg);
   position: relative;
+  contain: paint layout style;
 }
 
 /* 细微网格 overlay */
