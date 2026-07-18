@@ -22,7 +22,9 @@ export function ChatMessageList({ state, onOpenFile, onResolvePermission }: Chat
   const pendingPermissionIds = new Set(state.permissions.items.map((permission) => permission.id));
 
   useEffect(() => {
-    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (nearBottom && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [nearBottom, state.events.items.length, state.pendingPrompt, state.permissions.items.length, state.submitting, state.activeTask?.status]);
 
   const onScroll = () => {

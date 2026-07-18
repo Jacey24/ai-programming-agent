@@ -313,8 +313,12 @@ export function useAgentRuntime(options: {
 
       source.onmessage = (message) => handleEvent("message", message);
 
+      const handleNamedEvent: EventListener = (event) => {
+        handleEvent(event.type, event as MessageEvent<string>);
+      };
+
       for (const eventName of SSE_EVENT_NAMES) {
-        source.addEventListener(eventName, (message) => handleEvent(eventName, message as MessageEvent<string>));
+        source.addEventListener(eventName, handleNamedEvent);
       }
 
       source.onerror = () => {
